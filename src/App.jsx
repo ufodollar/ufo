@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
+import { useAppKit, useAppKitAccount, useAppKitProvider, useAppKitNetwork } from '@reown/appkit/react';
 import { ethers } from 'ethers';
+import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-const VAULT_ADDRESS = '0x你的BSC金库地址'; // 部署成功后替换
-const UFO_ADDRESS = '0x你的BSC_UFO地址';   // 部署成功后替换
+// ⚠️ 请务必替换为你真实的合约地址
+const VAULT_ADDRESS = '0x你的BSC金库地址'; 
+const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
 
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const UFO_LOGO = '/logo.png'; 
@@ -23,7 +25,7 @@ const VAULT_ABI = [
   "function deposit(uint256)", 
   "function withdraw(uint256)",
   "function getExchangeRate() view returns (uint256)",
-  "function lastHarvestBalance() view returns (uint256)" // 修复了变量名
+  "function lastHarvestBalance() view returns (uint256)" 
 ];
 
 const SwitchIcon = () => (
@@ -32,34 +34,51 @@ const SwitchIcon = () => (
   </svg>
 );
 
+// 沉闷厚实的“哒”声
 const playClickSound = () => {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
     const ctx = new AudioContext();
     const now = ctx.currentTime;
+
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(400, now);
     osc.frequency.exponentialRampToValueAtTime(80, now + 0.03);
+    
     oscGain.gain.setValueAtTime(0.8, now);
     oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
     const bufferSize = ctx.sampleRate * 0.01;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    
     const noiseNode = ctx.createBufferSource();
     noiseNode.buffer = buffer;
+    
     const noiseFilter = ctx.createBiquadFilter();
     noiseFilter.type = 'lowpass';
     noiseFilter.frequency.value = 800;
+
     const noiseGain = ctx.createGain();
     noiseGain.gain.setValueAtTime(0.5, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
-    osc.connect(oscGain); oscGain.connect(ctx.destination);
-    noiseNode.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.06); noiseNode.start(now); noiseNode.stop(now + 0.02);
+
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+
+    noiseNode.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.06);
+    noiseNode.start(now);
+    noiseNode.stop(now + 0.02);
+
   } catch (e) { }
 };
 
@@ -74,6 +93,7 @@ function App() {
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider('eip155');
+  const { switchNetwork } = useAppKitNetwork();
 
   const [isDepositMode, setIsDepositMode] = useState(true);
   const [inputAmount, setInputAmount] = useState('');
@@ -91,6 +111,26 @@ function App() {
 
   const currentYear = chainDate.getFullYear();
 
+  // 🔥 核心优化 1：自动检测并唤起钱包连接 (针对从 X/Twitter 跳转过来的场景)
+  useEffect(() => {
+    const isWalletBrowser = window.ethereum || window.phantom;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile && isWalletBrowser && !isConnected) {
+      // 延迟 300ms 确保环境完全注入
+      setTimeout(() => {
+        open({ view: 'Connect' }); 
+      }, 300);
+    }
+  }, [isConnected, open]);
+
+  // 🔥 核心优化 2：连接成功后，强制切换网络到 BSC
+  useEffect(() => {
+    if (isConnected) {
+      switchNetwork(bsc);
+    }
+  }, [isConnected, switchNetwork]);
+
   const fetchData = async () => {
     try {
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
@@ -99,7 +139,7 @@ function App() {
       const latestBlock = await rpcProvider.getBlock('latest');
       const blockDate = new Date(latestBlock.timestamp * 1000);
       setChainDate(blockDate);
-      setIsRedeemWindow(blockDate.getUTCMonth() === 0);
+      setIsRedeemWindow(blockDate.getUTCMonth() === 0); // 0 代表一月 (UTC时间)
 
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
@@ -108,7 +148,7 @@ function App() {
       const totalPrincipal = await vaultContract.lastHarvestBalance(); 
       const totalUFO = await ufoContract.totalSupply();
       
-      // 核心精度计算：本金(6位) -> 18位; aToken资产是 18位
+      // 精度处理：本金(6位)转18位，aToken资产是18位
       const totalAssets = (rate * totalUFO) / BigInt(1e18); 
       const principal18 = totalPrincipal * BigInt(1e12);
 
@@ -132,7 +172,7 @@ function App() {
       const usdtBal = await usdtContract.balanceOf(address);
       const ufoBal = await ufoContract.balanceOf(address);
       
-      // 修复：USDT 是 6 精度，UFO 是 18 精度
+      // 精度修复：USDT 是 6 精度，UFO 是 18 精度
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
       
@@ -142,7 +182,11 @@ function App() {
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => { fetchData(); }, 60000);
+    
+    const interval = setInterval(() => {
+      fetchData();
+    }, 60000);
+
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -175,7 +219,7 @@ function App() {
       const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
       
-      // 修复：存 USDT 用 6 精度，赎回 UFO 用 18 精度
+      // 精度修复：存 USDT 用 6 精度，赎回 UFO 用 18 精度
       const amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
 
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
