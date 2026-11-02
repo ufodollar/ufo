@@ -5,7 +5,7 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
 // ⚠️ 请务必替换为你真实的合约地址
-const VAULT_ADDRESS = '0x你的BSC金库地址'; 
+const VAULT_ADDRESS = '0x你的BSC金库地址A'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
 
