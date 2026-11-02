@@ -34,7 +34,7 @@ const SwitchIcon = () => (
   </svg>
 );
 
-// 沉闷厚实的“哒”声
+// 🛸 外星飞碟低沉吟唱振动音
 const playClickSound = () => {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -42,44 +42,60 @@ const playClickSound = () => {
     const ctx = new AudioContext();
     const now = ctx.currentTime;
 
+    // 1. 主振荡器：低频正弦波（低沉的嗡声）
     const osc = ctx.createOscillator();
-    const oscGain = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(400, now);
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.03);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, now); 
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.4); // 频率逐渐降低，产生坠落/启动感
+
+    // 2. LFO 低频振荡器：制造“振动”感（Tremolo/Vibrato）
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 15; // 15Hz 的振动频率（嗡嗡嗡的颤抖）
     
-    oscGain.gain.setValueAtTime(0.8, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-
-    const bufferSize = ctx.sampleRate * 0.01;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 15; // 振动幅度（频率上下浮动的数值）
     
-    const noiseNode = ctx.createBufferSource();
-    noiseNode.buffer = buffer;
-    
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 800;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency); // 将振动信号连入主振荡器的频率控制
 
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.5, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+    // 3. 副振荡器：高频三角波（增加科幻金属感）
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(280, now);
+    osc2.frequency.exponentialRampToValueAtTime(140, now + 0.3);
 
-    osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    // 4. 音量包络（缓慢起音，平滑收尾）
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.6, now + 0.05); // 快速淡入
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5); // 0.5秒的绵长尾音
 
-    noiseNode.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    const gain2 = ctx.createGain();
+    gain2.gain.setValueAtTime(0, now);
+    gain2.gain.linearRampToValueAtTime(0.2, now + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
+    // 连接节点
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+
+    // 启动并设定停止时间
     osc.start(now);
-    osc.stop(now + 0.06);
-    noiseNode.start(now);
-    noiseNode.stop(now + 0.02);
+    osc.stop(now + 0.6);
+    
+    osc2.start(now);
+    osc2.stop(now + 0.4);
 
-  } catch (e) { }
+    lfo.start(now);
+    lfo.stop(now + 0.6);
+
+  } catch (e) { 
+    console.warn("Audio context error", e); 
+  }
 };
 
 const formatAmount = (val) => {
