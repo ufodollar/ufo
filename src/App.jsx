@@ -90,7 +90,7 @@ const formatAmount = (val) => {
 };
 
 function App() {
-  const { open } = useAppKit();
+  const { open, close } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider('eip155');
   const { switchNetwork } = useAppKitNetwork();
@@ -111,13 +111,12 @@ function App() {
 
   const currentYear = chainDate.getFullYear();
 
-  // 🔥 核心优化 1：自动检测并唤起钱包连接 (针对从 X/Twitter 跳转过来的场景)
+  // 🔥 核心优化 1：自动检测并唤起钱包连接 (针对移动端跳转)
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isMobile && isWalletBrowser && !isConnected) {
-      // 延迟 300ms 确保环境完全注入
       setTimeout(() => {
         open({ view: 'Connect' }); 
       }, 300);
@@ -131,6 +130,13 @@ function App() {
     }
   }, [isConnected, switchNetwork]);
 
+  // 🔥 核心优化 3：连接成功后，自动关闭黑色弹窗
+  useEffect(() => {
+    if (isConnected) {
+      close(); 
+    }
+  }, [isConnected, close]);
+
   const fetchData = async () => {
     try {
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
@@ -139,7 +145,7 @@ function App() {
       const latestBlock = await rpcProvider.getBlock('latest');
       const blockDate = new Date(latestBlock.timestamp * 1000);
       setChainDate(blockDate);
-      setIsRedeemWindow(blockDate.getUTCMonth() === 0); // 0 代表一月 (UTC时间)
+      setIsRedeemWindow(blockDate.getUTCMonth() === 0);
 
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
@@ -148,7 +154,6 @@ function App() {
       const totalPrincipal = await vaultContract.lastHarvestBalance(); 
       const totalUFO = await ufoContract.totalSupply();
       
-      // 精度处理：本金(6位)转18位，aToken资产是18位
       const totalAssets = (rate * totalUFO) / BigInt(1e18); 
       const principal18 = totalPrincipal * BigInt(1e12);
 
@@ -172,7 +177,6 @@ function App() {
       const usdtBal = await usdtContract.balanceOf(address);
       const ufoBal = await ufoContract.balanceOf(address);
       
-      // 精度修复：USDT 是 6 精度，UFO 是 18 精度
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
       
@@ -182,11 +186,9 @@ function App() {
 
   useEffect(() => { 
     fetchBalances(); 
-    
     const interval = setInterval(() => {
       fetchData();
     }, 60000);
-
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -219,7 +221,6 @@ function App() {
       const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
       
-      // 精度修复：存 USDT 用 6 精度，赎回 UFO 用 18 精度
       const amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
 
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
