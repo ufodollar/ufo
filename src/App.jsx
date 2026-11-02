@@ -34,62 +34,68 @@ const SwitchIcon = () => (
   </svg>
 );
 
-// 🛸 外星飞碟低沉吟唱振动音
+// 🛸 全局音效池（防止频繁点击导致浏览器崩溃或失声）
+let globalAudioCtx = null;
+
+const getAudioContext = () => {
+  if (!globalAudioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return null;
+    globalAudioCtx = new AudioContext();
+  }
+  if (globalAudioCtx.state === 'suspended') {
+    globalAudioCtx.resume();
+  }
+  return globalAudioCtx;
+};
+
+// 🛸 外星飞碟低沉吟唱振动音 (支持无限叠加)
 const playClickSound = () => {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const ctx = getAudioContext();
+    if (!ctx) return;
     const now = ctx.currentTime;
 
-    // 1. 主振荡器：低频正弦波（低沉的嗡声）
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(140, now); 
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.4); // 频率逐渐降低，产生坠落/启动感
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
 
-    // 2. LFO 低频振荡器：制造“振动”感（Tremolo/Vibrato）
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 15; // 15Hz 的振动频率（嗡嗡嗡的颤抖）
+    lfo.frequency.value = 15; 
     
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 15; // 振动幅度（频率上下浮动的数值）
+    lfoGain.gain.value = 15; 
     
     lfo.connect(lfoGain);
-    lfoGain.connect(osc.frequency); // 将振动信号连入主振荡器的频率控制
+    lfoGain.connect(osc.frequency);
 
-    // 3. 副振荡器：高频三角波（增加科幻金属感）
     const osc2 = ctx.createOscillator();
     osc2.type = 'triangle';
     osc2.frequency.setValueAtTime(280, now);
     osc2.frequency.exponentialRampToValueAtTime(140, now + 0.3);
 
-    // 4. 音量包络（缓慢起音，平滑收尾）
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.6, now + 0.05); // 快速淡入
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5); // 0.5秒的绵长尾音
+    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); // 稍微降低音量，防止吵人
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
 
     const gain2 = ctx.createGain();
     gain2.gain.setValueAtTime(0, now);
-    gain2.gain.linearRampToValueAtTime(0.2, now + 0.05);
+    gain2.gain.linearRampToValueAtTime(0.1, now + 0.05);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
-    // 连接节点
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
 
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
 
-    // 启动并设定停止时间
     osc.start(now);
     osc.stop(now + 0.6);
-    
     osc2.start(now);
     osc2.stop(now + 0.4);
-
     lfo.start(now);
     lfo.stop(now + 0.6);
 
@@ -126,6 +132,17 @@ function App() {
   const [accumulatedYield, setAccumulatedYield] = useState('0');
 
   const currentYear = chainDate.getFullYear();
+
+  // 🔥 核心优化：全局点击监听（点击网页任意地方发声）
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      playClickSound();
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+    };
+  }, []);
 
   // 🔥 核心优化 1：自动检测并唤起钱包连接 (针对移动端跳转)
   useEffect(() => {
@@ -219,7 +236,6 @@ function App() {
   };
 
   const handleAction = async () => {
-    playClickSound();
     if (!isConnected) return open();
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
@@ -287,7 +303,8 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          <button className="btn-connect" onClick={() => { playClickSound(); open(); }}>
+          {/* 注意：所有 onClick 里都删除了 playClickSound()，因为全局已经监听了 */}
+          <button className="btn-connect" onClick={() => open()}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
             ) : (
@@ -310,7 +327,7 @@ function App() {
             </div>
             
             <div className="action-buttons-group">
-              <button className="btn-rules" onClick={() => { playClickSound(); setShowRules(true); }}>
+              <button className="btn-rules" onClick={() => setShowRules(true)}>
                 Rules
               </button>
             </div>
@@ -319,14 +336,14 @@ function App() {
 
         <div className="card">
           <div className="tabs">
-            <button className={`tab ${isDepositMode ? 'active' : ''}`} onClick={() => { playClickSound(); setIsDepositMode(true); setInputAmount(''); setMsg(''); }}>Deposit</button>
-            <button className={`tab ${!isDepositMode ? 'active' : ''}`} onClick={() => { playClickSound(); setIsDepositMode(false); setInputAmount(''); setMsg(''); }}>Redeem</button>
+            <button className={`tab ${isDepositMode ? 'active' : ''}`} onClick={() => { setIsDepositMode(true); setInputAmount(''); setMsg(''); }}>Deposit</button>
+            <button className={`tab ${!isDepositMode ? 'active' : ''}`} onClick={() => { setIsDepositMode(false); setInputAmount(''); setMsg(''); }}>Redeem</button>
           </div>
 
           <div className="input-box">
             <div className="input-label">
               <span>{isDepositMode ? 'You Pay' : 'You Redeem'}</span>
-              <span className="balance" onClick={() => { playClickSound(); setInputAmount(currentBalance); }}>
+              <span className="balance" onClick={() => { setInputAmount(currentBalance); }}>
                 <span className="balance-label">Balance: </span>
                 <span className="balance-value">{formatAmount(currentBalance)}</span>
               </span>
@@ -385,16 +402,16 @@ function App() {
           </div>
         </div>
 
-        <a href="https://t.me/ufofund" target="_blank" rel="noopener noreferrer" className="social-link" onClick={playClickSound}>
+        <a href="https://t.me/ufofund" target="_blank" rel="noopener noreferrer" className="social-link">
           Contact Fund Manager
         </a>
         
         <div className="footer-text">Secured by Aave V3 on BSC.<br/>Smart contracts are audited and fully on-chain.</div>
 
         {showRules && (
-          <div className="modal-overlay" onClick={() => { playClickSound(); setShowRules(false); }}>
+          <div className="modal-overlay" onClick={() => setShowRules(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => { playClickSound(); setShowRules(false); }}>×</button></div>
+              <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
                 <div className="rule-block"><h4>1. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
                 <div className="rule-block"><h4>2. When to Redeem</h4><p>Our redemption window is from Jan 1st to Jan 31st every year. When you redeem all your UFO, you will receive not only your principal but also additional interest, which is 50% of the interest generated by your principal.</p></div>
