@@ -121,9 +121,7 @@ function App() {
   const [showRules, setShowRules] = useState(false);
   
   const [nav, setNav] = useState(1); 
-  const [accumulatedYield, setAccumulatedYield] = useState('0');
-
-  const currentYear = chainDate.getFullYear();
+  const [pendingYield, setPendingYield] = useState('0'); // 改名：待赎回利息
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -131,13 +129,11 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // ❌ 删除了原来的自动唤起 useEffect，防止跳转回来重复弹出
-
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 🔥 核心：只要连接成功，立刻关闭黑色弹窗
+  // 连接成功后静默关闭弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -164,9 +160,9 @@ function App() {
 
       if (totalUFO > 0n && totalAssets > principal18) {
         const yieldAmount = totalAssets - principal18;
-        setAccumulatedYield(ethers.formatUnits(yieldAmount, 18));
+        setPendingYield(ethers.formatUnits(yieldAmount, 18));
       } else {
-        setAccumulatedYield('0');
+        setPendingYield('0');
       }
     } catch (e) { console.log("Fetch Data Error:", e); }
   };
@@ -202,7 +198,7 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
-    if (isDepositMode && isRedeemWindow) return setMsg("Deposits are closed in January.");
+    // 移除了 1月不能存款的限制，仅保留 1月才能赎回的限制
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
@@ -254,7 +250,7 @@ function App() {
 
   return (
     <>
-      {/* 🔥 终极排版覆盖：把弹窗钉死到底部，拉高至 90vh，去掉底部圆角 */}
+      {/* 弹窗高定贴底 */}
       <style>{`
         w3m-modal {
           --w3m-modal-height: 100dvh !important;
@@ -263,7 +259,6 @@ function App() {
           height: 100dvh !important;
           max-height: 100dvh !important;
         }
-        
         w3m-modal > wui-flex, 
         w3m-modal wui-flex.modal-container,
         .w3m-modal-content {
@@ -274,7 +269,6 @@ function App() {
           margin-bottom: 0 !important;
           padding-bottom: env(safe-area-inset-bottom) !important; 
         }
-        
         w3m-router {
           height: 100% !important;
           max-height: 100% !important;
@@ -372,14 +366,15 @@ function App() {
             <span className="info-label"><span className="big-icon">🏦</span> Current UFO Price</span>
             <span className="info-value green">${nav.toFixed(4)}</span>
           </div>
+          
+          {/* 🔥 修改为：待赎回利息 (Pending Redemption Yield) */}
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">📈</span> {currentYear} Accumulated Yield</span>
-            <span className="info-value green">${formatAmount(accumulatedYield)}</span>
+            <span className="info-label"><span className="big-icon">📈</span> Pending Redemption Yield</span>
+            <span className="info-value green">${formatAmount(pendingYield)}</span>
           </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">🛒</span> Deposit Period</span>
-            <span className="info-value blue">Feb - Dec, Dynamic Pricing</span>
-          </div>
+          
+          {/* 🗑️ 删除了 Deposit Period 模块 */}
+          
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💸</span> Redemption Period</span>
             <span className="info-value purple">Jan 1-31 of next year</span>
@@ -403,7 +398,7 @@ function App() {
                   <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers, and an <strong>Annual Redemption Window</strong> (January) to optimize capital efficiency.</p>
                 </div>
 
-                <div className="rule-block"><h4>2. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
+                <div className="rule-block"><h4>2. How It Works</h4><p>You can buy UFO tokens on any day throughout the year. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
                 
                 <div className="rule-block">
                   <h4>3. When to Redeem</h4>
