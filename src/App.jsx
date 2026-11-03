@@ -262,6 +262,23 @@ function App() {
 
   return (
     <>
+      {/* 🔥 强制重写 Reown 弹窗的高度及样式，确保显示 5 个钱包 */}
+      <style>{`
+        w3m-modal {
+          --w3m-modal-max-height: 85vh !important; 
+        }
+        w3m-router {
+          max-height: 80vh !important;
+          overflow-y: auto !important; 
+        }
+        w3m-router::-webkit-scrollbar {
+          display: none;
+        }
+        .wui-flex {
+          max-height: none !important;
+        }
+      `}</style>
+
       <div className="bg-shape-square"></div>
       <div className="bg-shape-triangle"></div>
 
