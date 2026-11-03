@@ -121,7 +121,7 @@ function App() {
   const [showRules, setShowRules] = useState(false);
   
   const [nav, setNav] = useState(1); 
-  const [pendingYield, setPendingYield] = useState('0'); // 改名：待赎回利息
+  const [pendingYield, setPendingYield] = useState('0');
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -133,7 +133,6 @@ function App() {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 连接成功后静默关闭弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -198,7 +197,6 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
-    // 移除了 1月不能存款的限制，仅保留 1月才能赎回的限制
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
@@ -250,7 +248,6 @@ function App() {
 
   return (
     <>
-      {/* 弹窗高定贴底 */}
       <style>{`
         w3m-modal {
           --w3m-modal-height: 100dvh !important;
@@ -367,13 +364,10 @@ function App() {
             <span className="info-value green">${nav.toFixed(4)}</span>
           </div>
           
-          {/* 🔥 修改为：待赎回利息 (Pending Redemption Yield) */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">📈</span> Pending Redemption Yield</span>
             <span className="info-value green">${formatAmount(pendingYield)}</span>
           </div>
-          
-          {/* 🗑️ 删除了 Deposit Period 模块 */}
           
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💸</span> Redemption Period</span>
@@ -405,8 +399,8 @@ function App() {
                   <p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p>
                 </div>
                 
-                <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated to cover platform operational costs.</p></div>
-                <div className="rule-block"><h4>5. Dynamic Pricing</h4><p>In January, the UFO purchase price is fixed at 1 USDT. During other months, the UFO purchase price fluctuates dynamically based on the vault's NAV. Within a single calendar year, UFOs purchased earlier will earn more interest than those purchased later.</p></div>
+                <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
+                <div className="rule-block"><h4>5. Dynamic Pricing</h4><p>During the redemption month (January), the UFO purchase price fluctuates dynamically based on the vault's NAV. UFOs purchased earlier will earn more interest than those purchased later, ensuring absolute fairness.</p></div>
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
                 <div className="rule-block"><h4>7. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
                 
