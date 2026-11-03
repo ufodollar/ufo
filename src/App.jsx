@@ -135,10 +135,7 @@ function App() {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => { 
-        // 强制打开 'AllWallets' 视图，直接显示网格状的所有钱包
-        open({ view: 'AllWallets' }); 
-      }, 300);
+      setTimeout(() => { open({ view: 'AllWallets' }); }, 300);
     }
   }, [isConnected, open]);
 
@@ -262,22 +259,30 @@ function App() {
 
   return (
     <>
-      {/* 🔥 终极强制：让所有弹窗视图都保持 85vh 高度，且内嵌网格展开 */}
+      {/* 🔥 终极排版覆盖：把弹窗钉死到底部，拉高至 90vh，去掉底部圆角 */}
       <style>{`
         w3m-modal {
-          --w3m-modal-max-height: 85vh !important;
-          height: 85vh !important; 
+          --w3m-modal-height: 100dvh !important;
+          --w3m-modal-max-height: 100dvh !important;
+          align-items: flex-end !important; /* 让抽屉贴到底部 */
+          height: 100dvh !important;
+          max-height: 100dvh !important;
         }
+        
+        w3m-modal > wui-flex, 
+        w3m-modal wui-flex.modal-container,
+        .w3m-modal-content {
+          height: 90dvh !important; /* 占据屏幕 90% 高度 */
+          max-height: 90dvh !important;
+          border-bottom-left-radius: 0 !important;
+          border-bottom-right-radius: 0 !important; /* 底部完全平齐 */
+          margin-bottom: 0 !important;
+          padding-bottom: env(safe-area-inset-bottom) !important; /* 适配 iPhone 底部安全区横条 */
+        }
+        
         w3m-router {
           height: 100% !important;
-          max-height: 85vh !important;
-          overflow-y: auto !important; 
-        }
-        w3m-router::-webkit-scrollbar {
-          display: none;
-        }
-        .wui-flex {
-          max-height: none !important;
+          max-height: 100% !important;
         }
       `}</style>
 
@@ -290,7 +295,6 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          {/* 🔥 点击直接打开 AllWallets 网格视图 */}
           <button className="btn-connect" onClick={() => open({ view: 'AllWallets' })}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
