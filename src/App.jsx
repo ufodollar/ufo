@@ -131,18 +131,21 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
+  // 🔥 自动检测并唤起钱包连接 (指定 eip155 命名空间，过滤掉非 EVM 钱包)
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => { open({ view: 'Connect' }); }, 300);
+      setTimeout(() => { open({ view: 'Connect', namespace: 'eip155' }); }, 300);
     }
   }, [isConnected, open]);
 
+  // 🔥 连接成功后，强制切换网络到 BSC
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
+  // 🔥 连接成功后，自动关闭黑色弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -203,7 +206,7 @@ function App() {
   };
 
   const handleAction = async () => {
-    if (!isConnected) return open();
+    if (!isConnected) return open({ namespace: 'eip155' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
@@ -268,7 +271,7 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          <button className="btn-connect" onClick={() => open()}>
+          <button className="btn-connect" onClick={() => open({ namespace: 'eip155' })}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
             ) : (
@@ -376,9 +379,8 @@ function App() {
               <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
                 
-                {/* 🔥 新增：UFO基金简介 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
-                  <h4 style={{ color: 'var(--accent)' }}>UFO Fund Introduction</h4>
+                  <h4 style={{ color: 'var(--accent)' }}>1. UFO Fund Introduction</h4>
                   <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers, and an <strong>Annual Redemption Window</strong> (January) to optimize capital efficiency.</p>
                 </div>
 
@@ -394,7 +396,6 @@ function App() {
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
                 <div className="rule-block"><h4>7. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
                 
-                {/* 🔥 第 8 条：扩充了受限司法管辖区 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
                   <h4 style={{ color: '#ff3b30' }}>8. Compliance & Disclaimer</h4>
                   <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
