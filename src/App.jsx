@@ -34,7 +34,6 @@ const SwitchIcon = () => (
   </svg>
 );
 
-// 🛸 全局音效池
 let globalAudioCtx = null;
 const getAudioContext = () => {
   if (!globalAudioCtx) {
@@ -48,7 +47,6 @@ const getAudioContext = () => {
   return globalAudioCtx;
 };
 
-// 🛸 外星飞碟低沉吟唱振动音 (支持无限叠加)
 const playClickSound = () => {
   try {
     const ctx = getAudioContext();
@@ -63,10 +61,8 @@ const playClickSound = () => {
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = 15; 
-    
     const lfoGain = ctx.createGain();
     lfoGain.gain.value = 15; 
-    
     lfo.connect(lfoGain);
     lfoGain.connect(osc.frequency);
 
@@ -87,7 +83,6 @@ const playClickSound = () => {
 
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
-
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
 
@@ -98,9 +93,7 @@ const playClickSound = () => {
     lfo.start(now);
     lfo.stop(now + 0.6);
 
-  } catch (e) { 
-    console.warn("Audio context error", e); 
-  }
+  } catch (e) { }
 };
 
 const formatAmount = (val) => {
@@ -132,41 +125,29 @@ function App() {
 
   const currentYear = chainDate.getFullYear();
 
-  // 🔥 全局点击监听
   useEffect(() => {
-    const handleGlobalClick = () => {
-      playClickSound();
-    };
+    const handleGlobalClick = () => { playClickSound(); };
     window.addEventListener('click', handleGlobalClick);
-    return () => {
-      window.removeEventListener('click', handleGlobalClick);
-    };
+    return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
   // 🔥 自动检测并唤起钱包连接
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
     if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => {
-        open({ view: 'Connect', namespace: 'eip155' }); 
-      }, 300);
+      setTimeout(() => { open({ view: 'Connect' }); }, 300);
     }
   }, [isConnected, open]);
 
   // 🔥 连接成功后，强制切换网络到 BSC
   useEffect(() => {
-    if (isConnected) {
-      switchNetwork(bsc);
-    }
+    if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
   // 🔥 连接成功后，自动关闭黑色弹窗
   useEffect(() => {
-    if (isConnected) {
-      close(); 
-    }
+    if (isConnected) { close(); }
   }, [isConnected, close]);
 
   const fetchData = async () => {
@@ -195,10 +176,7 @@ function App() {
       } else {
         setAccumulatedYield('0');
       }
-
-    } catch (e) { 
-      console.log("Fetch Data Error:", e); 
-    }
+    } catch (e) { console.log("Fetch Data Error:", e); }
   };
 
   const fetchBalances = async () => {
@@ -211,31 +189,24 @@ function App() {
       
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
-      
       fetchData(); 
     } catch (e) { }
   };
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => {
-      fetchData();
-    }, 60000);
+    const interval = setInterval(() => { fetchData(); }, 60000);
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
-    if (val < 0 || val.includes('-')) {
-      setMsg("Negative amounts are not allowed.");
-      return;
-    }
-    setMsg(''); 
-    setInputAmount(val);
+    if (val < 0 || val.includes('-')) { setMsg("Negative amounts are not allowed."); return; }
+    setMsg(''); setInputAmount(val);
   };
 
   const handleAction = async () => {
-    if (!isConnected) return open({ namespace: 'eip155' });
+    if (!isConnected) return open();
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
@@ -243,15 +214,13 @@ function App() {
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
-      setIsProcessing(true);
-      setMsg("");
+      setIsProcessing(true); setMsg("");
       const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
       
       const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-      
       const amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
 
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
@@ -268,7 +237,6 @@ function App() {
       setInputAmount('');
       fetchBalances();
     } catch (err) {
-      console.log(err);
       setMsg(err.message.includes('rejected') ? "Transaction Rejected." : "Transaction Failed.");
     } finally {
       setIsProcessing(false);
@@ -285,7 +253,8 @@ function App() {
 
   let receiveAmount = '0';
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    receiveAmount = isDepositMode ? (parseFloat(inputAmount) / nav).toString() : (parseFloat(inputAmount) * nav).toString();
+    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
+    receiveAmount = formatAmount(calc.toString()); 
   }
 
   const usdtValue = parseFloat(usdtBalance) * 1;
@@ -293,26 +262,6 @@ function App() {
 
   return (
     <>
-      {/* 🔥 核心优化：智能高度自适应，让 5 个钱包完美展开 */}
-      <style>{`
-        w3m-modal {
-          /* 允许弹窗达到屏幕高度的 85%，但内容少时自动缩小 */
-          --w3m-modal-max-height: 85vh !important;
-        }
-        w3m-router {
-          /* 移除强制滚动，让 5 个钱包自然撑开高度 */
-          overflow-y: auto !important; 
-          max-height: none !important;
-        }
-        /* 隐藏滚动条以保持液态玻璃的极简美感 */
-        w3m-router::-webkit-scrollbar {
-          display: none;
-        }
-        wui-flex {
-          max-height: none !important;
-        }
-      `}</style>
-
       <div className="bg-shape-square"></div>
       <div className="bg-shape-triangle"></div>
 
@@ -322,7 +271,7 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          <button className="btn-connect" onClick={() => open({ namespace: 'eip155' })}>
+          <button className="btn-connect" onClick={() => open()}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
             ) : (
@@ -429,6 +378,7 @@ function App() {
             <div className="modal-content" onClick={e => e.stopPropagation()}>
               <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
+                
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
                   <h4 style={{ color: 'var(--accent)' }}>1. UFO Fund Introduction</h4>
                   <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers, and an <strong>Annual Redemption Window</strong> (January) to optimize capital efficiency.</p>
@@ -450,6 +400,7 @@ function App() {
                   <h4 style={{ color: '#ff3b30' }}>8. Compliance & Disclaimer</h4>
                   <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
+
               </div>
             </div>
           </div>
