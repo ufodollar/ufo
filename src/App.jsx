@@ -132,7 +132,7 @@ function App() {
 
   const currentYear = chainDate.getFullYear();
 
-  // 🔥 全局点击监听（点击网页任意地方发声）
+  // 🔥 全局点击监听
   useEffect(() => {
     const handleGlobalClick = () => {
       playClickSound();
@@ -155,14 +155,14 @@ function App() {
     }
   }, [isConnected, open]);
 
-  // 🔥 连接成功后，强制切换网络到 BSC
+  // 🔥 强制切换网络
   useEffect(() => {
     if (isConnected) {
       switchNetwork(bsc);
     }
   }, [isConnected, switchNetwork]);
 
-  // 🔥 连接成功后，自动关闭黑色弹窗
+  // 🔥 连接后关闭弹窗
   useEffect(() => {
     if (isConnected) {
       close(); 
@@ -293,16 +293,16 @@ function App() {
 
   return (
     <>
-      {/* 🔥 强制重写 Reown 弹窗的高度及样式 */}
+      {/* 🔥 强制重写 Reown 弹窗的高度及样式 (放大 1.6 倍) */}
       <style>{`
         w3m-modal {
-          --w3m-modal-max-height: 85vh !important; /* 允许弹窗达到屏幕 85% 高度 */
+          --w3m-modal-max-height: 100dvh !important; /* 100dvh 等于满屏，确保有足够空间 */
+          --w3m-modal-height: 90dvh !important;
         }
         w3m-router {
-          max-height: 80vh !important;
-          overflow-y: auto !important; /* 如果钱包太多，允许内部滚动 */
+          max-height: 85vh !important;
+          overflow-y: auto !important;
         }
-        /* 隐藏滚动条以保持美观 */
         w3m-router::-webkit-scrollbar {
           display: none;
         }
