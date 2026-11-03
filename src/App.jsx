@@ -34,9 +34,8 @@ const SwitchIcon = () => (
   </svg>
 );
 
-// 🛸 全局音效池（防止频繁点击导致浏览器崩溃或失声）
+// 🛸 全局音效池
 let globalAudioCtx = null;
-
 const getAudioContext = () => {
   if (!globalAudioCtx) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -49,7 +48,7 @@ const getAudioContext = () => {
   return globalAudioCtx;
 };
 
-// 🛸 外星飞碟低沉吟唱振动音 (支持无限叠加)
+// 🛸 飞碟低沉吟唱音效
 const playClickSound = () => {
   try {
     const ctx = getAudioContext();
@@ -144,7 +143,7 @@ function App() {
     };
   }, []);
 
-  // 🔥 自动检测并唤起钱包连接 (针对移动端跳转)
+  // 🔥 自动检测并唤起钱包连接
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -294,6 +293,24 @@ function App() {
 
   return (
     <>
+      {/* 🔥 强制重写 Reown 弹窗的高度及样式 */}
+      <style>{`
+        w3m-modal {
+          --w3m-modal-max-height: 85vh !important; /* 允许弹窗达到屏幕 85% 高度 */
+        }
+        w3m-router {
+          max-height: 80vh !important;
+          overflow-y: auto !important; /* 如果钱包太多，允许内部滚动 */
+        }
+        /* 隐藏滚动条以保持美观 */
+        w3m-router::-webkit-scrollbar {
+          display: none;
+        }
+        .wui-flex {
+          max-height: none !important;
+        }
+      `}</style>
+
       <div className="bg-shape-square"></div>
       <div className="bg-shape-triangle"></div>
 
@@ -312,7 +329,6 @@ function App() {
           </button>
         </header>
 
-        {/* 🔥 移除了 {isConnected && (...)} 的条件限制，让资产面板始终显示 */}
         <div className="asset-dashboard">
           <div className="balance-group">
             <div className="balance-item">
@@ -412,12 +428,7 @@ function App() {
               <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
                 <div className="rule-block"><h4>1. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
-                
-                <div className="rule-block">
-                  <h4>2. When to Redeem</h4>
-                  <p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p>
-                </div>
-                
+                <div className="rule-block"><h4>2. When to Redeem</h4><p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p></div>
                 <div className="rule-block"><h4>3. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated to cover platform operational costs.</p></div>
                 <div className="rule-block"><h4>4. Dynamic Pricing</h4><p>In January, the UFO purchase price is fixed at 1 USDT. During other months, the UFO purchase price fluctuates dynamically based on the vault's NAV. Within a single calendar year, UFOs purchased earlier will earn more interest than those purchased later.</p></div>
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>5. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
