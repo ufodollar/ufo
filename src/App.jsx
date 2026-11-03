@@ -24,8 +24,7 @@ const ERC20_ABI = [
 const VAULT_ABI = [
   "function deposit(uint256)", 
   "function withdraw(uint256)",
-  "function getExchangeRate() view returns (uint256)",
-  "function lastHarvestBalance() view returns (uint256)" 
+  "function getExchangeRate() view returns (uint256)"
 ];
 
 const SwitchIcon = () => (
@@ -117,11 +116,9 @@ function App() {
   const [msg, setMsg] = useState('');
   
   const [isRedeemWindow, setIsRedeemWindow] = useState(false);
-  const [chainDate, setChainDate] = useState(new Date());
   const [showRules, setShowRules] = useState(false);
   
   const [nav, setNav] = useState(1); 
-  const [pendingYield, setPendingYield] = useState('0');
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -140,29 +137,14 @@ function App() {
   const fetchData = async () => {
     try {
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-      const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
       
       const latestBlock = await rpcProvider.getBlock('latest');
       const blockDate = new Date(latestBlock.timestamp * 1000);
-      setChainDate(blockDate);
       setIsRedeemWindow(blockDate.getUTCMonth() === 0);
 
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
-
-      const totalPrincipal = await vaultContract.lastHarvestBalance(); 
-      const totalUFO = await ufoContract.totalSupply();
-      
-      const totalAssets = (rate * totalUFO) / BigInt(1e18); 
-      const principal18 = totalPrincipal * BigInt(1e12);
-
-      if (totalUFO > 0n && totalAssets > principal18) {
-        const yieldAmount = totalAssets - principal18;
-        setPendingYield(ethers.formatUnits(yieldAmount, 18));
-      } else {
-        setPendingYield('0');
-      }
     } catch (e) { console.log("Fetch Data Error:", e); }
   };
 
@@ -361,17 +343,19 @@ function App() {
         <div className="info-section">
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🏦</span> Current UFO Price</span>
-            <span className="info-value green">${nav.toFixed(4)}</span>
+            <span className="info-value green">{nav.toFixed(4)} USDT</span>
           </div>
-          
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">📈</span> Pending Redemption Yield</span>
-            <span className="info-value green">${formatAmount(pendingYield)}</span>
+            <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
+            <span className="info-value blue">Aave V3</span>
           </div>
-          
+          <div className="info-item">
+            <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
+            <span className="info-value purple">BNB Chain</span>
+          </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💸</span> Redemption Period</span>
-            <span className="info-value purple">Jan 1-31 of next year</span>
+            <span className="info-value purple">Jan 1st - Jan 31st annually</span>
           </div>
         </div>
 
