@@ -131,18 +131,13 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  useEffect(() => {
-    const isWalletBrowser = window.ethereum || window.phantom;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => { open({ view: 'AllWallets' }); }, 300);
-    }
-  }, [isConnected, open]);
+  // ❌ 删除了原来的自动唤起 useEffect，防止跳转回来重复弹出
 
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
+  // 🔥 核心：只要连接成功，立刻关闭黑色弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -264,7 +259,7 @@ function App() {
         w3m-modal {
           --w3m-modal-height: 100dvh !important;
           --w3m-modal-max-height: 100dvh !important;
-          align-items: flex-end !important; /* 让抽屉贴到底部 */
+          align-items: flex-end !important; 
           height: 100dvh !important;
           max-height: 100dvh !important;
         }
@@ -272,12 +267,12 @@ function App() {
         w3m-modal > wui-flex, 
         w3m-modal wui-flex.modal-container,
         .w3m-modal-content {
-          height: 90dvh !important; /* 占据屏幕 90% 高度 */
+          height: 90dvh !important; 
           max-height: 90dvh !important;
           border-bottom-left-radius: 0 !important;
-          border-bottom-right-radius: 0 !important; /* 底部完全平齐 */
+          border-bottom-right-radius: 0 !important; 
           margin-bottom: 0 !important;
-          padding-bottom: env(safe-area-inset-bottom) !important; /* 适配 iPhone 底部安全区横条 */
+          padding-bottom: env(safe-area-inset-bottom) !important; 
         }
         
         w3m-router {
