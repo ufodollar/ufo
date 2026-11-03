@@ -179,6 +179,7 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
+    // 赎回限制保留，申购限制彻底解放
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
@@ -373,10 +374,10 @@ function App() {
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
                   <h4 style={{ color: 'var(--accent)' }}>1. UFO Fund Introduction</h4>
-                  <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers, and an <strong>Annual Redemption Window</strong> (January) to optimize capital efficiency.</p>
+                  <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers.</p>
                 </div>
 
-                <div className="rule-block"><h4>2. How It Works</h4><p>You can buy UFO tokens on any day throughout the year. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
+                <div className="rule-block"><h4>2. How It Works</h4><p>You can buy UFO tokens 365 days a year, even during the January redemption window. We deposit your USDT into Aave V3 to earn safe interest. The protocol uses real-time NAV calculation, ensuring that every deposit is perfectly priced and fairly distributed.</p></div>
                 
                 <div className="rule-block">
                   <h4>3. When to Redeem</h4>
@@ -384,7 +385,7 @@ function App() {
                 </div>
                 
                 <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
-                <div className="rule-block"><h4>5. Dynamic Pricing</h4><p>During the redemption month (January), the UFO purchase price fluctuates dynamically based on the vault's NAV. UFOs purchased earlier will earn more interest than those purchased later, ensuring absolute fairness.</p></div>
+                <div className="rule-block"><h4>5. Dynamic Pricing & Free Market</h4><p>The UFO price is continuously updated based on the vault's NAV. Because the algorithm is mathematically precise, early and late buyers are treated with absolute fairness. There are no lockups for buying; you can enter the market at any time.</p></div>
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
                 <div className="rule-block"><h4>7. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
                 
