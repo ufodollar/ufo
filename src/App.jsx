@@ -375,22 +375,29 @@ function App() {
             <div className="modal-content" onClick={e => e.stopPropagation()}>
               <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
-                <div className="rule-block"><h4>1. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
+                
+                {/* 🔥 新增：UFO基金简介 */}
+                <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
+                  <h4 style={{ color: 'var(--accent)' }}>UFO Fund Introduction</h4>
+                  <p>UFO Fund is a tokenized, stable-yield wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all buyers, and an <strong>Annual Redemption Window</strong> (January) to optimize capital efficiency.</p>
+                </div>
+
+                <div className="rule-block"><h4>2. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
                 
                 <div className="rule-block">
-                  <h4>2. When to Redeem</h4>
+                  <h4>3. When to Redeem</h4>
                   <p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p>
                 </div>
                 
-                <div className="rule-block"><h4>3. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated to cover platform operational costs.</p></div>
-                <div className="rule-block"><h4>4. Dynamic Pricing</h4><p>In January, the UFO purchase price is fixed at 1 USDT. During other months, the UFO purchase price fluctuates dynamically based on the vault's NAV. Within a single calendar year, UFOs purchased earlier will earn more interest than those purchased later.</p></div>
-                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>5. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
-                <div className="rule-block"><h4>6. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
+                <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated to cover platform operational costs.</p></div>
+                <div className="rule-block"><h4>5. Dynamic Pricing</h4><p>In January, the UFO purchase price is fixed at 1 USDT. During other months, the UFO purchase price fluctuates dynamically based on the vault's NAV. Within a single calendar year, UFOs purchased earlier will earn more interest than those purchased later.</p></div>
+                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
+                <div className="rule-block"><h4>7. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
                 
-                {/* 🔥 第 7 条：添加了中国大陆的限制 */}
+                {/* 🔥 第 8 条：扩充了受限司法管辖区 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
-                  <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
-                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China</strong>, or any sanctioned countries), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
+                  <h4 style={{ color: '#ff3b30' }}>8. Compliance & Disclaimer</h4>
+                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
 
               </div>
