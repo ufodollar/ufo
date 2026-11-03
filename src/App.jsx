@@ -131,21 +131,21 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 自动检测并唤起钱包连接
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => { open({ view: 'Connect' }); }, 300);
+      setTimeout(() => { 
+        // 强制打开 'AllWallets' 视图，直接显示网格状的所有钱包
+        open({ view: 'AllWallets' }); 
+      }, 300);
     }
   }, [isConnected, open]);
 
-  // 🔥 连接成功后，强制切换网络到 BSC
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 🔥 连接成功后，自动关闭黑色弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -206,7 +206,7 @@ function App() {
   };
 
   const handleAction = async () => {
-    if (!isConnected) return open();
+    if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
@@ -262,13 +262,15 @@ function App() {
 
   return (
     <>
-      {/* 🔥 强制重写 Reown 弹窗的高度及样式，确保显示 5 个钱包 */}
+      {/* 🔥 终极强制：让所有弹窗视图都保持 85vh 高度，且内嵌网格展开 */}
       <style>{`
         w3m-modal {
-          --w3m-modal-max-height: 85vh !important; 
+          --w3m-modal-max-height: 85vh !important;
+          height: 85vh !important; 
         }
         w3m-router {
-          max-height: 80vh !important;
+          height: 100% !important;
+          max-height: 85vh !important;
           overflow-y: auto !important; 
         }
         w3m-router::-webkit-scrollbar {
@@ -288,7 +290,8 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          <button className="btn-connect" onClick={() => open()}>
+          {/* 🔥 点击直接打开 AllWallets 网格视图 */}
+          <button className="btn-connect" onClick={() => open({ view: 'AllWallets' })}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
             ) : (
