@@ -34,7 +34,6 @@ const SwitchIcon = () => (
   </svg>
 );
 
-// 🛸 全局音效池
 let globalAudioCtx = null;
 const getAudioContext = () => {
   if (!globalAudioCtx) {
@@ -48,7 +47,6 @@ const getAudioContext = () => {
   return globalAudioCtx;
 };
 
-// 🛸 飞碟低沉吟唱音效
 const playClickSound = () => {
   try {
     const ctx = getAudioContext();
@@ -63,10 +61,8 @@ const playClickSound = () => {
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = 15; 
-    
     const lfoGain = ctx.createGain();
     lfoGain.gain.value = 15; 
-    
     lfo.connect(lfoGain);
     lfoGain.connect(osc.frequency);
 
@@ -87,7 +83,6 @@ const playClickSound = () => {
 
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
-
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
 
@@ -98,9 +93,7 @@ const playClickSound = () => {
     lfo.start(now);
     lfo.stop(now + 0.6);
 
-  } catch (e) { 
-    console.warn("Audio context error", e); 
-  }
+  } catch (e) { }
 };
 
 const formatAmount = (val) => {
@@ -132,41 +125,26 @@ function App() {
 
   const currentYear = chainDate.getFullYear();
 
-  // 🔥 全局点击监听
   useEffect(() => {
-    const handleGlobalClick = () => {
-      playClickSound();
-    };
+    const handleGlobalClick = () => { playClickSound(); };
     window.addEventListener('click', handleGlobalClick);
-    return () => {
-      window.removeEventListener('click', handleGlobalClick);
-    };
+    return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 自动检测并唤起钱包连接
   useEffect(() => {
     const isWalletBrowser = window.ethereum || window.phantom;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
     if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => {
-        open({ view: 'Connect' }); 
-      }, 300);
+      setTimeout(() => { open({ view: 'Connect' }); }, 300);
     }
   }, [isConnected, open]);
 
-  // 🔥 强制切换网络
   useEffect(() => {
-    if (isConnected) {
-      switchNetwork(bsc);
-    }
+    if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 🔥 连接后关闭弹窗
   useEffect(() => {
-    if (isConnected) {
-      close(); 
-    }
+    if (isConnected) { close(); }
   }, [isConnected, close]);
 
   const fetchData = async () => {
@@ -195,10 +173,7 @@ function App() {
       } else {
         setAccumulatedYield('0');
       }
-
-    } catch (e) { 
-      console.log("Fetch Data Error:", e); 
-    }
+    } catch (e) { console.log("Fetch Data Error:", e); }
   };
 
   const fetchBalances = async () => {
@@ -211,27 +186,20 @@ function App() {
       
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
-      
       fetchData(); 
     } catch (e) { }
   };
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => {
-      fetchData();
-    }, 60000);
+    const interval = setInterval(() => { fetchData(); }, 60000);
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
-    if (val < 0 || val.includes('-')) {
-      setMsg("Negative amounts are not allowed.");
-      return;
-    }
-    setMsg(''); 
-    setInputAmount(val);
+    if (val < 0 || val.includes('-')) { setMsg("Negative amounts are not allowed."); return; }
+    setMsg(''); setInputAmount(val);
   };
 
   const handleAction = async () => {
@@ -243,15 +211,13 @@ function App() {
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
-      setIsProcessing(true);
-      setMsg("");
+      setIsProcessing(true); setMsg("");
       const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
       
       const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-      
       const amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
 
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
@@ -268,7 +234,6 @@ function App() {
       setInputAmount('');
       fetchBalances();
     } catch (err) {
-      console.log(err);
       setMsg(err.message.includes('rejected') ? "Transaction Rejected." : "Transaction Failed.");
     } finally {
       setIsProcessing(false);
@@ -285,7 +250,8 @@ function App() {
 
   let receiveAmount = '0';
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    receiveAmount = isDepositMode ? (parseFloat(inputAmount) / nav).toString() : (parseFloat(inputAmount) * nav).toString();
+    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
+    receiveAmount = formatAmount(calc.toString()); 
   }
 
   const usdtValue = parseFloat(usdtBalance) * 1;
@@ -293,24 +259,6 @@ function App() {
 
   return (
     <>
-      {/* 🔥 强制重写 Reown 弹窗的高度及样式 (放大 1.6 倍) */}
-      <style>{`
-        w3m-modal {
-          --w3m-modal-max-height: 100dvh !important; /* 100dvh 等于满屏，确保有足够空间 */
-          --w3m-modal-height: 90dvh !important;
-        }
-        w3m-router {
-          max-height: 85vh !important;
-          overflow-y: auto !important;
-        }
-        w3m-router::-webkit-scrollbar {
-          display: none;
-        }
-        .wui-flex {
-          max-height: none !important;
-        }
-      `}</style>
-
       <div className="bg-shape-square"></div>
       <div className="bg-shape-triangle"></div>
 
@@ -428,11 +376,23 @@ function App() {
               <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
               <div className="rules-content">
                 <div className="rule-block"><h4>1. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
-                <div className="rule-block"><h4>2. When to Redeem</h4><p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p></div>
+                
+                <div className="rule-block">
+                  <h4>2. When to Redeem</h4>
+                  <p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p>
+                </div>
+                
                 <div className="rule-block"><h4>3. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated to cover platform operational costs.</p></div>
                 <div className="rule-block"><h4>4. Dynamic Pricing</h4><p>In January, the UFO purchase price is fixed at 1 USDT. During other months, the UFO purchase price fluctuates dynamically based on the vault's NAV. Within a single calendar year, UFOs purchased earlier will earn more interest than those purchased later.</p></div>
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>5. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
                 <div className="rule-block"><h4>6. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
+                
+                {/* 🔥 第 7 条：添加了中国大陆的限制 */}
+                <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
+                  <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
+                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China</strong>, or any sanctioned countries), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
+                </div>
+
               </div>
             </div>
           </div>
