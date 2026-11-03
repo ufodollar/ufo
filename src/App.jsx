@@ -108,7 +108,6 @@ const formatAmount = (val) => {
   if (!val) return '0.0';
   const num = parseFloat(val);
   if (num === 0) return '0.0';
-  // 强制截断6位小数并移除末尾多余的0，修复浮点数精度溢出问题
   return num.toFixed(6).replace(/\.?0+$/, ''); 
 };
 
@@ -287,9 +286,7 @@ function App() {
 
   let receiveAmount = '0';
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
-    // 🔥 前端精度终极修复：统一走 formatAmount 防止科学计数法或超长尾巴
-    receiveAmount = formatAmount(calc.toString()); 
+    receiveAmount = isDepositMode ? (parseFloat(inputAmount) / nav).toString() : (parseFloat(inputAmount) * nav).toString();
   }
 
   const usdtValue = parseFloat(usdtBalance) * 1;
@@ -315,26 +312,25 @@ function App() {
           </button>
         </header>
 
-        {isConnected && (
-          <div className="asset-dashboard">
-            <div className="balance-group">
-              <div className="balance-item">
-                <span className="asset-balance-label">USDT Balance</span>
-                <span className="asset-balance-value">${formatAmount(usdtValue)}</span>
-              </div>
-              <div className="balance-item">
-                <span className="asset-balance-label">UFO Balance</span>
-                <span className="asset-balance-value">${formatAmount(ufoValue)}</span>
-              </div>
+        {/* 🔥 移除了 {isConnected && (...)} 的条件限制，让资产面板始终显示 */}
+        <div className="asset-dashboard">
+          <div className="balance-group">
+            <div className="balance-item">
+              <span className="asset-balance-label">USDT Balance</span>
+              <span className="asset-balance-value">${formatAmount(usdtValue)}</span>
             </div>
-            
-            <div className="action-buttons-group">
-              <button className="btn-rules" onClick={() => setShowRules(true)}>
-                Rules
-              </button>
+            <div className="balance-item">
+              <span className="asset-balance-label">UFO Balance</span>
+              <span className="asset-balance-value">${formatAmount(ufoValue)}</span>
             </div>
           </div>
-        )}
+          
+          <div className="action-buttons-group">
+            <button className="btn-rules" onClick={() => setShowRules(true)}>
+              Rules
+            </button>
+          </div>
+        </div>
 
         <div className="card">
           <div className="tabs">
@@ -345,7 +341,7 @@ function App() {
           <div className="input-box">
             <div className="input-label">
               <span>{isDepositMode ? 'You Pay' : 'You Redeem'}</span>
-              <span className="balance" onClick={() => { setInputAmount(currentBalance); }}>
+              <span className="balance" onClick={() => { if(isConnected) setInputAmount(currentBalance); }}>
                 <span className="balance-label">Balance: </span>
                 <span className="balance-value">{formatAmount(currentBalance)}</span>
               </span>
@@ -370,7 +366,7 @@ function App() {
               </span>
             </div>
             <div className="input-row">
-              <input type="text" className="input-field" value={receiveAmount === '0' ? '' : receiveAmount} readOnly placeholder="0.0" />
+              <input type="text" className="input-field" value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} readOnly placeholder="0.0" />
               <div className="token-tag">
                 <img src={receiveIcon} alt={receiveToken} />
                 {receiveToken}
@@ -417,7 +413,6 @@ function App() {
               <div className="rules-content">
                 <div className="rule-block"><h4>1. How It Works</h4><p>You can buy UFO tokens on any day within a 365-day cycle. We deposit your USDT into Aave V3 to earn safe interest. The longer you hold, the more interest you accrue.</p></div>
                 
-                {/* 🔥 机构级规则优化：明确解释1月份的时间差及建议 */}
                 <div className="rule-block">
                   <h4>2. When to Redeem</h4>
                   <p>Our redemption window is from Jan 1st to Jan 31st every year. Since Aave yields continue to accrue every second, the NAV keeps rising during January. We recommend redeeming early in the month to capture the maximum available interest. You will receive your principal plus 50% of the generated interest.</p>
