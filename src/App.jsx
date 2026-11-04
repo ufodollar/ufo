@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址（活期版 + 1.5%手续费）
+// ⚠️ 请务必替换为你真实的最新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
@@ -12,7 +12,7 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
 
-// 🔥 换用更稳定的公共 RPC
+// 换用更稳定的公共 RPC
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-rpc.publicnode.com");
 
 const UFO_LOGO = '/logo.png'; 
@@ -31,30 +31,10 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// 🔥 使用 JSON 格式 ABI，带有明确的输出命名，确保 ethers v6 能准确解包
-const AAVE_ABI = [{
-  "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
-  "name": "getReserveData",
-  "outputs": [
-    {"internalType": "uint256", "name": "configuration", "type": "uint256"},
-    {"internalType": "uint128", "name": "liquidityIndex", "type": "uint128"},
-    {"internalType": "uint128", "name": "currentLiquidityRate", "type": "uint128"}, // 👈 我们要取的就是这个
-    {"internalType": "uint128", "name": "variableBorrowIndex", "type": "uint128"},
-    {"internalType": "uint128", "name": "currentVariableBorrowRate", "type": "uint128"},
-    {"internalType": "uint128", "name": "currentStableBorrowRate", "type": "uint128"},
-    {"internalType": "uint40", "name": "lastUpdateTimestamp", "type": "uint40"},
-    {"internalType": "uint16", "name": "id", "type": "uint16"},
-    {"internalType": "address", "name": "aTokenAddress", "type": "address"},
-    {"internalType": "address", "name": "stableDebtTokenAddress", "type": "address"},
-    {"internalType": "address", "name": "variableDebtTokenAddress", "type": "address"},
-    {"internalType": "address", "name": "interestRateStrategyAddress", "type": "address"},
-    {"internalType": "uint128", "name": "accruedToTreasury", "type": "uint128"},
-    {"internalType": "uint128", "name": "unbacked", "type": "uint128"},
-    {"internalType": "uint128", "name": "isolationModeTotalDebt", "type": "uint128"}
-  ],
-  "stateMutability": "view",
-  "type": "function"
-}];
+// 🔥 找回第一次成功的字符串 ABI
+const AAVE_ABI = [
+  "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
+];
 
 const SwitchIcon = () => (
   <svg className="switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -170,24 +150,20 @@ function App() {
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
 
-      // 2. 获取 Aave V3 实时年化利率
+      // 2. 获取 Aave V3 实时年化利率（使用最初成功的逻辑）
       try {
         const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
         const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
-        // 🔥 直接通过 JSON ABI 里的命名提取，不再依赖数组索引
-        const liquidityRate = reserveData.currentLiquidityRate;
+        // 直接取索引 2 的 currentLiquidityRate
+        const liquidityRate = reserveData[2]; 
         
         if (liquidityRate !== undefined) {
-          // 单位是 RAY (1e27)
           const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
           
-          // 使用 Aave 官方公式，计算按秒复利后的真实 APY
-          const apy = (Math.pow(1 + (rateInDecimal / 31536000), 31536000) - 1) * 100;
-          
-          setAaveApy(apy > 0 ? apy.toFixed(2) : '0.00');
-        } else {
-          console.log("Aave liquidityRate is undefined", reserveData);
+          // 🔥 最初成功的算法（直接单利转换），如果非要用复利，前端计算容易出偏差，这里采用最稳妥的单利展示
+          const apy = (rateInDecimal * 100).toFixed(2);
+          setAaveApy(apy);
         }
       } catch (aaveError) {
         console.error("Aave Data Fetch Error:", aaveError);
