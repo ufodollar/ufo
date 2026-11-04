@@ -164,7 +164,7 @@ function App() {
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => { fetchData(); }, 60000);
+    const interval = setInterval(() => { fetchData(); }, 30000); 
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -179,7 +179,6 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
-    // 赎回限制保留，申购限制彻底解放
     if (!isDepositMode && !isRedeemWindow) return setMsg("Redemption only available in January.");
 
     try {
@@ -253,6 +252,35 @@ function App() {
           height: 100% !important;
           max-height: 100% !important;
         }
+
+        /* Rules 弹窗排版 */
+        .modal-content {
+          display: flex;
+          flex-direction: column;
+          padding: 24px 24px 0 24px !important;
+          max-height: 85vh !important;
+        }
+        .modal-header {
+          flex-shrink: 0;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .modal-header h3 {
+          font-size: 1.3rem;
+        }
+        .btn-close {
+          font-size: 2.2rem !important; /* 放大 X */
+          line-height: 1;
+          margin-top: -6px;
+        }
+        .rules-content {
+          flex-grow: 1;
+          overflow-y: auto;
+          padding-bottom: 24px;
+          margin-top: 0;
+        }
+        .rules-content::-webkit-scrollbar { display: none; }
       `}</style>
 
       <div className="bg-shape-square"></div>
@@ -319,7 +347,7 @@ function App() {
 
           <div className="input-box">
             <div className="input-label">
-              <span>{isDepositMode ? 'You Receive' : 'You Receive (Dynamic Rate)'}</span>
+              <span>{isDepositMode ? 'You Receive' : 'You Receive'}</span>
               <span className="balance" style={{ cursor: 'default' }}>
                 <span className="balance-label">Balance: </span>
                 <span className="balance-value">{formatAmount(receiveBalance)}</span>
@@ -369,7 +397,10 @@ function App() {
         {showRules && (
           <div className="modal-overlay" onClick={() => setShowRules(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header"><h3>UFO Fund Rules</h3><button className="btn-close" onClick={() => setShowRules(false)}>×</button></div>
+              <div className="modal-header">
+                <h3>UFO Fund Rules</h3>
+                <button className="btn-close" onClick={() => setShowRules(false)}>×</button>
+              </div>
               <div className="rules-content">
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
