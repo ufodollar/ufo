@@ -8,8 +8,8 @@ import { bsc } from '@reown/appkit/networks';
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
-// 🔥 严格使用你的 Alchemy 节点
-const rpcProvider = new ethers.JsonRpcProvider("https://bnb-mainnet.g.alchemy.com/v2/alch_9l6WUDtf-F3hzT62COeL3");
+// 🔥 彻底切换为单一公共节点
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
@@ -31,7 +31,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// 🔥 原封不动恢复第一次成功的 ABI
+// 🔥 恢复第一次成功的字符串 ABI
 const AAVE_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
@@ -154,7 +154,6 @@ function App() {
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
 
       try {
-        // 🔥 原封不动恢复第一次成功的逻辑
         const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
         const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
@@ -166,8 +165,7 @@ function App() {
           setAaveApy(apy);
         }
       } catch (aaveError) {
-        console.error("❌ Aave 数据获取失败，这是因为 Alchemy 免费节点限制了复杂合约调用的返回解析:", aaveError);
-        // 如果 Alchemy 拦截了，这里会打印报错
+        console.error("❌ Aave 数据获取失败:", aaveError);
       }
     } catch (e) { 
       console.log("❌ 综合数据获取失败:", e); 
@@ -220,7 +218,6 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        // 精准授权
         const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
         await txApprove.wait();
       }
