@@ -4,14 +4,14 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
+// ⚠️ 请务必替换为你真实的最新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
-// 使用最稳定的 BSC 官方公共节点
+// 单一公共节点
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
-const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB';
 // ==========================================
 
 const UFO_LOGO = '/logo.png'; 
@@ -28,10 +28,6 @@ const VAULT_ABI = [
   "function deposit(uint256)", 
   "function withdraw(uint256)",
   "function getExchangeRate() view returns (uint256)"
-];
-
-const AAVE_ABI = [
-  "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
 
 const SwitchIcon = () => (
@@ -124,7 +120,6 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -132,12 +127,12 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 核心优化：使用 setTimeout 确保连接后立即发起底层网络切换
+  // 强制切换网络
   useEffect(() => {
-    if (isConnected && caipNetwork?.id !== bsc.id) {
-      setTimeout(() => {
-        switchNetwork(bsc).catch(e => console.log("Network switch background error:", e));
-      }, 100);
+    if (isConnected) {
+      if (caipNetwork?.id !== bsc.id) {
+        switchNetwork(bsc);
+      }
     }
   }, [isConnected, switchNetwork, caipNetwork]);
 
@@ -147,23 +142,10 @@ function App() {
 
   const fetchData = async () => {
     try {
+      // 只读取你自己的金库净值，彻底告别 Aave 合约解析
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
-
-      try {
-        const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
-        const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
-        const liquidityRate = reserveData[2]; 
-        
-        if (liquidityRate !== undefined) {
-          const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
-          const apy = (rateInDecimal * 100).toFixed(2);
-          setAaveApy(apy);
-        }
-      } catch (aaveError) {
-        console.error("Aave 数据获取失败:", aaveError);
-      }
     } catch (e) { 
       console.log("综合数据获取失败:", e); 
     }
@@ -180,9 +162,7 @@ function App() {
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
       fetchData(); 
-    } catch (e) { 
-      console.log("余额获取失败:", e);
-    }
+    } catch (e) { }
   };
 
   useEffect(() => { 
@@ -397,9 +377,10 @@ function App() {
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
           </div>
+          {/* 🔥 删除了 APY，替换为静态的年化情况展示 */}
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
-            <span className="info-value blue">{aaveApy}%</span>
+            <span className="info-label"><span className="big-icon">📈</span> Yield Type</span>
+            <span className="info-value green">Auto-Compounding</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
