@@ -12,8 +12,8 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
 
-// 换用更稳定的公共 RPC
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-rpc.publicnode.com");
+// 换回最稳定的官方 RPC
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -31,7 +31,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// 🔥 找回第一次成功的字符串 ABI
+// 使用最稳妥的字符串 ABI
 const AAVE_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
@@ -126,7 +126,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.00'); 
+  const [aaveApy, setAaveApy] = useState('0.0000'); // 保留4位小数
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -134,8 +134,11 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
+  // 🔥 强制切换网络，解决弹窗问题
   useEffect(() => {
-    if (isConnected) { switchNetwork(bsc); }
+    if (isConnected) { 
+      switchNetwork(bsc).catch(e => console.log("Network switch ignored:", e)); 
+    }
   }, [isConnected, switchNetwork]);
 
   useEffect(() => {
@@ -144,29 +147,33 @@ function App() {
 
   const fetchData = async () => {
     try {
-      // 1. 获取净值 (NAV)
+      // 1. 获取净值
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
 
-      // 2. 获取 Aave V3 实时年化利率（使用最初成功的逻辑）
+      // 2. 获取 Aave 利率
       try {
         const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
         const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
-        // 直接取索引 2 的 currentLiquidityRate
+        // 提取 currentLiquidityRate (索引 2)
         const liquidityRate = reserveData[2]; 
         
-        if (liquidityRate !== undefined) {
+        if (liquidityRate !== undefined && liquidityRate > 0n) {
+          // RAY -> 普通数值
           const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
-          
-          // 🔥 最初成功的算法（直接单利转换），如果非要用复利，前端计算容易出偏差，这里采用最稳妥的单利展示
-          const apy = (rateInDecimal * 100).toFixed(2);
-          setAaveApy(apy);
+          // 乘以100转为百分比
+          const apr = rateInDecimal * 100;
+          // 保留4位小数
+          setAaveApy(apr.toFixed(4));
+        } else {
+          setAaveApy('0.0000');
         }
       } catch (aaveError) {
         console.error("Aave Data Fetch Error:", aaveError);
+        setAaveApy('0.0000');
       }
 
     } catch (e) { 
@@ -218,7 +225,7 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        // 🔥 精准授权
+        // 精准授权
         const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
         await txApprove.wait();
       }
@@ -461,7 +468,7 @@ function App() {
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
                   <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
-                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
+                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
 
               </div>
