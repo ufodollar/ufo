@@ -11,7 +11,9 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+
+// 🔥 换用更稳定的公共 RPC
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-rpc.publicnode.com");
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -29,10 +31,30 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// 完整的 Aave V3 ReserveData ABI，确保能正确解析返回值
-const AAVE_ABI = [
-  "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
-];
+// 🔥 使用 JSON 格式 ABI，带有明确的输出命名，确保 ethers v6 能准确解包
+const AAVE_ABI = [{
+  "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
+  "name": "getReserveData",
+  "outputs": [
+    {"internalType": "uint256", "name": "configuration", "type": "uint256"},
+    {"internalType": "uint128", "name": "liquidityIndex", "type": "uint128"},
+    {"internalType": "uint128", "name": "currentLiquidityRate", "type": "uint128"}, // 👈 我们要取的就是这个
+    {"internalType": "uint128", "name": "variableBorrowIndex", "type": "uint128"},
+    {"internalType": "uint128", "name": "currentVariableBorrowRate", "type": "uint128"},
+    {"internalType": "uint128", "name": "currentStableBorrowRate", "type": "uint128"},
+    {"internalType": "uint40", "name": "lastUpdateTimestamp", "type": "uint40"},
+    {"internalType": "uint16", "name": "id", "type": "uint16"},
+    {"internalType": "address", "name": "aTokenAddress", "type": "address"},
+    {"internalType": "address", "name": "stableDebtTokenAddress", "type": "address"},
+    {"internalType": "address", "name": "variableDebtTokenAddress", "type": "address"},
+    {"internalType": "address", "name": "interestRateStrategyAddress", "type": "address"},
+    {"internalType": "uint128", "name": "accruedToTreasury", "type": "uint128"},
+    {"internalType": "uint128", "name": "unbacked", "type": "uint128"},
+    {"internalType": "uint128", "name": "isolationModeTotalDebt", "type": "uint128"}
+  ],
+  "stateMutability": "view",
+  "type": "function"
+}];
 
 const SwitchIcon = () => (
   <svg className="switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -153,22 +175,22 @@ function App() {
         const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
         const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
-        // Aave V3 的 currentLiquidityRate 是第 3 个返回值 (index 2)
-        // 它的单位是 RAY (1e27)
-        const liquidityRate = reserveData[2]; 
+        // 🔥 直接通过 JSON ABI 里的命名提取，不再依赖数组索引
+        const liquidityRate = reserveData.currentLiquidityRate;
         
         if (liquidityRate !== undefined) {
-          // 转换成普通十进制 (APR)
+          // 单位是 RAY (1e27)
           const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
           
           // 使用 Aave 官方公式，计算按秒复利后的真实 APY
-          // APY = (1 + APR/31536000)^31536000 - 1
           const apy = (Math.pow(1 + (rateInDecimal / 31536000), 31536000) - 1) * 100;
           
           setAaveApy(apy > 0 ? apy.toFixed(2) : '0.00');
+        } else {
+          console.log("Aave liquidityRate is undefined", reserveData);
         }
       } catch (aaveError) {
-        console.log("Aave Data Fetch Error:", aaveError);
+        console.error("Aave Data Fetch Error:", aaveError);
       }
 
     } catch (e) { 
@@ -220,7 +242,7 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        // 🔥 执行新政策：精准授权，只授权当前所需金额，避免无限授权带来的安全警告
+        // 🔥 精准授权
         const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
         await txApprove.wait();
       }
