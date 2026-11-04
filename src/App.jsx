@@ -126,24 +126,12 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 核心修复 1：自动检测并唤起连接 (防止从 App 切回来时丢失连接状态)
-  useEffect(() => {
-    const isWalletBrowser = window.ethereum || window.phantom;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile && isWalletBrowser && !isConnected) {
-      setTimeout(() => {
-        open(); // 使用默认 open()，自动适配移动端跳转
-      }, 500);
-    }
-  }, [isConnected, open]);
-
-  // 🔥 核心修复 2：连接成功后，强制切换网络到 BSC
+  // 仅在连接成功后，强制切换网络到 BSC
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 🔥 核心修复 3：连接成功后，自动关闭黑色弹窗
+  // 连接成功后，自动关闭黑色弹窗
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -189,8 +177,8 @@ function App() {
   };
 
   const handleAction = async () => {
-    // 🔥 核心修复 4：不再强制 open({ view: 'AllWallets' })
-    if (!isConnected) return open();
+    // 🔥 核心恢复：点击未连接时，强制打开 AllWallets
+    if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
     
@@ -245,7 +233,7 @@ function App() {
 
   return (
     <>
-      {/* 🔥 终极排版覆盖：弹窗贴底 + Rules 头部固定内部滚动 */}
+      {/* 弹窗贴底与滚动优化 */}
       <style>{`
         w3m-modal {
           --w3m-modal-height: 100dvh !important;
@@ -269,7 +257,7 @@ function App() {
           max-height: 100% !important;
         }
 
-        /* Rules 弹窗改造 */
+        /* Rules 弹窗 */
         .modal-content {
           display: flex;
           flex-direction: column;
@@ -308,8 +296,8 @@ function App() {
             <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
             <div className="logo-text">UFO <span>Fund</span></div>
           </div>
-          {/* 🔥 点击按钮直接使用默认 open() */}
-          <button className="btn-connect" onClick={() => open()}>
+          {/* 🔥 核心恢复：点击强制打开 AllWallets */}
+          <button className="btn-connect" onClick={() => open({ view: 'AllWallets' })}>
             {isConnected ? (
               <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
             ) : (
