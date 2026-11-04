@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址
+// ⚠️ 请务必替换为你真实的最新合约地址（活期版 + 1.5%手续费）
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
@@ -12,8 +12,8 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
 
-// 换回最稳定的官方 RPC
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+// 🔥 使用你的专属 Alchemy 节点，速度与稳定性拉满
+const rpcProvider = new ethers.JsonRpcProvider("https://bnb-mainnet.g.alchemy.com/v2/alch_9l6WUDtf-F3hzT62COeL3");
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -126,7 +126,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.0000'); // 保留4位小数
+  const [aaveApy, setAaveApy] = useState('0.0000'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -134,7 +134,7 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 强制切换网络，解决弹窗问题
+  // 🔥 强制切换网络
   useEffect(() => {
     if (isConnected) { 
       switchNetwork(bsc).catch(e => console.log("Network switch ignored:", e)); 
@@ -147,7 +147,7 @@ function App() {
 
   const fetchData = async () => {
     try {
-      // 1. 获取净值
+      // 1. 获取净值 (NAV)
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
@@ -158,16 +158,12 @@ function App() {
         const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
         const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
-        // 提取 currentLiquidityRate (索引 2)
         const liquidityRate = reserveData[2]; 
         
         if (liquidityRate !== undefined && liquidityRate > 0n) {
-          // RAY -> 普通数值
           const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
-          // 乘以100转为百分比
           const apr = rateInDecimal * 100;
-          // 保留4位小数
-          setAaveApy(apr.toFixed(4));
+          setAaveApy(apr.toFixed(4)); // 保留 4 位小数，能精准看到真实的微小波动
         } else {
           setAaveApy('0.0000');
         }
