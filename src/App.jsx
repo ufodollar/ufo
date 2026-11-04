@@ -10,6 +10,7 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
+const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const UFO_LOGO = '/logo.png'; 
@@ -21,10 +22,15 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function totalSupply() view returns (uint256)" 
 ];
+
 const VAULT_ABI = [
   "function deposit(uint256)", 
   "function withdraw(uint256)",
   "function getExchangeRate() view returns (uint256)"
+];
+
+const AAVE_ABI = [
+  "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
 
 const SwitchIcon = () => (
@@ -117,6 +123,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
+  const [aaveApy, setAaveApy] = useState('0.00'); // 新增 Aave APY 状态
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -138,6 +145,15 @@ function App() {
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
+
+      // 🔥 新增：获取 Aave V3 USDT 实时存款年化利率
+      const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
+      const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
+      // currentLiquidityRate 是第 3 个返回值 (index 2)，单位是 RAY (1e27)
+      const liquidityRate = reserveData[2]; 
+      const apy = (parseFloat(ethers.formatUnits(liquidityRate, 27)) * 100).toFixed(2);
+      setAaveApy(apy);
+
     } catch (e) { console.log("Fetch Data Error:", e); }
   };
 
@@ -185,7 +201,8 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        const txApprove = await tokenContract.approve(VAULT_ADDRESS, ethers.MaxUint256);
+        // 🔥 核心修改：精准授权，只授权当前所需金额，避免触发无限授权的安全警告
+        const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
         await txApprove.wait();
       }
 
@@ -359,7 +376,6 @@ function App() {
         </div>
 
         <div className="info-section">
-          {/* 🔥 Current UFO Price 改为 Net Asset Value */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
             <span className="info-value green">{nav.toFixed(4)} USDT</span>
@@ -367,6 +383,11 @@ function App() {
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
+          </div>
+          {/* 🔥 新增：Aave V3 实时年化 */}
+          <div className="info-item">
+            <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
+            <span className="info-value blue">{aaveApy}%</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
@@ -376,7 +397,6 @@ function App() {
             <span className="info-label"><span className="big-icon">💸</span> Fund Type</span>
             <span className="info-value purple">Flexible (Deposit & Withdraw Anytime)</span>
           </div>
-          {/* 🔥 赎回手续费改为 1.5% */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🔻</span> Redemption Fee</span>
             <span className="info-value red" style={{ color: '#ff3b30' }}>1.5%</span>
@@ -410,7 +430,6 @@ function App() {
 
                 <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets.</p></div>
                 
-                {/* 🔥 费用及持有天数更新 */}
                 <div className="rule-block">
                   <h4>4. Unique Revenue Model: 1.5% Redemption Fee</h4>
                   <p><strong>We do NOT harvest your interest!</strong> 100% of the Aave yield goes directly into increasing your Net Asset Value. Our platform's sole revenue model is a <strong>1.5% redemption fee</strong> deducted only when you withdraw. This fee is instantly transferred to the Fund Manager's wallet.</p>
