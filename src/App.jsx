@@ -8,7 +8,7 @@ import { bsc } from '@reown/appkit/networks';
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
-// 🔥 严格只使用你的 Alchemy 节点
+// 🔥 严格使用你的 Alchemy 节点
 const rpcProvider = new ethers.JsonRpcProvider("https://bnb-mainnet.g.alchemy.com/v2/alch_9l6WUDtf-F3hzT62COeL3");
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
@@ -29,6 +29,11 @@ const VAULT_ABI = [
   "function deposit(uint256)", 
   "function withdraw(uint256)",
   "function getExchangeRate() view returns (uint256)"
+];
+
+// 🔥 原封不动恢复第一次成功的 ABI
+const AAVE_ABI = [
+  "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
 
 const SwitchIcon = () => (
@@ -121,7 +126,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.0000'); 
+  const [aaveApy, setAaveApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -149,33 +154,20 @@ function App() {
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
 
       try {
-        // 🛡️ 终极杀招：绕过 ethers 的 ABI 解析，直接用底层 eth_call
-        // Aave getReserveData(address) 的 hash 是 0x35ea6a75
-        const iface = new ethers.Interface(["function getReserveData(address)"]);
-        const calldata = iface.encodeFunctionData("getReserveData", [USDT_ADDRESS]);
+        // 🔥 原封不动恢复第一次成功的逻辑
+        const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
+        const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
         
-        const rawResult = await rpcProvider.call({
-          to: AAVE_POOL_ADDRESS,
-          data: calldata
-        });
-
-        // 返回的 rawResult 是一串很长的 16 进制字符串
-        // 我们手动提取第三个 32 字节（即 currentLiquidityRate）
-        // 0x 占 2 个字符，每个 32 字节占 64 个字符。第三个就是 slice(2 + 64*2, 2 + 64*3)
-        const rateHex = "0x" + rawResult.slice(2 + 128, 2 + 192);
+        const liquidityRate = reserveData[2]; 
         
-        // 将提取出的 hex 转为 BigInt，然后转为 RAY 单位 (1e27)
-        const liquidityRate = BigInt(rateHex);
-        
-        if (liquidityRate > 0n) {
+        if (liquidityRate !== undefined) {
           const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
-          const apy = rateInDecimal * 100;
-          setAaveApy(apy.toFixed(4));
-        } else {
-          setAaveApy('0.0000');
+          const apy = (rateInDecimal * 100).toFixed(2);
+          setAaveApy(apy);
         }
       } catch (aaveError) {
-        console.error("❌ Aave 数据获取失败 (请检查 Alchemy 额度或跨域限制):", aaveError);
+        console.error("❌ Aave 数据获取失败，这是因为 Alchemy 免费节点限制了复杂合约调用的返回解析:", aaveError);
+        // 如果 Alchemy 拦截了，这里会打印报错
       }
     } catch (e) { 
       console.log("❌ 综合数据获取失败:", e); 
@@ -471,7 +463,7 @@ function App() {
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
                   <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
-                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
+                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
 
               </div>
