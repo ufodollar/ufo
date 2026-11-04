@@ -153,13 +153,14 @@ function App() {
     try {
       const aavePoolContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
       const reserveData = await aavePoolContract.getReserveData(USDT_ADDRESS);
+      
       const supplyRate = parseFloat(ethers.formatUnits(reserveData.currentLiquidityRate, 27));
       const secondsPerYear = 31536000;
       const apyValue = (Math.pow(1 + supplyRate / secondsPerYear, secondsPerYear) - 1) * 100;
       setApy(apyValue.toFixed(2));
     } catch (e) { 
       console.log("Fetch Aave APY Error:", e); 
-      setApy("Loading...");
+      setApy("N/A");
     }
   };
 
@@ -180,10 +181,12 @@ function App() {
   useEffect(() => { 
     fetchBalances(); 
     fetchAaveAPY(); 
+
     const interval = setInterval(() => { 
       fetchData(); 
       fetchAaveAPY();
     }, 15000); 
+
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -197,14 +200,6 @@ function App() {
     if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
-
-    // 🔥 新增：防呆拦截，防止用户余额不足导致白白支付 Gas 费
-    if (isDepositMode && parseFloat(inputAmount) > parseFloat(usdtBalance)) {
-      return setMsg("Insufficient USDT balance.");
-    }
-    if (!isDepositMode && parseFloat(inputAmount) > parseFloat(ufoBalance)) {
-      return setMsg("Insufficient UFO balance.");
-    }
 
     try {
       setIsProcessing(true); setMsg("");
@@ -230,7 +225,12 @@ function App() {
       setInputAmount('');
       fetchBalances();
     } catch (err) {
-      setMsg(err.message.includes('rejected') ? "Transaction Rejected." : "Transaction Failed.");
+      // 优化错误捕获：特别处理 Aave 流动性不足的问题
+      if (err.message.includes('execution reverted')) {
+        setMsg("Transaction Failed: Aave liquidity may be insufficient for this large amount. Please try a smaller amount.");
+      } else {
+        setMsg(err.message.includes('rejected') ? "Transaction Rejected." : "Transaction Failed.");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -244,10 +244,18 @@ function App() {
   const receiveIcon = isDepositMode ? UFO_LOGO : USDT_LOGO;
   const receiveBalance = isDepositMode ? ufoBalance : usdtBalance;
 
+  // 🔥 核心优化：赎回时，显示实际到账（扣除 1% 手续费）
   let receiveAmount = '0';
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
-    receiveAmount = formatAmount(calc.toString()); 
+    if (isDepositMode) {
+      const calc = parseFloat(inputAmount) / nav;
+      receiveAmount = formatAmount(calc.toString()); 
+    } else {
+      // 赎回模式：计算赎回总价值，扣除 1% 手续费
+      const totalValue = parseFloat(inputAmount) * nav;
+      const finalUserAmount = totalValue * 0.99;
+      receiveAmount = formatAmount(finalUserAmount.toString()); 
+    }
   }
 
   const usdtValue = parseFloat(usdtBalance) * 1;
@@ -304,6 +312,14 @@ function App() {
           margin-top: 0;
         }
         .rules-content::-webkit-scrollbar { display: none; }
+        
+        /* 新增：手续费提示小字样式 */
+        .fee-hint {
+          text-align: right;
+          font-size: 0.75rem;
+          color: #999;
+          margin-top: 4px;
+        }
       `}</style>
 
       <div className="bg-shape-square"></div>
@@ -377,12 +393,16 @@ function App() {
               </span>
             </div>
             <div className="input-row">
-              <input type="text" className="input-field" value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} readOnly placeholder="0.0" />
+              <input type="text" className="input-field" value={receiveAmount === '0' ? '' : receiveAmount} readOnly placeholder="0.0" />
               <div className="token-tag">
                 <img src={receiveIcon} alt={receiveToken} />
                 {receiveToken}
               </div>
             </div>
+            {/* 🔥 优化：在赎回模式下增加 1% 手续费的明示 */}
+            {!isDepositMode && inputAmount > 0 && (
+              <div className="fee-hint">* Amount after 1% redemption fee</div>
+            )}
           </div>
 
           <button className="action-btn" onClick={handleAction} disabled={isProcessing || !isConnected || (!inputAmount && isConnected)}>
@@ -447,12 +467,11 @@ function App() {
                   <p>The fund is completely flexible. You can redeem your principal and accumulated interest at any time. The NAV (price per share) continuously increases due to Aave yields. <strong>Early redemption by any user does not lower the NAV for others;</strong> it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p>
                 </div>
                 
-                <div className="rule-block"><h4>5. Redemption Fee</h4><p>We charge a <strong>1% fee on the total redemption amount</strong> to cover platform operational costs.</p></div>
+                <div className="rule-block"><h4>5. Redemption Fee</h4><p>We charge a <strong>1% fee on the total redemption amount</strong> to cover platform operational costs. Note: Frequent short-term deposit and withdrawal may result in loss of principal due to this fee. We recommend long-term holding to maximize returns.</p></div>
                 
-                {/* 🔥 修复：删除误导性的“NAV会下跌”表述 */}
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
                   <h4 style={{ color: '#d9a000' }}>6. Dynamic Pricing & Reality Check</h4>
-                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When any user redeems, a 1% fee is deducted from their total value, while their shares are burned. <strong>This process keeps the remaining NAV perfectly stable.</strong> The value of your shares is never diluted by the actions of other users.</p>
+                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When any user redeems a significant portion of the vault, a 1% fee is deducted. This will cause the displayed NAV to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
                 </div>
 
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>7. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
