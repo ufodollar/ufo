@@ -30,7 +30,6 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// Aave V3 Pool 读取准备金数据的极简 ABI
 const AAVE_POOL_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
@@ -125,7 +124,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [apy, setApy] = useState('0.00'); // 🔥 新增：实时 Aave V3 APY
+  const [apy, setApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -150,23 +149,16 @@ function App() {
     } catch (e) { console.log("Fetch Data Error:", e); }
   };
 
-  // 🔥 实时读取 Aave V3 Pool 的年化收益率 (Supply APY)
   const fetchAaveAPY = async () => {
     try {
       const aavePoolContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
       const reserveData = await aavePoolContract.getReserveData(USDT_ADDRESS);
-      
-      // currentLiquidityRate 是 ray 单位 (1e27)
       const supplyRate = parseFloat(ethers.formatUnits(reserveData.currentLiquidityRate, 27));
-      
-      // 将供应利率 (APR) 按每秒复利折算为年化收益率 (APY)
-      // APY = (1 + APR / 31,536,000)^31,536,000 - 1
       const secondsPerYear = 31536000;
       const apyValue = (Math.pow(1 + supplyRate / secondsPerYear, secondsPerYear) - 1) * 100;
       setApy(apyValue.toFixed(2));
     } catch (e) { 
       console.log("Fetch Aave APY Error:", e); 
-      // 接口网络异常时的兜底显示（不使用假数据，仅作加载提示）
       setApy("Loading...");
     }
   };
@@ -187,14 +179,11 @@ function App() {
 
   useEffect(() => { 
     fetchBalances(); 
-    fetchAaveAPY(); // 页面加载即获取一次 APY
-
-    // 每 15 秒刷新一次链上价格和 Aave 实时利率
+    fetchAaveAPY(); 
     const interval = setInterval(() => { 
       fetchData(); 
       fetchAaveAPY();
     }, 15000); 
-
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -208,6 +197,14 @@ function App() {
     if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
+
+    // 🔥 新增：防呆拦截，防止用户余额不足导致白白支付 Gas 费
+    if (isDepositMode && parseFloat(inputAmount) > parseFloat(usdtBalance)) {
+      return setMsg("Insufficient USDT balance.");
+    }
+    if (!isDepositMode && parseFloat(inputAmount) > parseFloat(ufoBalance)) {
+      return setMsg("Insufficient UFO balance.");
+    }
 
     try {
       setIsProcessing(true); setMsg("");
@@ -404,7 +401,6 @@ function App() {
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
           </div>
-          {/* 🔥 新增：实时 Aave V3 年化收益率 */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">📈</span> Aave V3 APY</span>
             <span className="info-value green">{apy === 'Loading...' ? 'Loading...' : `${apy}%`}</span>
@@ -451,11 +447,12 @@ function App() {
                   <p>The fund is completely flexible. You can redeem your principal and accumulated interest at any time. The NAV (price per share) continuously increases due to Aave yields. <strong>Early redemption by any user does not lower the NAV for others;</strong> it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p>
                 </div>
                 
-                <div className="rule-block"><h4>5. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
+                <div className="rule-block"><h4>5. Redemption Fee</h4><p>We charge a <strong>1% fee on the total redemption amount</strong> to cover platform operational costs.</p></div>
                 
+                {/* 🔥 修复：删除误导性的“NAV会下跌”表述 */}
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
                   <h4 style={{ color: '#d9a000' }}>6. Dynamic Pricing & Reality Check</h4>
-                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When the platform extracts its 50% performance fee, or when a large user redeems a significant portion of the vault, the protocol automatically settles profits. This will cause the displayed NAV to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
+                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When any user redeems, a 1% fee is deducted from their total value, while their shares are burned. <strong>This process keeps the remaining NAV perfectly stable.</strong> The value of your shares is never diluted by the actions of other users.</p>
                 </div>
 
                 <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>7. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
