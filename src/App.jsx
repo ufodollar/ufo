@@ -359,8 +359,9 @@ function App() {
         </div>
 
         <div className="info-section">
+          {/* 🔥 修改为 Net Asset Value */}
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">🏦</span> Current UFO Price</span>
+            <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
             <span className="info-value green">{nav.toFixed(4)} USDT</span>
           </div>
           <div className="info-item">
@@ -394,43 +395,34 @@ function App() {
                 
                 {/* 1 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
-                  <h4 style={{ color: 'var(--accent)' }}>1. UFO Fund Introduction</h4>
-                  <p>UFO Fund is a flexible, tokenized wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all users.</p>
+                  <h4 style={{ color: 'var(--accent)' }}>1. Fund Overview & Mechanism</h4>
+                  <p>UFO Fund is a flexible, tokenized wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. There are no lockups; you can deposit and withdraw at any time.</p>
                 </div>
 
-                {/* 🔥 2. 插入你的最新宣言 */}
+                {/* 2 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(52, 199, 89, 0.08)', borderColor: 'rgba(52, 199, 89, 0.2)' }}>
-                  <h4 style={{ color: '#34c759' }}>2. Algorithm-Protected Value</h4>
-                  <p>In UFO Fund, your principal and interest are <strong>algorithmically locked</strong>. The entry or exit of whales will <strong>never affect your NAV price</strong>. Your assets are 1:1 backed by the underlying assets in Aave. The longer you hold, the more real interest Aave generates, and the higher your UFO unit price will be. There is no market maker, no price dumping—only the gift of time compounding.</p>
+                  <h4 style={{ color: '#34c759' }}>2. Algorithmic Protection & Fairness</h4>
+                  <p>In UFO Fund, your principal and interest are <strong>algorithmically locked</strong>. The entry or exit of whales will <strong>never affect your Net Asset Value</strong>. Your assets are 1:1 backed by the underlying assets in Aave. The longer you hold, the more real interest Aave generates, and the higher your Net Asset Value will be. There is no market maker, no price dumping—only the gift of time compounding.</p>
                 </div>
 
                 {/* 3 */}
-                <div className="rule-block"><h4>3. How It Works</h4><p>You can deposit and withdraw your funds at any time. Your USDT is deposited into Aave V3 to earn continuous interest. The longer you hold your $UFO tokens, the more interest your shares will accrue.</p></div>
+                <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p></div>
                 
                 {/* 4 */}
-                <div className="rule-block">
-                  <h4>4. Redemption & Yield</h4>
-                  <p>The fund is completely flexible. You can redeem your principal and accumulated interest at any time. The NAV (price per share) continuously increases due to Aave yields. <strong>Early redemption by any user does not lower the NAV for others;</strong> it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p>
-                </div>
+                <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
                 
                 {/* 5 */}
-                <div className="rule-block"><h4>5. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
-                
-                {/* 6 */}
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
-                  <h4 style={{ color: '#d9a000' }}>6. Dynamic Pricing & Reality Check</h4>
-                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When the platform extracts its 50% performance fee, or when a large user redeems a significant portion of the vault, the protocol automatically settles profits. This will cause the displayed NAV to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
+                  <h4 style={{ color: '#d9a000' }}>5. Dynamic Pricing & Visual Settlement</h4>
+                  <p>The "Net Asset Value" displayed is a <strong>real-time dynamic metric</strong>. When the platform extracts its 50% performance fee, or when a large user redeems a significant portion of the vault, the protocol automatically settles profits. This will cause the displayed Net Asset Value to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
                 </div>
 
+                {/* 6 */}
+                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Security & Wallet Note</h4><p>Your money is fully secured by an unchangeable smart contract. No one, not even our team, can touch or run away with your funds. Please note that $UFO tokens may not display a dollar value in your Web3 wallet because it is a fund share tool, not a traditional cryptocurrency. This does not affect its actual underlying value.</p></div>
+                
                 {/* 7 */}
-                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>7. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
-                
-                {/* 8 */}
-                <div className="rule-block"><h4>8. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
-                
-                {/* 9 */}
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
-                  <h4 style={{ color: '#ff3b30' }}>9. Compliance & Disclaimer</h4>
+                  <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
                   <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
 
