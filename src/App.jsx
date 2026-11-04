@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的合约地址
+// ⚠️ 请务必替换为你真实的新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
@@ -359,7 +359,6 @@ function App() {
         </div>
 
         <div className="info-section">
-          {/* 🔥 修改为 Net Asset Value */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
             <span className="info-value green">{nav.toFixed(4)} USDT</span>
@@ -375,6 +374,11 @@ function App() {
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💸</span> Fund Type</span>
             <span className="info-value purple">Flexible (Deposit & Withdraw Anytime)</span>
+          </div>
+          {/* 🔥 新增：赎回手续费 */}
+          <div className="info-item">
+            <span className="info-label"><span className="big-icon">🔻</span> Redemption Fee</span>
+            <span className="info-value red" style={{ color: '#ff3b30' }}>1%</span>
           </div>
         </div>
 
@@ -406,15 +410,19 @@ function App() {
                 </div>
 
                 {/* 3 */}
-                <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p></div>
+                <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets.</p></div>
                 
                 {/* 4 */}
-                <div className="rule-block"><h4>4. Performance Fee</h4><p>We charge a 50% performance fee from the interest generated every month to cover platform operational costs.</p></div>
+                <div className="rule-block">
+                  <h4>4. Unique Revenue Model: 1% Redemption Fee</h4>
+                  <p><strong>We do NOT harvest your interest!</strong> 100% of the Aave yield goes directly into increasing your Net Asset Value. Our platform's sole revenue model is a <strong>1% redemption fee</strong> deducted only when you withdraw. This fee is instantly transferred to the Fund Manager's wallet.</p>
+                  <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}><strong>Important Note on Break-even:</strong> Because of the 1% redemption fee, if you redeem too early, the fee may exceed your accumulated interest. Based on current Aave yields (~6% APY), <strong>you need to hold your UFO for at least 50 to 60 days</strong> to fully cover the 1% fee and start generating pure profit.</p>
+                </div>
                 
                 {/* 5 */}
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
                   <h4 style={{ color: '#d9a000' }}>5. Dynamic Pricing & Visual Settlement</h4>
-                  <p>The "Net Asset Value" displayed is a <strong>real-time dynamic metric</strong>. When the platform extracts its 50% performance fee, or when a large user redeems a significant portion of the vault, the protocol automatically settles profits. This will cause the displayed Net Asset Value to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
+                  <p>The "Net Asset Value" displayed is a <strong>real-time dynamic metric</strong>. When a large user redeems a significant portion of the vault, the protocol settles the accounting. This will cause the displayed Net Asset Value to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
                 </div>
 
                 {/* 6 */}
