@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址！！！（千万别填钱包地址或留空）
+// ⚠️ 请务必替换为你真实的合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
@@ -12,8 +12,7 @@ const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB'; // BSC Aave V3 Pool
 
-// 你的专属 Alchemy 节点
-const rpcProvider = new ethers.JsonRpcProvider("https://bnb-mainnet.g.alchemy.com/v2/alch_9l6WUDtf-F3hzT62COeL3");
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -31,7 +30,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-const AAVE_ABI = [
+const AAVE_POOL_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
 
@@ -125,7 +124,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.0000'); 
+  const [apy, setApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -134,9 +133,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (isConnected) { 
-      switchNetwork(bsc).catch(e => console.log("Network switch ignored:", e)); 
-    }
+    if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
   useEffect(() => {
@@ -144,33 +141,26 @@ function App() {
   }, [isConnected, close]);
 
   const fetchData = async () => {
-    // 1. 独立获取净值 (NAV)，即使这里地址错了，也不会影响下面的 Aave 获取
     try {
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
-    } catch (navError) {
-      console.error("NAV Fetch Error (请检查金库地址是否正确):", navError);
-    }
+    } catch (e) { console.log("Fetch Data Error:", e); }
+  };
 
-    // 2. 独立获取 Aave 利率
+  const fetchAaveAPY = async () => {
     try {
-      const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
-      const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
+      const aavePoolContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
+      const reserveData = await aavePoolContract.getReserveData(USDT_ADDRESS);
+      const supplyRate = parseFloat(ethers.formatUnits(reserveData.currentLiquidityRate, 27));
       
-      const liquidityRate = reserveData[2]; 
-      
-      if (liquidityRate !== undefined && liquidityRate > 0n) {
-        const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
-        const apr = rateInDecimal * 100;
-        setAaveApy(apr.toFixed(4)); 
-      } else {
-        setAaveApy('0.0000');
-      }
-    } catch (aaveError) {
-      console.error("Aave Data Fetch Error:", aaveError);
-      setAaveApy('0.0000');
+      const secondsPerYear = 31536000;
+      const apyValue = (Math.pow(1 + supplyRate / secondsPerYear, secondsPerYear) - 1) * 100;
+      setApy(apyValue.toFixed(2));
+    } catch (e) { 
+      console.log("Fetch Aave APY Error:", e); 
+      setApy("Loading...");
     }
   };
 
@@ -184,13 +174,19 @@ function App() {
       
       setUsdtBalance(ethers.formatUnits(usdtBal, 6));
       setUfoBalance(ethers.formatUnits(ufoBal, 18));
+      fetchData(); 
     } catch (e) { }
-    fetchData(); 
   };
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => { fetchData(); }, 15000); 
+    fetchAaveAPY(); 
+
+    const interval = setInterval(() => { 
+      fetchData(); 
+      fetchAaveAPY();
+    }, 15000); 
+
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -205,6 +201,13 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
 
+    if (isDepositMode && parseFloat(inputAmount) > parseFloat(usdtBalance)) {
+      return setMsg("Insufficient USDT balance.");
+    }
+    if (!isDepositMode && parseFloat(inputAmount) > parseFloat(ufoBalance)) {
+      return setMsg("Insufficient UFO balance.");
+    }
+
     try {
       setIsProcessing(true); setMsg("");
       const provider = new ethers.BrowserProvider(walletProvider);
@@ -218,7 +221,7 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
+        const txApprove = await tokenContract.approve(VAULT_ADDRESS, ethers.MaxUint256);
         await txApprove.wait();
       }
 
@@ -245,7 +248,14 @@ function App() {
 
   let receiveAmount = '0';
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
+    let calc = 0;
+    if (isDepositMode) {
+      // 存款无手续费
+      calc = parseFloat(inputAmount) / nav;
+    } else {
+      // 🔥 修复：赎回扣除 1% 手续费后的实际到账金额
+      calc = (parseFloat(inputAmount) * nav) * 0.99;
+    }
     receiveAmount = formatAmount(calc.toString()); 
   }
 
@@ -369,7 +379,7 @@ function App() {
 
           <div className="input-box">
             <div className="input-label">
-              <span>{isDepositMode ? 'You Receive' : 'You Receive'}</span>
+              <span>{isDepositMode ? 'You Receive' : 'You Receive (After 1% Fee)'}</span>
               <span className="balance" style={{ cursor: 'default' }}>
                 <span className="balance-label">Balance: </span>
                 <span className="balance-value">{formatAmount(receiveBalance)}</span>
@@ -393,7 +403,7 @@ function App() {
 
         <div className="info-section">
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
+            <span className="info-label"><span className="big-icon">🏦</span> Current UFO Price</span>
             <span className="info-value green">{nav.toFixed(4)} USDT</span>
           </div>
           <div className="info-item">
@@ -401,8 +411,8 @@ function App() {
             <span className="info-value blue">Aave V3</span>
           </div>
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
-            <span className="info-value blue">{aaveApy}%</span>
+            <span className="info-label"><span className="big-icon">📈</span> Aave V3 APY</span>
+            <span className="info-value green">{apy === 'Loading...' ? 'Loading...' : `${apy}%`}</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
@@ -411,10 +421,6 @@ function App() {
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💸</span> Fund Type</span>
             <span className="info-value purple">Flexible (Deposit & Withdraw Anytime)</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">🔻</span> Redemption Fee</span>
-            <span className="info-value red" style={{ color: '#ff3b30' }}>1.5%</span>
           </div>
         </div>
 
@@ -434,33 +440,38 @@ function App() {
               <div className="rules-content">
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
-                  <h4 style={{ color: 'var(--accent)' }}>1. Fund Overview & Mechanism</h4>
-                  <p>UFO Fund is a flexible, tokenized wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. There are no lockups; you can deposit and withdraw at any time.</p>
+                  <h4 style={{ color: 'var(--accent)' }}>1. UFO Fund Introduction</h4>
+                  <p>UFO Fund is a flexible, tokenized wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. The protocol features a <strong>Dynamic NAV Pricing</strong> mechanism to ensure absolute fairness for all users.</p>
                 </div>
 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(52, 199, 89, 0.08)', borderColor: 'rgba(52, 199, 89, 0.2)' }}>
-                  <h4 style={{ color: '#34c759' }}>2. Algorithmic Protection & Fairness</h4>
-                  <p>In UFO Fund, your principal and interest are <strong>algorithmically locked</strong>. The entry or exit of whales will <strong>never affect your Net Asset Value</strong>. Your assets are 1:1 backed by the underlying assets in Aave. The longer you hold, the more real interest Aave generates, and the higher your Net Asset Value will be. There is no market maker, no price dumping—only the gift of time compounding.</p>
+                  <h4 style={{ color: '#34c759' }}>2. Algorithm-Protected Value</h4>
+                  <p>In UFO Fund, your principal and interest are <strong>algorithmically locked</strong>. The entry or exit of whales will <strong>never affect your NAV price</strong>. Your assets are 1:1 backed by the underlying assets in Aave. The longer you hold, the more real interest Aave generates, and the higher your UFO unit price will be. There is no market maker, no price dumping—only the gift of time compounding.</p>
                 </div>
 
-                <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets.</p></div>
+                <div className="rule-block"><h4>3. How It Works</h4><p>You can deposit and withdraw your funds at any time. Your USDT is deposited into Aave V3 to earn continuous interest. The longer you hold your $UFO tokens, the more interest your shares will accrue.</p></div>
                 
                 <div className="rule-block">
-                  <h4>4. Unique Revenue Model: 1.5% Redemption Fee</h4>
-                  <p><strong>We do NOT harvest your interest!</strong> 100% of the Aave yield goes directly into increasing your Net Asset Value. Our platform's sole revenue model is a <strong>1.5% redemption fee</strong> deducted only when you withdraw. This fee is instantly transferred to the Fund Manager's wallet.</p>
-                  <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}><strong>Important Note on Break-even:</strong> Because of the 1.5% redemption fee, if you redeem too early, the fee may exceed your accumulated interest. Based on current Aave yields, <strong>you need to hold your UFO for at least 90 to 100 days</strong> to fully cover the 1.5% fee and start generating pure profit.</p>
+                  <h4>4. Redemption & Yield</h4>
+                  <p>The fund is completely flexible. You can redeem your principal and accumulated interest at any time. The NAV (price per share) continuously increases due to Aave yields. <strong>Early redemption by any user does not lower the NAV for others;</strong> it simply removes their proportional share of the assets. The algorithm perfectly protects the value of remaining holders.</p>
                 </div>
                 
+                {/* 🔥 修改：50% 抽成改为 1% 赎回费 */}
+                <div className="rule-block"><h4>5. Redemption Fee</h4><p>We charge a <strong>1% fee on the total redemption amount</strong> to cover platform operational costs.</p></div>
+                
+                {/* 🔥 修改：消除 50% 抽成导致的 NAV 掉落的误解 */}
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
-                  <h4 style={{ color: '#d9a000' }}>5. Dynamic Pricing & Visual Settlement</h4>
-                  <p>The "Net Asset Value" displayed is a <strong>real-time dynamic metric</strong>. When a large user redeems a significant portion of the vault, the protocol settles the accounting. This will cause the displayed Net Asset Value to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
+                  <h4 style={{ color: '#d9a000' }}>6. Dynamic Pricing & Reality Check</h4>
+                  <p>The "Current UFO Price" displayed is a <strong>real-time dynamic NAV</strong>. When any user redeems, a 1% fee is deducted from their total value, while their shares are burned. <strong>This process keeps the remaining NAV perfectly stable.</strong> The value of your shares is never diluted by the actions of other users.</p>
                 </div>
 
-                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Security & Wallet Note</h4><p>Your money is fully secured by an unchangeable smart contract. No one, not even our team, can touch or run away with your funds. Please note that $UFO tokens may not display a dollar value in your Web3 wallet because it is a fund share tool, not a traditional cryptocurrency. This does not affect its actual underlying value.</p></div>
+                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>7. Trust & Guarantee</h4><p>We guarantee to process all redemptions on time. Your money is fully secured by an unchangeable smart contract. This means no one, not even our team, can touch or run away with your funds. It is 100% safe on-chain.</p></div>
+                
+                <div className="rule-block"><h4>8. Wallet Display Note</h4><p>UFO tokens may not display a value in your wallet because it is a fund tool, not a traditional cryptocurrency. However, this does not affect its actual underlying value.</p></div>
                 
                 <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
-                  <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
-                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
+                  <h4 style={{ color: '#ff3b30' }}>9. Compliance & Disclaimer</h4>
+                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and that you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
                 </div>
 
               </div>
