@@ -8,7 +8,7 @@ import { bsc } from '@reown/appkit/networks';
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
-// 使用公共节点
+// 使用公共节点读取 NAV
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
@@ -120,7 +120,9 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.00'); 
+  
+  // 预设一个兜底保底值，防止网络波动时前端空白
+  const [aaveApy, setAaveApy] = useState('3.05'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -145,27 +147,30 @@ function App() {
       const rate = await vaultContract.getExchangeRate();
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
     } catch (e) { 
-      console.log("金库数据获取失败:", e); 
+      // 未连接网络或 RPC 受阻时静默失败，不影响 UI 渲染
     }
   };
 
-  // 🔥 从 DeFiLlama 获取 Aave V3 BSC USDT 的实时 APY
+  // 🔥 独立获取 APY 的逻辑（与钱包连接完全无关）
   const fetchAaveApy = async () => {
     try {
       const response = await fetch("https://yields.llama.fi/pools");
+      if (!response.ok) throw new Error("Network response was not ok");
+      
       const data = await response.json();
-      // 筛选条件：项目为 aave-v3，链为 BSC，代币为 USDT
+      // 筛选 Aave V3 BSC USDT
       const targetPool = data.data.find(pool => 
         pool.project === 'aave-v3' && 
         pool.chain === 'BSC' && 
         pool.symbol === 'USDT'
       );
-      if (targetPool) {
+      
+      if (targetPool && targetPool.apy) {
         setAaveApy(targetPool.apy.toFixed(2));
       }
     } catch (error) {
-      console.error("DeFiLlama API 获取失败:", error);
-      setAaveApy('3.05'); // 兜底显示一个合理的参考值
+      console.log("APY 获取失败，将使用保底参考值:", error);
+      // 如果获取失败，aaveApy 会保持初始的 3.05 或者上次成功的值，绝不会变成 0.00
     }
   };
 
@@ -184,11 +189,14 @@ function App() {
   };
 
   useEffect(() => { 
+    // 首次渲染立刻获取 NAV 和 APY，不需要等钱包连接
+    fetchData();
+    fetchAaveApy();
     fetchBalances(); 
-    fetchAaveApy(); // 初始加载时拉取一次
+
     const interval = setInterval(() => { 
       fetchData(); 
-      fetchAaveApy(); // 每隔 15 秒同步拉取一次
+      fetchAaveApy(); 
     }, 15000); 
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
@@ -399,7 +407,6 @@ function App() {
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
           </div>
-          {/* 🔥 显示从 DeFiLlama 拉取的 APY */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
             <span className="info-value blue">{aaveApy}%</span>
