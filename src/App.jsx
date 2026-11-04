@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址
+// ⚠️ 请务必替换为你真实的最新合约地址（活期版 + 1.5%手续费）
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 // ==========================================
@@ -29,6 +29,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
+// 完整的 Aave V3 ReserveData ABI，确保能正确解析返回值
 const AAVE_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
@@ -123,7 +124,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  const [aaveApy, setAaveApy] = useState('0.00'); // 新增 Aave APY 状态
+  const [aaveApy, setAaveApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -141,20 +142,38 @@ function App() {
 
   const fetchData = async () => {
     try {
+      // 1. 获取净值 (NAV)
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       const currentNav = parseFloat(ethers.formatUnits(rate, 18));
       setNav(currentNav);
 
-      // 🔥 新增：获取 Aave V3 USDT 实时存款年化利率
-      const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
-      const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
-      // currentLiquidityRate 是第 3 个返回值 (index 2)，单位是 RAY (1e27)
-      const liquidityRate = reserveData[2]; 
-      const apy = (parseFloat(ethers.formatUnits(liquidityRate, 27)) * 100).toFixed(2);
-      setAaveApy(apy);
+      // 2. 获取 Aave V3 实时年化利率
+      try {
+        const aaveContract = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_ABI, rpcProvider);
+        const reserveData = await aaveContract.getReserveData(USDT_ADDRESS);
+        
+        // Aave V3 的 currentLiquidityRate 是第 3 个返回值 (index 2)
+        // 它的单位是 RAY (1e27)
+        const liquidityRate = reserveData[2]; 
+        
+        if (liquidityRate !== undefined) {
+          // 转换成普通十进制 (APR)
+          const rateInDecimal = parseFloat(ethers.formatUnits(liquidityRate, 27));
+          
+          // 使用 Aave 官方公式，计算按秒复利后的真实 APY
+          // APY = (1 + APR/31536000)^31536000 - 1
+          const apy = (Math.pow(1 + (rateInDecimal / 31536000), 31536000) - 1) * 100;
+          
+          setAaveApy(apy > 0 ? apy.toFixed(2) : '0.00');
+        }
+      } catch (aaveError) {
+        console.log("Aave Data Fetch Error:", aaveError);
+      }
 
-    } catch (e) { console.log("Fetch Data Error:", e); }
+    } catch (e) { 
+      console.log("General Fetch Data Error:", e); 
+    }
   };
 
   const fetchBalances = async () => {
@@ -201,7 +220,7 @@ function App() {
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
         setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        // 🔥 核心修改：精准授权，只授权当前所需金额，避免触发无限授权的安全警告
+        // 🔥 执行新政策：精准授权，只授权当前所需金额，避免无限授权带来的安全警告
         const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
         await txApprove.wait();
       }
@@ -384,7 +403,6 @@ function App() {
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
           </div>
-          {/* 🔥 新增：Aave V3 实时年化 */}
           <div className="info-item">
             <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
             <span className="info-value blue">{aaveApy}%</span>
@@ -433,7 +451,7 @@ function App() {
                 <div className="rule-block">
                   <h4>4. Unique Revenue Model: 1.5% Redemption Fee</h4>
                   <p><strong>We do NOT harvest your interest!</strong> 100% of the Aave yield goes directly into increasing your Net Asset Value. Our platform's sole revenue model is a <strong>1.5% redemption fee</strong> deducted only when you withdraw. This fee is instantly transferred to the Fund Manager's wallet.</p>
-                  <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}><strong>Important Note on Break-even:</strong> Because of the 1.5% redemption fee, if you redeem too early, the fee may exceed your accumulated interest. Based on current Aave yields (~6% APY), <strong>you need to hold your UFO for at least 90 to 100 days</strong> to fully cover the 1.5% fee and start generating pure profit.</p>
+                  <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}><strong>Important Note on Break-even:</strong> Because of the 1.5% redemption fee, if you redeem too early, the fee may exceed your accumulated interest. Based on current Aave yields, <strong>you need to hold your UFO for at least 90 to 100 days</strong> to fully cover the 1.5% fee and start generating pure profit.</p>
                 </div>
                 
                 <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
