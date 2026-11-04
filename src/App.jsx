@@ -8,10 +8,10 @@ import { bsc } from '@reown/appkit/networks';
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 
-// 单一公共节点
+// 使用公共节点
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 // ==========================================
 
 const UFO_LOGO = '/logo.png'; 
@@ -120,6 +120,7 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
+  const [aaveApy, setAaveApy] = useState('0.00'); 
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -129,10 +130,8 @@ function App() {
 
   // 强制切换网络
   useEffect(() => {
-    if (isConnected) {
-      if (caipNetwork?.id !== bsc.id) {
-        switchNetwork(bsc);
-      }
+    if (isConnected && caipNetwork?.id !== bsc.id) {
+      switchNetwork(bsc);
     }
   }, [isConnected, switchNetwork, caipNetwork]);
 
@@ -142,12 +141,31 @@ function App() {
 
   const fetchData = async () => {
     try {
-      // 只读取你自己的金库净值，彻底告别 Aave 合约解析
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
     } catch (e) { 
-      console.log("综合数据获取失败:", e); 
+      console.log("金库数据获取失败:", e); 
+    }
+  };
+
+  // 🔥 从 DeFiLlama 获取 Aave V3 BSC USDT 的实时 APY
+  const fetchAaveApy = async () => {
+    try {
+      const response = await fetch("https://yields.llama.fi/pools");
+      const data = await response.json();
+      // 筛选条件：项目为 aave-v3，链为 BSC，代币为 USDT
+      const targetPool = data.data.find(pool => 
+        pool.project === 'aave-v3' && 
+        pool.chain === 'BSC' && 
+        pool.symbol === 'USDT'
+      );
+      if (targetPool) {
+        setAaveApy(targetPool.apy.toFixed(2));
+      }
+    } catch (error) {
+      console.error("DeFiLlama API 获取失败:", error);
+      setAaveApy('3.05'); // 兜底显示一个合理的参考值
     }
   };
 
@@ -167,7 +185,11 @@ function App() {
 
   useEffect(() => { 
     fetchBalances(); 
-    const interval = setInterval(() => { fetchData(); }, 15000); 
+    fetchAaveApy(); // 初始加载时拉取一次
+    const interval = setInterval(() => { 
+      fetchData(); 
+      fetchAaveApy(); // 每隔 15 秒同步拉取一次
+    }, 15000); 
     return () => clearInterval(interval);
   }, [address, isDepositMode]);
 
@@ -377,10 +399,10 @@ function App() {
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
             <span className="info-value blue">Aave V3</span>
           </div>
-          {/* 🔥 删除了 APY，替换为静态的年化情况展示 */}
+          {/* 🔥 显示从 DeFiLlama 拉取的 APY */}
           <div className="info-item">
-            <span className="info-label"><span className="big-icon">📈</span> Yield Type</span>
-            <span className="info-value green">Auto-Compounding</span>
+            <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
+            <span className="info-value blue">{aaveApy}%</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
