@@ -116,11 +116,9 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   
-  // 🔥 修复 1：NAV 初始设为 0，并引入加载状态
   const [nav, setNav] = useState(0); 
   const [isNavLoading, setIsNavLoading] = useState(true);
   
-  // 🔥 修复 4：APY 增加加载状态和上次更新时间
   const [aaveApy, setAaveApy] = useState('3.05'); 
   const [isApyLoading, setIsApyLoading] = useState(true);
 
@@ -134,7 +132,6 @@ function App() {
     if (isConnected) { close(); }
   }, [isConnected, close]);
 
-  // 🔥 修复 2：处理竞态条件，并在断开时清空余额
   useEffect(() => {
     let isMounted = true;
 
@@ -142,7 +139,7 @@ function App() {
       if (!isConnected) {
         setUsdtBalance('0');
         setUfoBalance('0');
-        return;
+        // 未连接时也应当尝试拉取 NAV，以便用户浏览
       }
       
       try {
@@ -165,12 +162,15 @@ function App() {
           }
         }
       } catch (e) {
-        if (isMounted) setIsNavLoading(false);
+        if (isMounted) {
+          setIsNavLoading(false);
+          // 🔥 如果首次加载失败，nav 会保持在 0
+        }
       }
     };
 
     fetchData(); 
-    const interval = setInterval(fetchData, 30000); // 余额和NAV 30秒刷新一次即可
+    const interval = setInterval(fetchData, 30000); 
 
     return () => { 
       isMounted = false; 
@@ -178,7 +178,6 @@ function App() {
     };
   }, [address, isConnected, isDepositMode]);
 
-  // 🔥 修复 4：APY 独立获取逻辑，轮询间隔改为 90 秒
   useEffect(() => {
     let isMounted = true;
     const fetchAaveApy = async () => {
@@ -193,14 +192,13 @@ function App() {
           setAaveApy(targetPool.apy.toFixed(2));
         }
       } catch (error) {
-        // 失败时保留上一次的值或默认值，不弹窗骚扰用户
       } finally {
         if (isMounted) setIsApyLoading(false);
       }
     };
 
     fetchAaveApy();
-    const interval = setInterval(fetchAaveApy, 90000); // 90秒刷新一次
+    const interval = setInterval(fetchAaveApy, 90000); 
 
     return () => {
       isMounted = false;
@@ -215,11 +213,13 @@ function App() {
   };
 
   const handleAction = async () => {
+    // 🔥 兜底拦截：如果 NAV 未就绪，坚决不让交易
+    if (nav === 0) return setMsg("Net Asset Value is loading or unavailable. Please try again later.");
+    
     if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
 
-    // 🔥 修复 3：精度检查，防止 parseUnits 报错
     let amount;
     try {
       amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
@@ -227,7 +227,6 @@ function App() {
       return setMsg(`Invalid precision. Max decimals: ${isDepositMode ? '6' : '18'}`);
     }
 
-    // 🔥 修复 3：用 BigInt 比较余额
     try {
       const currentBalance = isDepositMode ? usdtBalance : ufoBalance;
       const balanceWei = isDepositMode ? ethers.parseUnits(currentBalance, 6) : ethers.parseUnits(currentBalance, 18);
@@ -261,7 +260,6 @@ function App() {
       setMsg("Transaction Successful!");
       setInputAmount('');
     } catch (err) {
-      // 🔥 修复 5：使用错误码优先判断
       console.log("Transaction error details:", err);
       if (err.code === 'ACTION_REJECTED' || err.message?.toLowerCase().includes('rejected')) {
         setMsg("Transaction Rejected by User.");
@@ -286,7 +284,6 @@ function App() {
   let receiveAmount = '0';
   let estimatedFee = '0';
 
-  // 🔥 修复 1：只有在 NAV 加载完成且 > 0 时，才显示预估金额
   if (nav > 0 && inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
     if (isDepositMode) {
       receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
@@ -406,7 +403,17 @@ function App() {
               </span>
             </div>
             <div className="input-row">
-              <input type="number" className="input-field" value={inputAmount} onChange={handleInputChange} placeholder="0.0" min="0" />
+              {/* 🔥 修复：NAV 未就绪时，输入框直接禁用 */}
+              <input 
+                type="number" 
+                className="input-field" 
+                value={inputAmount} 
+                onChange={handleInputChange} 
+                placeholder={isNavLoading || nav === 0 ? "Wait for price..." : "0.0"} 
+                min="0"
+                disabled={isNavLoading || nav === 0}
+                style={{ opacity: (isNavLoading || nav === 0) ? 0.5 : 1 }}
+              />
               <div className="token-tag">
                 <img src={currentIcon} alt={currentToken} />
                 {currentToken}
@@ -430,7 +437,7 @@ function App() {
                 className="input-field" 
                 value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} 
                 readOnly 
-                placeholder={isNavLoading ? "Loading..." : "0.0"} 
+                placeholder={isNavLoading || nav === 0 ? "Wait..." : "0.0"} 
               />
               <div className="token-tag">
                 <img src={receiveIcon} alt={receiveToken} />
@@ -452,17 +459,16 @@ function App() {
             </div>
           )}
 
-          {/* 🔥 修复 1：加载中禁用按钮 */}
           <button 
             className="action-btn" 
             onClick={handleAction} 
-            disabled={isProcessing || !isConnected || isNavLoading || (!inputAmount && isConnected)}
+            disabled={isProcessing || !isConnected || isNavLoading || nav === 0 || (!inputAmount && isConnected)}
           >
             {isProcessing 
               ? 'Processing...' 
               : !isConnected 
                 ? 'Connect Wallet' 
-                : isNavLoading 
+                : (isNavLoading || nav === 0)
                   ? 'Loading NAV...' 
                   : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
           </button>
