@@ -3,12 +3,17 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { bsc } from '@reown/appkit/networks'
 
 const projectId = 'd6431212399f6c487b364387859983ea'
+// 只保留 BSC 一个网络
 const wagmiAdapter = new WagmiAdapter({ networks: [bsc], projectId })
 
 export const modal = createAppKit({
   adapters: [wagmiAdapter],
+  // 只声明 BSC 网络
   networks: [bsc],
+  // 将 BSC 设为默认连接网络
   defaultNetwork: bsc,
+  // 🔥 核心开关：禁用 AppKit 内置的网络切换功能
+  enableNetworkSwitch: false,
   projectId,
   metadata: {
     name: 'UFO Fund',
