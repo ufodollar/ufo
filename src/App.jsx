@@ -1,18 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useAppKit, useAppKitAccount, useAppKitProvider, useAppKitNetwork } from '@reown/appkit/react';
+import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { ethers } from 'ethers';
-import { bsc } from '@reown/appkit/networks';
 
 // ================= 配置区 =================
 // ⚠️ 请务必替换为你真实的最新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-
-// 使用公共节点读取 NAV
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+// ==========================================
 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
-// ==========================================
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -109,7 +106,6 @@ function App() {
   const { open, close } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider('eip155');
-  const { switchNetwork, caipNetwork } = useAppKitNetwork();
 
   const [isDepositMode, setIsDepositMode] = useState(true);
   const [inputAmount, setInputAmount] = useState('');
@@ -128,11 +124,7 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  useEffect(() => {
-    if (isConnected && caipNetwork?.id !== bsc.id) {
-      switchNetwork(bsc);
-    }
-  }, [isConnected, switchNetwork, caipNetwork]);
+  // 🔥 移除了所有 switchNetwork 相关的代码，完全依赖 config.js 的锁定
 
   useEffect(() => {
     if (isConnected) { close(); }
@@ -236,16 +228,15 @@ function App() {
   const receiveBalance = isDepositMode ? ufoBalance : usdtBalance;
 
   let receiveAmount = '0';
-  let estimatedFee = '0'; // 🔥 新增：预估手续费状态
+  let estimatedFee = '0';
 
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
     const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
     receiveAmount = formatAmount(calc.toString()); 
 
-    // 🔥 只有在 Redeem（赎回）模式下，才计算手续费
     if (!isDepositMode) {
-      const fee = (parseFloat(inputAmount) * nav) * 0.015; // 总 USDT * 1.5%
-      estimatedFee = fee.toFixed(4); // 保留4位小数展示
+      const fee = (parseFloat(inputAmount) * nav) * 0.015; 
+      estimatedFee = fee.toFixed(4); 
     }
   }
 
@@ -384,7 +375,6 @@ function App() {
             </div>
           </div>
 
-          {/* 🔥 动态手续费提示栏 */}
           {!isDepositMode && inputAmount && parseFloat(inputAmount) > 0 && (
             <div style={{ 
               fontSize: '0.85rem', 
