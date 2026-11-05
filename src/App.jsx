@@ -120,8 +120,6 @@ function App() {
   
   const [showRules, setShowRules] = useState(false);
   const [nav, setNav] = useState(1); 
-  
-  // 预设一个兜底保底值，防止网络波动时前端空白
   const [aaveApy, setAaveApy] = useState('3.05'); 
 
   useEffect(() => {
@@ -130,7 +128,6 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 强制切换网络
   useEffect(() => {
     if (isConnected && caipNetwork?.id !== bsc.id) {
       switchNetwork(bsc);
@@ -146,32 +143,21 @@ function App() {
       const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       const rate = await vaultContract.getExchangeRate();
       setNav(parseFloat(ethers.formatUnits(rate, 18)));
-    } catch (e) { 
-      // 未连接网络或 RPC 受阻时静默失败，不影响 UI 渲染
-    }
+    } catch (e) { }
   };
 
-  // 🔥 独立获取 APY 的逻辑（与钱包连接完全无关）
   const fetchAaveApy = async () => {
     try {
       const response = await fetch("https://yields.llama.fi/pools");
       if (!response.ok) throw new Error("Network response was not ok");
-      
       const data = await response.json();
-      // 筛选 Aave V3 BSC USDT
       const targetPool = data.data.find(pool => 
-        pool.project === 'aave-v3' && 
-        pool.chain === 'BSC' && 
-        pool.symbol === 'USDT'
+        pool.project === 'aave-v3' && pool.chain === 'BSC' && pool.symbol === 'USDT'
       );
-      
       if (targetPool && targetPool.apy) {
         setAaveApy(targetPool.apy.toFixed(2));
       }
-    } catch (error) {
-      console.log("APY 获取失败，将使用保底参考值:", error);
-      // 如果获取失败，aaveApy 会保持初始的 3.05 或者上次成功的值，绝不会变成 0.00
-    }
+    } catch (error) {}
   };
 
   const fetchBalances = async () => {
@@ -189,7 +175,6 @@ function App() {
   };
 
   useEffect(() => { 
-    // 首次渲染立刻获取 NAV 和 APY，不需要等钱包连接
     fetchData();
     fetchAaveApy();
     fetchBalances(); 
@@ -251,9 +236,17 @@ function App() {
   const receiveBalance = isDepositMode ? ufoBalance : usdtBalance;
 
   let receiveAmount = '0';
+  let estimatedFee = '0'; // 🔥 新增：预估手续费状态
+
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
     const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
     receiveAmount = formatAmount(calc.toString()); 
+
+    // 🔥 只有在 Redeem（赎回）模式下，才计算手续费
+    if (!isDepositMode) {
+      const fee = (parseFloat(inputAmount) * nav) * 0.015; // 总 USDT * 1.5%
+      estimatedFee = fee.toFixed(4); // 保留4位小数展示
+    }
   }
 
   const usdtValue = parseFloat(usdtBalance) * 1;
@@ -376,7 +369,7 @@ function App() {
 
           <div className="input-box">
             <div className="input-label">
-              <span>{isDepositMode ? 'You Receive' : 'You Receive'}</span>
+              <span>{isDepositMode ? 'You Receive' : 'You Receive (After Fee)'}</span>
               <span className="balance" style={{ cursor: 'default' }}>
                 <span className="balance-label">Balance: </span>
                 <span className="balance-value">{formatAmount(receiveBalance)}</span>
@@ -390,6 +383,20 @@ function App() {
               </div>
             </div>
           </div>
+
+          {/* 🔥 动态手续费提示栏 */}
+          {!isDepositMode && inputAmount && parseFloat(inputAmount) > 0 && (
+            <div style={{ 
+              fontSize: '0.85rem', 
+              color: '#ff3b30', 
+              textAlign: 'right', 
+              marginTop: '-5px', 
+              marginBottom: '10px',
+              fontWeight: '600'
+            }}>
+              Estimated Fee: ~{estimatedFee} USDT (1.5%)
+            </div>
+          )}
 
           <button className="action-btn" onClick={handleAction} disabled={isProcessing || !isConnected || (!inputAmount && isConnected)}>
             {isProcessing ? 'Processing...' : !isConnected ? 'Connect Wallet' : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
