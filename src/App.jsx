@@ -3,13 +3,12 @@ import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/re
 import { ethers } from 'ethers';
 
 // ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-// ==========================================
-
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+// ==========================================
 
 const UFO_LOGO = '/logo.png'; 
 const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
@@ -124,8 +123,6 @@ function App() {
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 🔥 移除了所有 switchNetwork 相关的代码，完全依赖 config.js 的锁定
-
   useEffect(() => {
     if (isConnected) { close(); }
   }, [isConnected, close]);
@@ -189,6 +186,14 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
 
+    // 🔥 新增核心拦截：检查用户余额是否足够
+    if (isDepositMode && parseFloat(inputAmount) > parseFloat(usdtBalance)) {
+      return setMsg("Insufficient USDT balance.");
+    }
+    if (!isDepositMode && parseFloat(inputAmount) > parseFloat(ufoBalance)) {
+      return setMsg("Insufficient UFO balance.");
+    }
+
     try {
       setIsProcessing(true); setMsg("");
       const provider = new ethers.BrowserProvider(walletProvider);
@@ -213,7 +218,14 @@ function App() {
       setInputAmount('');
       fetchBalances();
     } catch (err) {
-      setMsg(err.message.includes('rejected') ? "Transaction Rejected." : "Transaction Failed.");
+      console.log("Transaction error:", err);
+      if (err.message.includes('rejected')) {
+        setMsg("Transaction Rejected.");
+      } else if (err.message.includes('Insufficient')) {
+        setMsg("Insufficient balance.");
+      } else {
+        setMsg("Transaction Failed. Please check network or gas.");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -231,12 +243,16 @@ function App() {
   let estimatedFee = '0';
 
   if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    const calc = isDepositMode ? (parseFloat(inputAmount) / nav) : (parseFloat(inputAmount) * nav);
-    receiveAmount = formatAmount(calc.toString()); 
-
-    if (!isDepositMode) {
-      const fee = (parseFloat(inputAmount) * nav) * 0.015; 
-      estimatedFee = fee.toFixed(4); 
+    if (isDepositMode) {
+      // 申购：输入 USDT，算出 UFO
+      receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
+    } else {
+      // 赎回：输入 UFO，算出扣除 1.5% 手续费后的实际 USDT
+      const totalUsdt = parseFloat(inputAmount) * nav;
+      const fee = totalUsdt * 0.015;
+      estimatedFee = fee.toFixed(4);
+      // 🔥 核心修复：实际到手的钱 = 总额 - 手续费
+      receiveAmount = formatAmount((totalUsdt - fee).toString()); 
     }
   }
 
