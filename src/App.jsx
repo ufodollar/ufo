@@ -3,6 +3,7 @@ import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/re
 import { ethers } from 'ethers';
 
 // ================= 配置区 =================
+// ⚠️ 请务必替换为你真实的最新合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
@@ -114,8 +115,14 @@ function App() {
   const [msg, setMsg] = useState('');
   
   const [showRules, setShowRules] = useState(false);
-  const [nav, setNav] = useState(1); 
+  
+  // 🔥 修复 1：NAV 初始设为 0，并引入加载状态
+  const [nav, setNav] = useState(0); 
+  const [isNavLoading, setIsNavLoading] = useState(true);
+  
+  // 🔥 修复 4：APY 增加加载状态和上次更新时间
   const [aaveApy, setAaveApy] = useState('3.05'); 
+  const [isApyLoading, setIsApyLoading] = useState(true);
 
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
@@ -127,53 +134,79 @@ function App() {
     if (isConnected) { close(); }
   }, [isConnected, close]);
 
-  const fetchData = async () => {
-    try {
-      const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-      const rate = await vaultContract.getExchangeRate();
-      setNav(parseFloat(ethers.formatUnits(rate, 18)));
-    } catch (e) { }
-  };
+  // 🔥 修复 2：处理竞态条件，并在断开时清空余额
+  useEffect(() => {
+    let isMounted = true;
 
-  const fetchAaveApy = async () => {
-    try {
-      const response = await fetch("https://yields.llama.fi/pools");
-      if (!response.ok) throw new Error("Network response was not ok");
-      const data = await response.json();
-      const targetPool = data.data.find(pool => 
-        pool.project === 'aave-v3' && pool.chain === 'BSC' && pool.symbol === 'USDT'
-      );
-      if (targetPool && targetPool.apy) {
-        setAaveApy(targetPool.apy.toFixed(2));
+    const fetchData = async () => {
+      if (!isConnected) {
+        setUsdtBalance('0');
+        setUfoBalance('0');
+        return;
       }
-    } catch (error) {}
-  };
-
-  const fetchBalances = async () => {
-    if (!address) return;
-    try {
-      const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
-      const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
-      const usdtBal = await usdtContract.balanceOf(address);
-      const ufoBal = await ufoContract.balanceOf(address);
       
-      setUsdtBalance(ethers.formatUnits(usdtBal, 6));
-      setUfoBalance(ethers.formatUnits(ufoBal, 18));
-      fetchData(); 
-    } catch (e) { }
-  };
+      try {
+        const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+        const rate = await vaultContract.getExchangeRate();
+        if (isMounted) {
+          setNav(parseFloat(ethers.formatUnits(rate, 18)));
+          setIsNavLoading(false);
+        }
+        
+        if (address) {
+          const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
+          const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
+          const usdtBal = await usdtContract.balanceOf(address);
+          const ufoBal = await ufoContract.balanceOf(address);
+          
+          if (isMounted) {
+            setUsdtBalance(ethers.formatUnits(usdtBal, 6));
+            setUfoBalance(ethers.formatUnits(ufoBal, 18));
+          }
+        }
+      } catch (e) {
+        if (isMounted) setIsNavLoading(false);
+      }
+    };
 
-  useEffect(() => { 
-    fetchData();
+    fetchData(); 
+    const interval = setInterval(fetchData, 30000); // 余额和NAV 30秒刷新一次即可
+
+    return () => { 
+      isMounted = false; 
+      clearInterval(interval); 
+    };
+  }, [address, isConnected, isDepositMode]);
+
+  // 🔥 修复 4：APY 独立获取逻辑，轮询间隔改为 90 秒
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAaveApy = async () => {
+      try {
+        const response = await fetch("https://yields.llama.fi/pools");
+        if (!response.ok) throw new Error("Network error");
+        const data = await response.json();
+        const targetPool = data.data.find(pool => 
+          pool.project === 'aave-v3' && pool.chain === 'BSC' && pool.symbol === 'USDT'
+        );
+        if (targetPool && targetPool.apy && isMounted) {
+          setAaveApy(targetPool.apy.toFixed(2));
+        }
+      } catch (error) {
+        // 失败时保留上一次的值或默认值，不弹窗骚扰用户
+      } finally {
+        if (isMounted) setIsApyLoading(false);
+      }
+    };
+
     fetchAaveApy();
-    fetchBalances(); 
+    const interval = setInterval(fetchAaveApy, 90000); // 90秒刷新一次
 
-    const interval = setInterval(() => { 
-      fetchData(); 
-      fetchAaveApy(); 
-    }, 15000); 
-    return () => clearInterval(interval);
-  }, [address, isDepositMode]);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
@@ -186,12 +219,24 @@ function App() {
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
     if (!walletProvider) return setMsg("Provider not ready");
 
-    // 🔥 新增核心拦截：检查用户余额是否足够
-    if (isDepositMode && parseFloat(inputAmount) > parseFloat(usdtBalance)) {
-      return setMsg("Insufficient USDT balance.");
+    // 🔥 修复 3：精度检查，防止 parseUnits 报错
+    let amount;
+    try {
+      amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
+    } catch (error) {
+      return setMsg(`Invalid precision. Max decimals: ${isDepositMode ? '6' : '18'}`);
     }
-    if (!isDepositMode && parseFloat(inputAmount) > parseFloat(ufoBalance)) {
-      return setMsg("Insufficient UFO balance.");
+
+    // 🔥 修复 3：用 BigInt 比较余额
+    try {
+      const currentBalance = isDepositMode ? usdtBalance : ufoBalance;
+      const balanceWei = isDepositMode ? ethers.parseUnits(currentBalance, 6) : ethers.parseUnits(currentBalance, 18);
+      
+      if (amount > balanceWei) {
+        return setMsg(`Insufficient ${isDepositMode ? 'USDT' : 'UFO'} balance.`);
+      }
+    } catch (error) {
+      return setMsg("Error calculating balance.");
     }
 
     try {
@@ -202,7 +247,6 @@ function App() {
       
       const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-      const amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
 
       const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
       if (allowance < amount) {
@@ -216,15 +260,15 @@ function App() {
       await tx.wait();
       setMsg("Transaction Successful!");
       setInputAmount('');
-      fetchBalances();
     } catch (err) {
-      console.log("Transaction error:", err);
-      if (err.message.includes('rejected')) {
-        setMsg("Transaction Rejected.");
-      } else if (err.message.includes('Insufficient')) {
-        setMsg("Insufficient balance.");
+      // 🔥 修复 5：使用错误码优先判断
+      console.log("Transaction error details:", err);
+      if (err.code === 'ACTION_REJECTED' || err.message?.toLowerCase().includes('rejected')) {
+        setMsg("Transaction Rejected by User.");
+      } else if (err.code === 'INSUFFICIENT_FUNDS' || err.message?.toLowerCase().includes('insufficient funds')) {
+        setMsg("Insufficient BNB for gas fees.");
       } else {
-        setMsg("Transaction Failed. Please check network or gas.");
+        setMsg("Transaction Failed. Please try again.");
       }
     } finally {
       setIsProcessing(false);
@@ -242,16 +286,14 @@ function App() {
   let receiveAmount = '0';
   let estimatedFee = '0';
 
-  if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
+  // 🔥 修复 1：只有在 NAV 加载完成且 > 0 时，才显示预估金额
+  if (nav > 0 && inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
     if (isDepositMode) {
-      // 申购：输入 USDT，算出 UFO
       receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
     } else {
-      // 赎回：输入 UFO，算出扣除 1.5% 手续费后的实际 USDT
       const totalUsdt = parseFloat(inputAmount) * nav;
       const fee = totalUsdt * 0.015;
       estimatedFee = fee.toFixed(4);
-      // 🔥 核心修复：实际到手的钱 = 总额 - 手续费
       receiveAmount = formatAmount((totalUsdt - fee).toString()); 
     }
   }
@@ -383,7 +425,13 @@ function App() {
               </span>
             </div>
             <div className="input-row">
-              <input type="text" className="input-field" value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} readOnly placeholder="0.0" />
+              <input 
+                type="text" 
+                className="input-field" 
+                value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} 
+                readOnly 
+                placeholder={isNavLoading ? "Loading..." : "0.0"} 
+              />
               <div className="token-tag">
                 <img src={receiveIcon} alt={receiveToken} />
                 {receiveToken}
@@ -391,7 +439,7 @@ function App() {
             </div>
           </div>
 
-          {!isDepositMode && inputAmount && parseFloat(inputAmount) > 0 && (
+          {!isDepositMode && inputAmount && parseFloat(inputAmount) > 0 && nav > 0 && (
             <div style={{ 
               fontSize: '0.85rem', 
               color: '#ff3b30', 
@@ -404,8 +452,19 @@ function App() {
             </div>
           )}
 
-          <button className="action-btn" onClick={handleAction} disabled={isProcessing || !isConnected || (!inputAmount && isConnected)}>
-            {isProcessing ? 'Processing...' : !isConnected ? 'Connect Wallet' : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
+          {/* 🔥 修复 1：加载中禁用按钮 */}
+          <button 
+            className="action-btn" 
+            onClick={handleAction} 
+            disabled={isProcessing || !isConnected || isNavLoading || (!inputAmount && isConnected)}
+          >
+            {isProcessing 
+              ? 'Processing...' 
+              : !isConnected 
+                ? 'Connect Wallet' 
+                : isNavLoading 
+                  ? 'Loading NAV...' 
+                  : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
           </button>
           
           {msg && <p className={`msg-text ${msg.includes('Success') ? 'success' : 'error'}`}>{msg}</p>}
@@ -414,7 +473,7 @@ function App() {
         <div className="info-section">
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
-            <span className="info-value green">{nav.toFixed(4)} USDT</span>
+            <span className="info-value green">{nav > 0 ? nav.toFixed(4) : '...'} USDT</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
@@ -422,7 +481,7 @@ function App() {
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
-            <span className="info-value blue">{aaveApy}%</span>
+            <span className="info-value blue">{isApyLoading ? '...' : `${aaveApy}%`}</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
