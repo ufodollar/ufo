@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { ethers } from 'ethers';
 
@@ -122,6 +122,9 @@ function App() {
   const [aaveApy, setAaveApy] = useState('3.05'); 
   const [isApyLoading, setIsApyLoading] = useState(true);
 
+  // 🔥 用于闪电重试的 Ref
+  const retryCountRef = useRef(0);
+
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
     window.addEventListener('click', handleGlobalClick);
@@ -132,6 +135,7 @@ function App() {
     if (isConnected) { close(); }
   }, [isConnected, close]);
 
+  // 🔥 核心逻辑：NAV 快速加载 + 闪电重试
   useEffect(() => {
     let isMounted = true;
 
@@ -139,15 +143,19 @@ function App() {
       if (!isConnected) {
         setUsdtBalance('0');
         setUfoBalance('0');
-        // 未连接时也应当尝试拉取 NAV，以便用户浏览
       }
       
       try {
         const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
         const rate = await vaultContract.getExchangeRate();
+        
         if (isMounted) {
-          setNav(parseFloat(ethers.formatUnits(rate, 18)));
-          setIsNavLoading(false);
+          const parsedNav = parseFloat(ethers.formatUnits(rate, 18));
+          setNav(parsedNav);
+          if (parsedNav > 0) {
+            setIsNavLoading(false);
+            retryCountRef.current = 0; // 成功后重置重试计数
+          }
         }
         
         if (address) {
@@ -163,8 +171,13 @@ function App() {
         }
       } catch (e) {
         if (isMounted) {
-          setIsNavLoading(false);
-          // 🔥 如果首次加载失败，nav 会保持在 0
+          // 如果失败，触发闪电重试（最多快速重试 5 次，每次间隔 1 秒）
+          if (retryCountRef.current < 5) {
+            retryCountRef.current += 1;
+            setTimeout(() => { if(isMounted) fetchData(); }, 1000);
+          } else {
+            setIsNavLoading(false);
+          }
         }
       }
     };
@@ -213,8 +226,11 @@ function App() {
   };
 
   const handleAction = async () => {
-    // 🔥 兜底拦截：如果 NAV 未就绪，坚决不让交易
-    if (nav === 0) return setMsg("Net Asset Value is loading or unavailable. Please try again later.");
+    // 🔥 如果用户点击时 NAV 还没好，立刻手动触发一次获取，并提示稍等
+    if (nav === 0) {
+      setMsg("Fetching latest NAV, please wait...");
+      return; 
+    }
     
     if (!isConnected) return open({ view: 'AllWallets' });
     if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
@@ -283,15 +299,20 @@ function App() {
 
   let receiveAmount = '0';
   let estimatedFee = '0';
+  let isCalculating = false;
 
-  if (nav > 0 && inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    if (isDepositMode) {
-      receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
+  if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
+    if (nav > 0) {
+      if (isDepositMode) {
+        receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
+      } else {
+        const totalUsdt = parseFloat(inputAmount) * nav;
+        const fee = totalUsdt * 0.015;
+        estimatedFee = fee.toFixed(4);
+        receiveAmount = formatAmount((totalUsdt - fee).toString()); 
+      }
     } else {
-      const totalUsdt = parseFloat(inputAmount) * nav;
-      const fee = totalUsdt * 0.015;
-      estimatedFee = fee.toFixed(4);
-      receiveAmount = formatAmount((totalUsdt - fee).toString()); 
+      isCalculating = true; // 用户已输入，但 NAV 还在路上
     }
   }
 
@@ -403,16 +424,14 @@ function App() {
               </span>
             </div>
             <div className="input-row">
-              {/* 🔥 修复：NAV 未就绪时，输入框直接禁用 */}
+              {/* 🔥 输入框永远可点 */}
               <input 
                 type="number" 
                 className="input-field" 
                 value={inputAmount} 
                 onChange={handleInputChange} 
-                placeholder={isNavLoading || nav === 0 ? "Wait for price..." : "0.0"} 
+                placeholder="0.0" 
                 min="0"
-                disabled={isNavLoading || nav === 0}
-                style={{ opacity: (isNavLoading || nav === 0) ? 0.5 : 1 }}
               />
               <div className="token-tag">
                 <img src={currentIcon} alt={currentToken} />
@@ -435,9 +454,9 @@ function App() {
               <input 
                 type="text" 
                 className="input-field" 
-                value={receiveAmount === '0' ? '' : formatAmount(receiveAmount)} 
+                value={isCalculating ? '' : (receiveAmount === '0' ? '' : formatAmount(receiveAmount))} 
                 readOnly 
-                placeholder={isNavLoading || nav === 0 ? "Wait..." : "0.0"} 
+                placeholder={isCalculating ? "Fetching..." : "0.0"} 
               />
               <div className="token-tag">
                 <img src={receiveIcon} alt={receiveToken} />
@@ -459,18 +478,17 @@ function App() {
             </div>
           )}
 
+          {/* 🔥 按钮在未连接时提示连接，在连接后如果有输入随时可点。点击时判断 NAV */}
           <button 
             className="action-btn" 
             onClick={handleAction} 
-            disabled={isProcessing || !isConnected || isNavLoading || nav === 0 || (!inputAmount && isConnected)}
+            disabled={isProcessing || !isConnected || (!inputAmount && isConnected)}
           >
             {isProcessing 
               ? 'Processing...' 
               : !isConnected 
                 ? 'Connect Wallet' 
-                : (isNavLoading || nav === 0)
-                  ? 'Loading NAV...' 
-                  : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
+                : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
           </button>
           
           {msg && <p className={`msg-text ${msg.includes('Success') ? 'success' : 'error'}`}>{msg}</p>}
@@ -479,7 +497,7 @@ function App() {
         <div className="info-section">
           <div className="info-item">
             <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
-            <span className="info-value green">{nav > 0 ? nav.toFixed(4) : '...'} USDT</span>
+            <span className="info-value green">{nav > 0 ? nav.toFixed(4) : 'Fetching...'} USDT</span>
           </div>
           <div className="info-item">
             <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
