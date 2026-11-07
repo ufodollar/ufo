@@ -75,12 +75,24 @@
         .bottom-card { background: rgba(255,255,255,0.6); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; margin-top: 1rem; border: 1px solid #fff; display: flex; justify-content: space-between; align-items: center; }
         .apy-text { color: #10b981; font-weight: 700; }
 
-        /* 规则弹窗 */
+        /* 弹窗通用 */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 50; padding: 1rem; }
         .modal-content { background: #fff; border-radius: 1.5rem; width: 100%; max-width: 380px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
-        .modal-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
-        .modal-list { font-size: 0.9rem; color: #475569; line-height: 1.8; padding-left: 1.2rem; }
-        .modal-btn { width: 100%; margin-top: 1.5rem; background: #f1f5f9; color: #1e293b; font-weight: 700; padding: 0.8rem; border-radius: 0.8rem; border: none; cursor: pointer; }
+        
+        /* 钱包列表样式 */
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .modal-title { font-size: 1.25rem; font-weight: 700; }
+        .close-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b; }
+        .wallet-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 60vh; overflow-y: auto; }
+        .wallet-item { display: flex; align-items: center; gap: 1rem; padding: 0.8rem; border-radius: 1rem; cursor: pointer; background: #f8fafc; border: 1px solid transparent; transition: 0.2s; text-align: left; width: 100%; }
+        .wallet-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
+        .wallet-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: #fff; padding: 0.2rem; object-fit: contain; }
+        .wallet-name { font-weight: 700; font-size: 0.95rem; color: #1e293b; }
+        .wallet-desc { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+
+        /* 规则列表 */
+        .modal-list { font-size: 0.9rem; color: #475569; line-height: 1.8; padding-left: 1.2rem; margin-bottom: 1.5rem; }
+        .modal-btn { width: 100%; background: #f1f5f9; color: #1e293b; font-weight: 700; padding: 0.8rem; border-radius: 0.8rem; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -98,7 +110,7 @@
                 <span class="dot"></span>
                 <span id="walletAddress">0x...</span>
             </div>
-            <button id="connectBtn" class="connect-btn" onclick="connectWallet()">连接钱包</button>
+            <button id="connectBtn" class="connect-btn" onclick="openWalletModal()">连接钱包</button>
         </div>
 
         <div class="balance-card">
@@ -165,9 +177,26 @@
         </div>
     </div>
 
+    <!-- 钱包选择弹窗 -->
+    <div id="walletModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">连接钱包</div>
+                <button class="close-btn" onclick="closeWalletModal()">✕</button>
+            </div>
+            <div class="wallet-list" id="walletList">
+                <!-- 动态生成钱包列表 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 规则弹窗 -->
     <div id="rulesModal" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-title">产品规则</div>
+            <div class="modal-header">
+                <div class="modal-title">产品规则</div>
+                <button class="close-btn" onclick="toggleRules(false)">✕</button>
+            </div>
             <ul class="modal-list">
                 <li>1 UFO 兑换比例随金库 NAV 浮动。</li>
                 <li>所有的 USDT 将进入底层 Aave 协议生息。</li>
@@ -177,7 +206,6 @@
         </div>
     </div>
 
-    <!-- 直接引入 Ethers CDN，抛弃 React -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 
     <script>
@@ -186,7 +214,6 @@
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
         const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
         const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB';
-        
         const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
         const ERC20_ABI = [
@@ -203,6 +230,17 @@
             "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
         ];
 
+        // 指定的 7 个钱包
+        const WALLETS = [
+            { id: "metamask", name: "MetaMask", icon: "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
+            { id: "trust", name: "Trust Wallet", icon: "https://trustwallet.com/assets/images/media/assets/TWT.svg", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
+            { id: "phantom", name: "Phantom", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Phantom_wallet_logo.svg/512px-Phantom_wallet_logo.svg.png", desc: "多链极简钱包", url: "https://phantom.app/ul/browse/" },
+            { id: "binance", name: "Binance Wallet", icon: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Binance_Logo.svg", desc: "币安官方 Web3 钱包", url: "https://app.binance.com/en/download" },
+            { id: "mywallet", name: "MyWallet", icon: "https://www.myetherwallet.com/favicon.ico", desc: "经典以太坊轻钱包", url: "https://www.myetherwallet.com/" },
+            { id: "safepal", name: "SafePal", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png", desc: "币安投资的硬件钱包", url: "https://www.safepal.com/" },
+            { id: "rainbow", name: "Rainbow", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", desc: "以太坊最绚丽钱包", url: "https://rnbwapp.com/" }
+        ];
+
         // 全局变量
         let currentAddress = null;
         let currentSigner = null;
@@ -211,19 +249,68 @@
         let uBalanceStr = '0.0';
         let ufoBalanceStr = '0.0';
 
-        // ================= 核心交互逻辑 =================
+        // ================= 弹窗控制 =================
         
-        // 1. 连接钱包 (直接调用浏览器原生插件)
-        window.connectWallet = async () => {
-            if (!window.ethereum) {
-                alert("请先安装 MetaMask 或 Trust Wallet 插件！");
+        // 渲染钱包列表并打开弹窗
+        window.openWalletModal = () => {
+            // 如果检测到了浏览器插件，直接连，不弹窗
+            if (window.ethereum) {
+                connectBrowserWallet();
                 return;
             }
+            // 否则打开多钱包选择弹窗
+            const listEl = document.getElementById('walletList');
+            listEl.innerHTML = '';
+            WALLETS.forEach(w => {
+                const btn = document.createElement('button');
+                btn.className = 'wallet-item';
+                btn.onclick = () => handleWalletClick(w);
+                btn.innerHTML = `
+                    <img src="${w.icon}" class="wallet-icon" alt="${w.name}">
+                    <div>
+                        <div class="wallet-name">${w.name}</div>
+                        <div class="wallet-desc">${w.desc}</div>
+                    </div>
+                `;
+                listEl.appendChild(btn);
+            });
+            document.getElementById('walletModal').style.display = 'flex';
+        };
+
+        window.closeWalletModal = () => {
+            document.getElementById('walletModal').style.display = 'none';
+        };
+
+        window.toggleRules = (show) => {
+            document.getElementById('rulesModal').style.display = show ? 'flex' : 'none';
+        };
+
+        // 处理钱包点击
+        const handleWalletClick = (wallet) => {
+            closeWalletModal();
+            const currentUrl = window.location.href;
+            
+            // 手机深度链接跳转
+            if (wallet.id === "metamask" || wallet.id === "trust" || wallet.id === "phantom") {
+                window.location.href = wallet.url + encodeURIComponent(currentUrl);
+            } else {
+                // 对于没有直接跳转协议的钱包，提示复制网址
+                navigator.clipboard.writeText(currentUrl).then(() => {
+                    alert(`网址已复制！请打开 ${wallet.name} App，在 DApp 浏览器中粘贴访问即可连接。`);
+                }).catch(() => {
+                    alert(`请手动复制当前网址，打开 ${wallet.name} App 进行访问。`);
+                });
+            }
+        };
+
+        // ================= 核心交互逻辑 =================
+        
+        // 浏览器插件直接连接（如果在钱包内置浏览器或电脑上）
+        const connectBrowserWallet = async () => {
             try {
-                // 请求切换网络到 BSC
                 await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x38' }], // BSC 主网
+                    params: [{ chainId: '0x38' }], // BSC
                 }).catch(async (err) => {
                     if (err.code === 4902) {
                         await window.ethereum.request({
@@ -241,7 +328,6 @@
 
                 const provider = new ethers.BrowserProvider(window.ethereum);
                 const accounts = await provider.send("eth_requestAccounts", []);
-                
                 currentSigner = await provider.getSigner();
                 currentAddress = accounts[0];
 
@@ -253,16 +339,11 @@
                 
                 fetchBalances();
             } catch (err) {
-                alert("连接失败: " + (err.message || "未知错误"));
+                alert("连接失败: " + (err.message || "用户取消"));
             }
         };
 
-        // 2. 规则弹窗
-        window.toggleRules = (show) => {
-            document.getElementById('rulesModal').style.display = show ? 'flex' : 'none';
-        };
-
-        // 3. 模式切换 (存入 / 赎回)
+        // 模式切换
         window.switchMode = (isDeposit) => {
             isDepositMode = isDeposit;
             document.getElementById('tabDeposit').className = isDeposit ? 'tab active' : 'tab';
@@ -287,7 +368,7 @@
             window.switchMode(!isDepositMode);
         };
 
-        // 4. 计算汇率
+        // 计算输出
         window.calculateOutput = () => {
             const input = parseFloat(document.getElementById('inputAmount').value);
             if (isNaN(input) || input <= 0) {
@@ -298,7 +379,7 @@
             document.getElementById('outputAmount').innerText = formatAmount(output);
         };
 
-        // 5. 读取 Aave 收益率
+        // 读取数据
         const fetchAaveApy = async () => {
             try {
                 const pool = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
@@ -310,7 +391,6 @@
             }
         };
 
-        // 6. 读取余额
         const fetchBalances = async () => {
             if (!currentAddress) return;
             try {
@@ -337,10 +417,10 @@
             document.getElementById('balancePay').innerText = isDepositMode ? formatAmount(uBalanceStr) : formatAmount(ufoBalanceStr);
         };
 
-        // 7. 执行交易
+        // 交易
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
-                window.connectWallet();
+                openWalletModal();
                 return;
             }
             const inputAmount = document.getElementById('inputAmount').value;
@@ -405,7 +485,7 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 初始化运行
+        // 初始化
         fetchAaveApy();
     </script>
 </body>
