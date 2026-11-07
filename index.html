@@ -8,22 +8,29 @@
         /* 基础重置 */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        /* 核心：强制铺满视口，彻底禁止滑动 */
+        /* 默认背景设为深色（电脑端看两边好看） */
         html, body { 
             width: 100%; 
             height: 100%; 
-            height: 100dvh; /* 适配手机动态地址栏 */
             overflow: hidden; 
-            background-color: #f4f6fb; 
+            background-color: #0f172a; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
+        /* 核心容器：高度永远占满 100dvh，宽度最大 420px */
         .app-container {
             width: 100%;
-            height: 100%;
+            max-width: 420px;
+            height: 100vh;
+            height: 100dvh; /* 适配移动端地址栏 */
+            background-color: #f4f6fb; 
             display: flex;
             flex-direction: column;
             position: relative;
             overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3); /* 电脑端两边有一点点阴影区分 */
         }
 
         /* 浅色毛玻璃渐变光晕 */
@@ -31,25 +38,26 @@
         .glow-1 { top: -10%; left: -10%; width: 80vw; height: 80vw; max-width: 400px; max-height: 400px; background: #93c5fd; opacity: 0.4; }
         .glow-2 { top: 30%; right: -10%; width: 80vw; height: 80vw; max-width: 400px; max-height: 400px; background: #d8b4fe; opacity: 0.4; }
 
-        /* 页面内容区：使用 Flex 纵向分布，填满屏幕 */
+        /* 页面内容区：flex 自动分配空间 */
         .content-wrapper {
             flex: 1;
-            padding: 1.5rem 1rem; /* 减少上下内边距 */
+            padding: 1rem 1.25rem; 
             display: flex;
             flex-direction: column;
             z-index: 10;
-            justify-content: space-between; /* 自动把上下中均匀撑开 */
+            justify-content: space-between; 
+            overflow-y: auto;
         }
 
         /* 顶部 Header */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
         .logo-row { display: flex; align-items: center; gap: 0.5rem; }
         .logo-icon { width: 2.2rem; height: 2.2rem; background: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 1.1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .title { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; }
+        .title { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; color: #1e293b;}
         .title-blue { color: #3b82f6; }
         .connect-btn { background: #3b82f6; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 999px; font-weight: 600; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(59,130,246,0.3); transition: 0.2s; }
         .connect-btn:active { transform: scale(0.95); }
-        .wallet-info { background: #fff; padding: 0.4rem 0.8rem; border-radius: 999px; font-size: 0.85rem; border: 1px solid #e2e8f0; display: none; align-items: center; gap: 0.4rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: monospace; font-weight: 600; }
+        .wallet-info { background: #fff; padding: 0.4rem 0.8rem; border-radius: 999px; font-size: 0.85rem; border: 1px solid #e2e8f0; display: none; align-items: center; gap: 0.4rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: monospace; font-weight: 600; color: #1e293b;}
         .dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; }
 
         /* 余额卡片 */
@@ -61,7 +69,7 @@
         .rules-btn:active { background: rgba(59,130,246,0.2); }
 
         /* 主交互面板 */
-        .panel { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); border: 1px solid #fff; position: relative; }
+        .panel { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); border: 1px solid #fff; position: relative; margin-bottom: 0.5rem;}
         
         .panel-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; text-align: center; }
 
@@ -70,14 +78,14 @@
         .input-box:focus-within { border-color: #bfdbfe; background: #fff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1); }
         .input-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: #64748b; margin-bottom: 0.4rem; font-weight: 500; }
         .input-field { background: transparent; font-size: 2rem; font-weight: 800; color: #1e293b; border: none; outline: none; width: 100%; }
-        .token-pill { display: flex; align-items: center; gap: 0.4rem; background: #fff; padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid #e2e8f0; font-weight: 700; font-size: 0.95rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .token-pill { display: flex; align-items: center; gap: 0.4rem; background: #fff; padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid #e2e8f0; font-weight: 700; font-size: 0.95rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02); color: #1e293b;}
         .token-icon { width: 1.5rem; height: 1.5rem; object-fit: contain; }
 
         /* 中间切换按钮 (上下箭头) */
         .switch-container { display: flex; justify-content: center; margin: -10px 0; position: relative; z-index: 10; }
         .switch-btn { 
             background: #fff; border: 4px solid #f4f6fb; 
-            width: 52px; height: 52px; /* 稍微缩小一点，防止挤爆 */
+            width: 52px; height: 52px; 
             border-radius: 50%; box-shadow: 0 6px 16px rgba(59,130,246,0.15); 
             color: #3b82f6; cursor: pointer; display: flex; justify-content: center; align-items: center; 
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
@@ -96,8 +104,8 @@
         .action-btn:disabled { opacity: 0.7; cursor: not-allowed; }
         .msg-text { margin-top: 0.8rem; text-align: center; font-size: 0.8rem; color: #ef4444; background: #fef2f2; padding: 0.4rem; border-radius: 0.4rem; display: none; }
 
-        /* 底部特性卡片 (极度压缩高度) */
-        .features { display: flex; justify-content: space-between; margin-top: 0.5rem; gap: 0.4rem; }
+        /* 底部特性卡片 */
+        .features { display: flex; justify-content: space-between; margin-top: auto; gap: 0.4rem; padding-bottom: 0.5rem;}
         .feature-item { flex: 1; background: rgba(255,255,255,0.6); backdrop-filter: blur(10px); border-radius: 0.8rem; padding: 0.6rem 0.2rem; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; border: 1px solid #fff; }
         .feature-icon { font-size: 1.2rem; }
         .feature-text { font-size: 0.65rem; font-weight: 700; color: #475569; }
@@ -146,7 +154,7 @@
         .wallet-list { display: flex; flex-direction: column; gap: 0.4rem; }
         .wallet-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem; border-radius: 0.8rem; cursor: pointer; background: #f8fafc; border: 1px solid transparent; transition: 0.2s; text-align: left; width: 100%; }
         .wallet-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
-        .wallet-icon { width: 2.2rem; height: 2.2rem; border-radius: 50%; background: #fff; padding: 0.2rem; object-fit: contain; border: 1px solid #f1f5f9; }
+        .wallet-icon { width: 2.2rem; height: 2.2rem; border-radius: 50%; background: #fff; padding: 0.1rem; object-fit: contain; border: 1px solid #f1f5f9; }
         .wallet-name { font-weight: 700; font-size: 0.9rem; color: #1e293b; }
         .wallet-desc { font-size: 0.7rem; color: #94a3b8; margin-top: 2px; }
 
@@ -159,24 +167,6 @@
         
         .modal-btn { width: 100%; background: #3b82f6; color: #fff; font-weight: 700; padding: 0.9rem; border-radius: 0.8rem; border: none; cursor: pointer; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(59,130,246,0.3); transition: 0.2s; }
         .modal-btn:active { transform: scale(0.98); }
-
-        /* ========================================= */
-        /* 电脑端自适应：屏幕大于 500px 时，居中变成手机模拟器（绝不干扰手机） */
-        /* ========================================= */
-        @media (min-width: 500px) {
-            body { 
-                background-color: #0f172a; 
-                display: flex; justify-content: center; align-items: center; 
-            }
-            .app-container {
-                width: 380px; 
-                height: 750px; 
-                border-radius: 36px; 
-                box-shadow: 0 0 60px rgba(0,0,0,0.5), inset 0 0 0 6px #1e293b;
-                border: 1px solid #334155;
-                overflow: hidden;
-            }
-        }
     </style>
 </head>
 <body>
@@ -185,7 +175,6 @@
         <div class="glow glow-1"></div>
         <div class="glow glow-2"></div>
 
-        <!-- 内容区：使用 flex 均匀分布 -->
         <div class="content-wrapper">
             <div class="header">
                 <div class="logo-row">
@@ -259,7 +248,6 @@
                 <div id="msgBox" class="msg-text"></div>
             </div>
 
-            <!-- 底部特性 -->
             <div class="features">
                 <div class="feature-item">
                     <div class="feature-icon">🛡️</div>
@@ -277,7 +265,6 @@
         </div>
     </div>
 
-    <!-- 钱包选择弹窗 -->
     <div id="walletModal" class="modal-overlay" onclick="closeWalletModalOnBg(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -290,7 +277,6 @@
         </div>
     </div>
 
-    <!-- 规则弹窗 -->
     <div id="rulesModal" class="modal-overlay" onclick="toggleRules(false)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -356,11 +342,12 @@
             "function getExchangeRate() view returns (uint256)"
         ];
 
+        // 更换为绝对稳定的 CoinMarketCap 图标，国内秒开，防止裂图
         const WALLETS = [
-            { id: "metamask", name: "MetaMask", icon: "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
-            { id: "trust", name: "Trust Wallet", icon: "https://trustwallet.com/assets/images/media/assets/TWT.svg", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
-            { id: "phantom", name: "Phantom", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Phantom_wallet_logo.svg/512px-Phantom_wallet_logo.svg.png", desc: "多链极简钱包", url: "https://phantom.app/ul/browse/" },
-            { id: "binance", name: "Binance Wallet", icon: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Binance_Logo.svg", desc: "币安官方 Web3 钱包", url: "https://app.binance.com/en/download" },
+            { id: "metamask", name: "MetaMask", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/11419.png", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
+            { id: "trust", name: "Trust Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/3717.png", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
+            { id: "phantom", name: "Phantom", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/21795.png", desc: "多链极简钱包", url: "https://phantom.app/ul/browse/" },
+            { id: "binance", name: "Binance Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1839.png", desc: "币安官方 Web3 钱包", url: "https://app.binance.com/en/download" },
             { id: "safepal", name: "SafePal", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png", desc: "币安投资的硬件钱包", url: "https://www.safepal.com/" },
             { id: "rainbow", name: "Rainbow", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", desc: "以太坊最绚丽钱包", url: "https://rnbwapp.com/" }
         ];
