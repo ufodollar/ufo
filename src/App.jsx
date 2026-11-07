@@ -5,18 +5,18 @@ import { useAppKit, useAppKitAccount, createAppKit } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
-// ================= 1. 初始化 Reown =================
+// ================= 1. Init Reown AppKit =================
 try {
   createAppKit({
     adapters: [new EthersAdapter()],
     networks: [bsc],
-    metadata: { name: 'UFO 生态', description: '兑换', url: window.location.origin, icons: [] },
+    metadata: { name: 'UFO Ecosystem', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
     features: { analytics: true, allWallets: { showWallets: true } }
   });
 } catch (e) { console.error(e); }
 
-// ================= 2. 配置区 =================
+// ================= 2. Config =================
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -24,9 +24,9 @@ const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org
 
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
 const VAULT_ABI = ["function getExchangeRate() view returns (uint256)"];
-const FEE_RATE = 0.005; // 0.5% 手续费
+const FEE_RATE = 0.005; // 0.5% Fee
 
-// 精美渐变 UFO SVG
+// Gradient UFO SVG Icon
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -47,7 +47,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// ================= 3. 主组件 =================
+// ================= 3. Main App =================
 function App() {
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
@@ -61,7 +61,7 @@ function App() {
   const [usdtBal, setUsdtBal] = useState('0.0');
   const [ufoBal, setUfoBal] = useState('0.0');
 
-  // 获取汇率
+  // Fetch Exchange Rate
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -73,7 +73,7 @@ function App() {
     fetchNav();
   }, []);
 
-  // 获取余额
+  // Fetch Balances
   const fetchBalances = async () => {
     if (!address) return;
     try {
@@ -90,7 +90,7 @@ function App() {
     if (isConnected) fetchBalances();
   }, [isConnected, address, activeTab]);
 
-  // 计算输出
+  // Calculate Output
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0) {
@@ -105,24 +105,24 @@ function App() {
 
   const handleAction = () => {
     if (!isConnected) return open({ view: 'AllWallets' });
-    if (!inputAmount || Number(inputAmount) <= 0) return alert("请输入有效金额");
-    alert(`正在准备${isBuyingUFO ? '兑换' : '赎回'}...`);
+    if (!inputAmount || Number(inputAmount) <= 0) return alert("Please enter a valid amount");
+    alert(`Preparing ${isBuyingUFO ? 'Swap' : 'Redeem'}...`);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc' }}>
       
-      {/* 浅色背景光晕 */}
+      {/* Background Glows */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
-      {/* ================= 顶部 Header ================= */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10 }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             <UfoIcon size={28} />
           </div>
-          <span style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>UFO<span style={{ color: '#3b82f6' }}>生态</span></span>
+          <span style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>UFO<span style={{ color: '#3b82f6' }}>Ecosystem</span></span>
         </div>
 
         {isConnected ? (
@@ -132,30 +132,30 @@ function App() {
           </span>
         ) : (
           <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            连接钱包
+            Connect Wallet
           </button>
         )}
       </div>
 
-      {/* ================= 内容区（滚动） ================= */}
+      {/* Main Content Area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
-        {/* 1. 兑换页面 */}
+        {/* Tab 1: Swap */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            <h3 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '20px' }}>闪兑</h3>
+            <h3 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '20px' }}>Swap</h3>
             
-            {/* 支付 */}
+            {/* Pay Input */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>你支付</span>
-                <span>余额: {isConnected ? (isBuyingUFO ? usdtBal : ufoBal) : '0.0'}</span>
+                <span>You Pay</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? usdtBal : ufoBal) : '0.0'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.0" style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '800', color: '#1e293b', width: '100%' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: 'bold' }}>
                   {isBuyingUFO ? (
-                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 20, height: 20}}/><span>USDT</span></>
+                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 20, height: 20}} alt="USDT"/><span>USDT</span></>
                   ) : (
                     <><UfoIcon size={20}/><span>UFO</span></>
                   )}
@@ -163,17 +163,17 @@ function App() {
               </div>
             </div>
 
-            {/* 切换按钮 */}
+            {/* Switch Button */}
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); }} style={{ background: '#fff', border: '4px solid #f8fafc', width: '44px', height: '44px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 10l5-5 5 5"/><path d="M7 14l5 5 5-5"/></svg>
               </button>
             </div>
 
-            {/* 接收 */}
+            {/* Receive Input */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>您收到</span>
+                <span>You Receive</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '28px', fontWeight: '800', color: '#94a3b8' }}>{outputAmount}</div>
@@ -181,31 +181,31 @@ function App() {
                   {isBuyingUFO ? (
                     <><UfoIcon size={20}/><span>UFO</span></>
                   ) : (
-                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 20, height: 20}}/><span>USDT</span></>
+                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 20, height: 20}} alt="USDT"/><span>USDT</span></>
                   )}
                 </div>
               </div>
             </div>
 
             <div style={{ textAlign: 'center', fontSize: '13px', color: '#64748b', marginTop: '20px', fontWeight: '600', background: '#f8fafc', borderRadius: '10px', padding: '10px' }}>
-              实时汇率: 1 UFO ≈ <span style={{ color: '#3b82f6', fontWeight: '800' }}>{currentNav}</span> USDT
+              Real-time Rate: 1 UFO ≈ <span style={{ color: '#3b82f6', fontWeight: '800' }}>{currentNav}</span> USDT
             </div>
             <div style={{ textAlign: 'center', fontSize: '11px', color: '#ef4444', marginTop: '8px', fontWeight: '500' }}>
-              * 双向兑换收取 0.5% 手续费
+              * A 0.5% fee applies to both buy and sell.
             </div>
 
             <button onClick={handleAction} style={{ width: '100%', padding: '16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer', marginTop: '20px', boxShadow: '0 8px 20px -5px rgba(59,130,246,0.4)' }}>
-              {isConnected ? (isBuyingUFO ? '立即兑换' : '立即赎回') : '连接钱包'}
+              {isConnected ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet'}
             </button>
           </div>
         )}
 
-        {/* 2. 资产页面 */}
+        {/* Tab 2: Assets */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 36, height: 36}}/>
+                <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 36, height: 36}} alt="USDT"/>
                 <span style={{ fontSize: '16px', fontWeight: '700' }}>USDT</span>
               </div>
               <span style={{ fontSize: '18px', fontWeight: '800' }}>{isConnected ? usdtBal : '0.0'}</span>
@@ -220,35 +220,39 @@ function App() {
           </div>
         )}
 
-        {/* 3. 规则页面 */}
+        {/* Tab 3: Rules */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>🌐 UFO 应用场景</h4>
-              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>UFO 是一种基于 BSC 链发行的去中心化稳定资产，专为高频跨境支付与商业结算设计。</p>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>🌐 Use Cases</h4>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>UFO is a decentralized stable asset issued on the BSC chain, designed for high-frequency cross-border payments and commercial settlements.</p>
             </div>
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>🛡️ 安全承诺</h4>
-              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>100% 资金储备、透明金库（资金流向可链上审计）、合约已通过严格测试。</p>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>🛡️ Security Commitment</h4>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>100% capital reserves, transparent vault (on-chain auditable fund flows), and smart contracts strictly tested and audited.</p>
+            </div>
+            <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>⚠️ Disclaimer</h4>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>UFO is a payment and settlement tool, not an investment product. We do not promise any fixed annualized yield.</p>
             </div>
           </div>
         )}
 
       </div>
 
-      {/* ================= 底部导航栏 ================= */}
-      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20 }}>
-        <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
-          <span>兑换</span>
+      {/* Bottom Navigation Bar - Fixed at bottom */}
+      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
+        <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
+          <span>Swap</span>
         </div>
-        <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-          <span>资产</span>
+        <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span>Assets</span>
         </div>
-        <div onClick={() => setActiveTab('rules')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'rules' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          <span>规则</span>
+        <div onClick={() => setActiveTab('rules')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'rules' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Rules</span>
         </div>
       </div>
 
