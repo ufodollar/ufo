@@ -50,7 +50,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// 🌟 优化后的 UFO 呜声：一声、平直、空心、长音
+// 🌟 纯正、平直、空心的 UFO 长音“呜——”
 let globalAudioCtx = null;
 const playUfoSound = () => {
   try {
@@ -66,15 +66,16 @@ const playUfoSound = () => {
     osc1.type = 'sine';
     osc2.type = 'sine';
     
-    // 两个极高且相近的频率（产生极其空灵、类似飞碟悬停的“拍频”效果）
-    // 保持平直，不做频率滑动（不滑音，所以不是四声）
-    osc1.frequency.setValueAtTime(650, globalAudioCtx.currentTime);
-    osc2.frequency.setValueAtTime(652, globalAudioCtx.currentTime); 
+    // 核心：不滑音，保持频率绝对平直。
+    // 使用 600Hz 和 602Hz 两个微差频率，会产生声学上的“拍频”，听起来极其空心和神秘。
+    osc1.frequency.setValueAtTime(600, globalAudioCtx.currentTime);
+    osc2.frequency.setValueAtTime(602, globalAudioCtx.currentTime); 
     
-    // 音量包络：迅速起音，然后极长地平滑淡出（长音）
+    // 音量包络：快速起音 (0.05s)，持续长音，极长淡出 (1.5s)
     gain.gain.setValueAtTime(0, globalAudioCtx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, globalAudioCtx.currentTime + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 1.2); // 持续 1.2 秒
+    gain.gain.linearRampToValueAtTime(0.1, globalAudioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.1, globalAudioCtx.currentTime + 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 1.5); 
     
     osc1.connect(gain);
     osc2.connect(gain);
@@ -82,8 +83,8 @@ const playUfoSound = () => {
     
     osc1.start();
     osc2.start();
-    osc1.stop(globalAudioCtx.currentTime + 1.2);
-    osc2.stop(globalAudioCtx.currentTime + 1.2);
+    osc1.stop(globalAudioCtx.currentTime + 1.5);
+    osc2.stop(globalAudioCtx.currentTime + 1.5);
   } catch (e) {}
 };
 
@@ -254,13 +255,13 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
-              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '44px', height: '44px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
-                {/* 🌟 完美并排的 ↑↓ 箭头 */}
+              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
+                {/* 🌟 两个箭头之间拉开间隔的上下箭头 */}
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 20V4" />
-                  <path d="M5 8l4-4 4 4" />
-                  <path d="M15 4v16" />
-                  <path d="M19 16l-4 4-4-4" />
+                  <path d="M7 20V4" />
+                  <path d="M3 8l4-4 4 4" />
+                  <path d="M17 4v16" />
+                  <path d="M21 16l-4 4-4-4" />
                 </svg>
               </button>
             </div>
