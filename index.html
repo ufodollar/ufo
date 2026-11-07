@@ -5,143 +5,127 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>UFO 兑换</title>
     <style>
-        /* ================= 全局重置与强制全屏 ================= */
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        /* ================= 强制使用纯数字 px 尺寸 ================= */
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            -webkit-tap-highlight-color: transparent; 
+        }
         
         html, body { 
-            width: 100%; 
-            height: 100%; 
-            height: 100dvh; 
-            overflow: hidden; /* 禁止任何滑动 */
-            background-color: #f4f6fb; /* 浅色底 */
+            width: 100vw; /* 手机屏幕宽度 */
+            height: 100dvh; /* 手机屏幕高度 */
+            overflow: hidden; 
+            background-color: #f4f6fb; 
         }
 
-        /* 主容器：占满整个视口 */
         .app-container {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             position: relative;
             overflow: hidden;
-            /* 电脑端打开时，限制最大宽度居中，但手机端绝对铺满 */
-            max-width: 480px; 
-            margin: 0 auto; 
-            background-color: #f4f6fb;
         }
 
-        /* 电脑端的外围背景 */
-        @media (min-width: 481px) {
-            body { background-color: #0f172a; }
-            .app-container { box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        }
+        /* 浅色光晕背景 */
+        .glow { position: absolute; border-radius: 50%; filter: blur(70px); z-index: 0; pointer-events: none; }
+        .glow-1 { top: -50px; left: -50px; width: 250px; height: 250px; background: #93c5fd; opacity: 0.5; }
+        .glow-2 { bottom: 100px; right: -50px; width: 250px; height: 250px; background: #d8b4fe; opacity: 0.5; }
 
-        /* 浅色渐变光晕背景 */
-        .glow { position: absolute; border-radius: 50%; filter: blur(70px); mix-blend-mode: multiply; z-index: 0; pointer-events: none; }
-        .glow-1 { top: -10%; left: -20%; width: 300px; height: 300px; background: #93c5fd; opacity: 0.5; }
-        .glow-2 { top: 40%; right: -20%; width: 300px; height: 300px; background: #d8b4fe; opacity: 0.5; }
-
-        /* ================= 页面内容区 ================= */
+        /* ================= 主内容区（纯 px 间距） ================= */
         .content {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 1.5rem 1.25rem;
+            padding: 24px 20px;
             z-index: 10;
-            justify-content: space-between; /* 均匀分布上下 */
+            justify-content: space-between; 
         }
 
         /* 顶部 Header */
         .header { display: flex; justify-content: space-between; align-items: center; }
-        .logo-row { display: flex; align-items: center; gap: 0.5rem; }
-        .logo-icon { width: 2.4rem; height: 2.4rem; background: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .title { font-size: 1.5rem; font-weight: 800; color: #1e293b; letter-spacing: -0.5px; }
+        .logo-row { display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 38px; height: 38px; background: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .title { font-size: 24px; font-weight: 800; color: #1e293b; }
         .title-blue { color: #3b82f6; }
         
-        .connect-btn { background: #3b82f6; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 99px; font-weight: 700; cursor: pointer; font-size: 0.9rem; box-shadow: 0 4px 15px rgba(59,130,246,0.4); transition: 0.1s; }
+        .connect-btn { background: #3b82f6; color: #fff; border: none; padding: 10px 20px; border-radius: 99px; font-weight: 700; cursor: pointer; font-size: 14px; box-shadow: 0 4px 15px rgba(59,130,246,0.4); }
         .connect-btn:active { transform: scale(0.95); }
         
-        .wallet-info { background: #fff; padding: 0.5rem 1rem; border-radius: 99px; font-size: 0.9rem; border: 1px solid #e2e8f0; display: none; align-items: center; gap: 0.5rem; font-family: monospace; font-weight: 700; color: #1e293b; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .wallet-info { background: #fff; padding: 8px 16px; border-radius: 99px; font-size: 14px; border: 1px solid #e2e8f0; display: none; align-items: center; gap: 8px; font-family: monospace; font-weight: 700; color: #1e293b; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
 
         /* 余额卡片 */
-        .balance-card { background: rgba(255,255,255,0.85); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid #fff; display: flex; justify-content: space-between; align-items: center; }
-        .balance-label { color: #64748b; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; }
-        .balance-val { color: #1e293b; font-weight: 800; font-size: 1.5rem; }
-        .balance-unit { font-size: 0.8rem; font-weight: normal; color: #94a3b8; }
-        .rules-btn { background: rgba(59,130,246,0.1); color: #3b82f6; font-size: 0.8rem; font-weight: 700; padding: 0.5rem 1rem; border-radius: 99px; border: none; cursor: pointer; }
-        .rules-btn:active { background: rgba(59,130,246,0.2); }
+        .balance-card { background: #ffffff; border-radius: 24px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center; }
+        .balance-label { color: #64748b; font-size: 13px; margin-bottom: 4px; font-weight: 600; }
+        .balance-val { color: #1e293b; font-weight: 800; font-size: 24px; }
+        .balance-unit { font-size: 12px; font-weight: normal; color: #94a3b8; }
+        .rules-btn { background: #eff6ff; color: #3b82f6; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 99px; border: none; }
 
-        /* 主兑换面板 */
-        .panel { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 1.75rem; padding: 1.5rem; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); border: 1px solid #fff; position: relative; }
-        .panel-title { font-size: 1.1rem; font-weight: 800; color: #1e293b; margin-bottom: 1.25rem; text-align: center; }
+        /* 兑换面板 */
+        .panel { background: #ffffff; border-radius: 28px; padding: 24px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); }
+        .panel-title { font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 20px; text-align: center; }
 
-        /* 输入框区域 */
-        .input-box { background: #f8fafc; border-radius: 1.25rem; padding: 1.25rem 1rem; border: 1px solid #f1f5f9; position: relative; margin-bottom: 0.2rem; }
-        .input-box:focus-within { border-color: #bfdbfe; background: #fff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1); }
-        .input-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; }
-        .input-field { background: transparent; font-size: 2.2rem; font-weight: 800; color: #1e293b; border: none; outline: none; width: 100%; }
-        .token-pill { display: flex; align-items: center; gap: 0.5rem; background: #fff; padding: 0.5rem 1rem; border-radius: 99px; border: 1px solid #e2e8f0; font-weight: 800; font-size: 1rem; color: #1e293b; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-        .token-icon { width: 1.6rem; height: 1.6rem; object-fit: contain; }
+        /* 输入框 */
+        .input-box { background: #f8fafc; border-radius: 20px; padding: 20px 16px; border: 1px solid #f1f5f9; margin-bottom: 4px; }
+        .input-row { display: flex; justify-content: space-between; font-size: 14px; color: #64748b; margin-bottom: 8px; font-weight: 600; }
+        .input-field { background: transparent; font-size: 36px; font-weight: 800; color: #1e293b; border: none; outline: none; width: 100%; }
+        .token-pill { display: flex; align-items: center; gap: 8px; background: #ffffff; padding: 8px 16px; border-radius: 99px; border: 1px solid #e2e8f0; font-weight: 800; font-size: 16px; }
+        .token-icon { width: 26px; height: 26px; object-fit: contain; }
 
         /* 中间切换按钮 */
-        .switch-container { display: flex; justify-content: center; margin: -12px 0; position: relative; z-index: 10; }
+        .switch-container { display: flex; justify-content: center; margin: -20px 0; position: relative; z-index: 10; }
         .switch-btn { 
-            background: #fff; border: 4px solid #f4f6fb; 
+            background: #ffffff; border: 4px solid #f4f6fb; 
             width: 56px; height: 56px; border-radius: 50%; 
             box-shadow: 0 6px 20px rgba(59,130,246,0.15); 
-            color: #3b82f6; cursor: pointer; display: flex; justify-content: center; align-items: center; 
-            transition: 0.2s;
+            color: #3b82f6; display: flex; justify-content: center; align-items: center; 
         }
-        .switch-btn:active { transform: scale(0.9); }
 
         /* 汇率与手续费 */
-        .rate-display { text-align: center; font-size: 0.85rem; color: #64748b; margin-top: 1.25rem; font-weight: 600; background: #f8fafc; border-radius: 0.75rem; padding: 0.75rem; }
-        .rate-display span { color: #3b82f6; font-weight: 800; font-family: monospace; font-size: 1rem; }
-        .fee-notice { font-size: 0.75rem; color: #ef4444; text-align: center; margin-top: 0.5rem; font-weight: 500;}
+        .rate-display { text-align: center; font-size: 14px; color: #64748b; margin-top: 20px; font-weight: 600; background: #f8fafc; border-radius: 12px; padding: 12px; }
+        .rate-display span { color: #3b82f6; font-weight: 800; font-size: 16px; }
+        .fee-notice { font-size: 12px; color: #ef4444; text-align: center; margin-top: 8px; font-weight: 500;}
 
         /* 提交按钮 */
-        .action-btn { width: 100%; padding: 1.1rem; border-radius: 1.25rem; font-size: 1.1rem; font-weight: 800; background: #3b82f6; color: #fff; border: none; cursor: pointer; margin-top: 1rem; box-shadow: 0 10px 20px -5px rgba(59,130,246,0.4); transition: 0.1s; }
+        .action-btn { width: 100%; padding: 18px; border-radius: 20px; font-size: 18px; font-weight: 800; background: #3b82f6; color: #ffffff; border: none; margin-top: 16px; box-shadow: 0 10px 20px -5px rgba(59,130,246,0.4); }
         .action-btn:active { transform: scale(0.98); }
         
-        .msg-text { margin-top: 1rem; text-align: center; font-size: 0.85rem; color: #ef4444; background: #fef2f2; padding: 0.5rem; border-radius: 0.5rem; display: none; font-weight: 600;}
+        .msg-text { margin-top: 16px; text-align: center; font-size: 14px; color: #ef4444; background: #fef2f2; padding: 8px; border-radius: 8px; display: none; font-weight: 600;}
 
-        /* 底部导航栏 (App 风格) */
-        .tab-bar { display: flex; justify-content: space-around; align-items: center; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-top: 1px solid #f1f5f9; padding: 0.75rem 0 1rem 0; z-index: 20; flex-shrink: 0; }
-        .tab-item { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; color: #94a3b8; font-size: 0.7rem; font-weight: 600; cursor: pointer; }
+        /* 底部导航栏 */
+        .tab-bar { display: flex; justify-content: space-around; align-items: center; background: #ffffff; border-top: 1px solid #f1f5f9; padding: 12px 0 20px 0; z-index: 20; }
+        .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #94a3b8; font-size: 12px; font-weight: 600; }
         .tab-item.active { color: #3b82f6; }
-        .tab-icon { font-size: 1.3rem; }
+        .tab-icon { font-size: 22px; }
 
-        /* ================= 弹窗通用 ================= */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 999; padding: 1.5rem; }
-        .modal-content { 
-            background: #fff; border-radius: 1.5rem; width: 100%; max-width: 340px; 
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); max-height: 80vh; 
-            display: flex; flex-direction: column; overflow: hidden; margin: auto; 
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; }
-        .modal-title { font-size: 1.2rem; font-weight: 800; color: #1e293b; }
-        .close-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b; padding: 0.2rem; line-height: 1; }
-        .modal-scroll-area { padding: 1.5rem; overflow-y: auto; flex: 1; }
-        .modal-scroll-area::-webkit-scrollbar { display: none; }
-        .modal-footer { padding: 1rem 1.5rem 1.5rem; border-top: 1px solid #f1f5f9; flex-shrink: 0; }
+        /* ================= 弹窗（纯 px） ================= */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 999; padding: 24px; }
+        .modal-content { background: #ffffff; border-radius: 24px; width: 100%; max-width: 340px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* 规则列表 */
-        .rules-section { margin-bottom: 1.2rem; }
-        .rules-title { font-size: 0.95rem; font-weight: 800; color: #1e293b; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
-        .rules-content { font-size: 0.85rem; color: #475569; line-height: 1.6; }
-        .rules-list { padding-left: 1.2rem; margin: 0; }
-        .rules-list li { margin-bottom: 0.3rem; }
-        .modal-btn { width: 100%; background: #3b82f6; color: #fff; font-weight: 800; padding: 1rem; border-radius: 1rem; border: none; cursor: pointer; font-size: 1rem; box-shadow: 0 4px 12px rgba(59,130,246,0.3); transition: 0.1s; }
-        .modal-btn:active { transform: scale(0.98); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
+        .modal-title { font-size: 20px; font-weight: 800; color: #1e293b; }
+        .close-btn { background: transparent; border: none; font-size: 20px; color: #64748b; }
+        
+        .modal-scroll-area { padding: 24px; overflow-y: auto; flex: 1; }
+        .modal-footer { padding: 16px 24px 24px; border-top: 1px solid #f1f5f9; }
+        
+        .rules-section { margin-bottom: 20px; }
+        .rules-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 8px; }
+        .rules-content { font-size: 14px; color: #475569; line-height: 1.6; }
+        .rules-list { padding-left: 20px; margin: 0; }
+        .rules-list li { margin-bottom: 6px; }
+        .modal-btn { width: 100%; background: #3b82f6; color: #ffffff; font-weight: 800; padding: 16px; border-radius: 16px; border: none; font-size: 16px; }
 
         /* 钱包列表 */
-        .wallet-list { display: flex; flex-direction: column; gap: 0.5rem; }
-        .wallet-item { display: flex; align-items: center; gap: 1rem; padding: 0.8rem; border-radius: 1rem; cursor: pointer; background: #f8fafc; border: 1px solid transparent; transition: 0.1s; text-align: left; width: 100%; }
-        .wallet-item:active { background: #f1f5f9; border-color: #e2e8f0; }
-        .wallet-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: #fff; padding: 0.1rem; object-fit: contain; border: 1px solid #f1f5f9; }
-        .wallet-name { font-weight: 800; font-size: 0.95rem; color: #1e293b; }
-        .wallet-desc { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+        .wallet-list { display: flex; flex-direction: column; gap: 8px; }
+        .wallet-item { display: flex; align-items: center; gap: 16px; padding: 12px; border-radius: 16px; background: #f8fafc; border: none; width: 100%; text-align: left; }
+        .wallet-icon { width: 40px; height: 40px; border-radius: 50%; background: #ffffff; padding: 2px; object-fit: contain; }
+        .wallet-name { font-weight: 800; font-size: 16px; color: #1e293b; }
+        .wallet-desc { font-size: 12px; color: #94a3b8; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -150,7 +134,6 @@
         <div class="glow glow-1"></div>
         <div class="glow glow-2"></div>
 
-        <!-- 主内容区 -->
         <div class="content">
             <div class="header">
                 <div class="logo-row">
@@ -161,7 +144,6 @@
                     <span class="dot"></span>
                     <span id="walletAddress">0x...</span>
                 </div>
-                <!-- 连接按钮 -->
                 <button id="connectBtn" class="connect-btn" onclick="openWalletModal()">连接钱包</button>
             </div>
 
@@ -185,7 +167,7 @@
                         <span id="labelPay">你支付</span>
                         <span>余额: <span id="balancePay">0.0</span></span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
                         <input type="number" id="inputAmount" class="input-field" placeholder="0.0" oninput="calculateOutput()">
                         <div id="pillPay" class="token-pill">
                             <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon">
@@ -203,14 +185,14 @@
                     </button>
                 </div>
 
-                <div class="input-box" style="margin-top: 0.2rem;">
+                <div class="input-box" style="margin-top: 4px;">
                     <div class="input-row">
                         <span>您收到</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
                         <div class="input-field" style="color: #94a3b8;" id="outputAmount">0.0</div>
                         <div id="pillReceive" class="token-pill">
-                            <span style="font-size: 1.5rem; line-height: 1;">🛸</span>
+                            <span style="font-size: 24px; line-height: 1;">🛸</span>
                             <span>UFO</span>
                         </div>
                     </div>
@@ -226,7 +208,6 @@
             </div>
         </div>
 
-        <!-- 底部 App 风格导航栏 -->
         <div class="tab-bar">
             <div class="tab-item active">
                 <div class="tab-icon">🔄</div>
@@ -285,42 +266,30 @@
         </div>
     </div>
 
-    <!-- 钱包选择弹窗 (原生，绝对能点) -->
+    <!-- 钱包选择弹窗 -->
     <div id="walletModal" class="modal-overlay" onclick="closeWalletModalOnBg(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <div class="modal-title">连接钱包</div>
                 <button class="close-btn" onclick="closeWalletModal()">✕</button>
             </div>
-            <div class="modal-scroll-area">
+            <div class="modal-scroll-area" style="padding: 16px;">
                 <div class="wallet-list" id="walletList"></div>
             </div>
         </div>
     </div>
 
-    <!-- 引入 Ethers -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 
-    <!-- 核心业务逻辑 (无框架，确保绝对能点) -->
     <script>
-        // ================= 配置区 =================
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
         const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
         const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
-        const ERC20_ABI = [
-            "function allowance(address, address) view returns (uint256)",
-            "function approve(address, uint256) returns (bool)",
-            "function balanceOf(address) view returns (uint256)"
-        ];
-        const VAULT_ABI = [
-            "function deposit(uint256)", 
-            "function withdraw(uint256)",
-            "function getExchangeRate() view returns (uint256)"
-        ];
+        const ERC20_ABI = ["function allowance(address, address) view returns (uint256)", "function approve(address, uint256) returns (bool)", "function balanceOf(address) view returns (uint256)"];
+        const VAULT_ABI = ["function deposit(uint256)", "function withdraw(uint256)", "function getExchangeRate() view returns (uint256)"];
 
-        // 稳定的钱包图标
         const WALLETS = [
             { id: "metamask", name: "MetaMask", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/11419.png", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
             { id: "trust", name: "Trust Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/3717.png", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
@@ -337,7 +306,6 @@
         let ufoBalanceStr = '0.0';
         const FEE_RATE = 0.005;
 
-        // ================= 自动连接 (如果在钱包 App 内打开) =================
         async function autoConnect() {
             if (window.ethereum) {
                 try {
@@ -364,17 +332,14 @@
             fetchBalances();
         };
 
-        // ================= UI 交互逻辑 (完全脱离第三方库，绝对能点) =================
         window.toggleRules = (show) => { 
             document.getElementById('rulesModal').style.display = show ? 'flex' : 'none'; 
         };
 
         window.openWalletModal = () => {
             if (window.ethereum) {
-                // 如果已经装了插件或在钱包内，直接连
                 autoConnect();
             } else {
-                // 手机普通浏览器，弹窗选择
                 const listEl = document.getElementById('walletList');
                 listEl.innerHTML = '';
                 WALLETS.forEach(w => {
@@ -405,11 +370,11 @@
             if (isBuyingUFO) {
                 document.getElementById('labelPay').innerText = '你支付';
                 document.getElementById('pillPay').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
-                document.getElementById('pillReceive').innerHTML = '<span style="font-size: 1.5rem; line-height: 1;">🛸</span><span>UFO</span>';
+                document.getElementById('pillReceive').innerHTML = '<span style="font-size: 24px; line-height: 1;">🛸</span><span>UFO</span>';
                 if(currentAddress) document.getElementById('actionBtn').innerText = "立即兑换";
             } else {
                 document.getElementById('labelPay').innerText = '你支付';
-                document.getElementById('pillPay').innerHTML = '<span style="font-size: 1.5rem; line-height: 1;">🛸</span><span>UFO</span>';
+                document.getElementById('pillPay').innerHTML = '<span style="font-size: 24px; line-height: 1;">🛸</span><span>UFO</span>';
                 document.getElementById('pillReceive').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
                 if(currentAddress) document.getElementById('actionBtn').innerText = "立即赎回";
             }
@@ -433,7 +398,6 @@
             document.getElementById('outputAmount').innerText = formatAmount(output);
         };
 
-        // ================= 数据拉取 =================
         const fetchNav = async () => {
             try {
                 const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
@@ -467,7 +431,6 @@
             document.getElementById('balancePay').innerText = isBuyingUFO ? formatAmount(uBalanceStr) : formatAmount(ufoBalanceStr);
         };
 
-        // ================= 交易操作 =================
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
                 openWalletModal();
@@ -527,7 +490,6 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 启动
         window.addEventListener('load', () => {
             fetchNav();
             autoConnect();
