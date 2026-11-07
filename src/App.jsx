@@ -50,7 +50,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// 🌟 空心、高频、长音调的 UFO 呜声
+// 🌟 优化后的 UFO 呜声：一声、平直、空心、长音
 let globalAudioCtx = null;
 const playUfoSound = () => {
   try {
@@ -59,26 +59,31 @@ const playUfoSound = () => {
     if (!globalAudioCtx) globalAudioCtx = new AudioContext();
     if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
     
-    const osc = globalAudioCtx.createOscillator();
+    const osc1 = globalAudioCtx.createOscillator();
+    const osc2 = globalAudioCtx.createOscillator();
     const gain = globalAudioCtx.createGain();
     
-    // 使用三角波，稍微带一点空心感，不像正弦波那么闷
-    osc.type = 'triangle'; 
+    osc1.type = 'sine';
+    osc2.type = 'sine';
     
-    // 频率设定在 600Hz 左右，缓慢下滑，持续 0.8 秒
-    osc.frequency.setValueAtTime(650, globalAudioCtx.currentTime);
-    osc.frequency.linearRampToValueAtTime(550, globalAudioCtx.currentTime + 0.8); 
+    // 两个极高且相近的频率（产生极其空灵、类似飞碟悬停的“拍频”效果）
+    // 保持平直，不做频率滑动（不滑音，所以不是四声）
+    osc1.frequency.setValueAtTime(650, globalAudioCtx.currentTime);
+    osc2.frequency.setValueAtTime(652, globalAudioCtx.currentTime); 
     
-    // 音量包络：迅速起音，然后慢慢淡出，形成“呜——”的拖尾
+    // 音量包络：迅速起音，然后极长地平滑淡出（长音）
     gain.gain.setValueAtTime(0, globalAudioCtx.currentTime);
     gain.gain.linearRampToValueAtTime(0.08, globalAudioCtx.currentTime + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 0.8);
+    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 1.2); // 持续 1.2 秒
     
-    osc.connect(gain);
+    osc1.connect(gain);
+    osc2.connect(gain);
     gain.connect(globalAudioCtx.destination);
     
-    osc.start();
-    osc.stop(globalAudioCtx.currentTime + 0.8);
+    osc1.start();
+    osc2.start();
+    osc1.stop(globalAudioCtx.currentTime + 1.2);
+    osc2.stop(globalAudioCtx.currentTime + 1.2);
   } catch (e) {}
 };
 
@@ -93,14 +98,12 @@ function App() {
   const [outputAmount, setOutputAmount] = useState('0.0');
   const [currentNav, setCurrentNav] = useState(10);
   
-  // 使用精确的字符串存储余额
   const [usdtBal, setUsdtBal] = useState('0.0');
   const [ufoBal, setUfoBal] = useState('0.0');
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
-  // 全局点击音效
   useEffect(() => {
     document.addEventListener('click', playUfoSound);
     return () => document.removeEventListener('click', playUfoSound);
@@ -125,7 +128,6 @@ function App() {
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
       
-      // 获取精确数字符串，去除多余的小数点后的0
       const exactUsdt = parseFloat(ethers.formatUnits(uBal, 6)).toString();
       const exactUfo = parseFloat(ethers.formatUnits(ufoBalData, 18)).toString();
       
@@ -196,7 +198,6 @@ function App() {
     }
   };
 
-  // 格式化法币价值（两位小数，千位分割）
   const formatUsd = (val) => {
     const num = Number(val);
     if (isNaN(num)) return '0.00';
@@ -254,10 +255,12 @@ function App() {
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '44px', height: '44px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
-                {/* 🌟 极简的 ↑↓ 箭头 */}
+                {/* 🌟 完美并排的 ↑↓ 箭头 */}
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 10l4-4 4 4" />
-                  <path d="M8 14l4 4 4-4" />
+                  <path d="M9 20V4" />
+                  <path d="M5 8l4-4 4 4" />
+                  <path d="M15 4v16" />
+                  <path d="M19 16l-4 4-4-4" />
                 </svg>
               </button>
             </div>
@@ -297,10 +300,8 @@ function App() {
           </div>
         )}
 
-        {/* 🌟 钱包页面：精确显示和绿色法币价值 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            {/* USDT 资产行 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 40, height: 40}} alt="USDT"/>
@@ -315,7 +316,6 @@ function App() {
               </div>
             </div>
 
-            {/* UFO 资产行 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
