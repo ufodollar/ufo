@@ -88,7 +88,7 @@
 
         <div class="header">
             <div class="logo-row">
-                <!-- 恢复原版精美 UFO -->
+                <!-- 渐变精美 UFO -->
                 <div class="logo-icon">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                         <defs>
@@ -113,7 +113,6 @@
             <div id="walletInfo" class="wallet-info">
                 <span class="dot"></span><span id="walletAddress">0x...</span>
             </div>
-            <!-- 按钮改名为唤起 Reown -->
             <button id="connectBtn" class="connect-btn" onclick="openReown()">连接钱包</button>
         </div>
 
@@ -144,7 +143,6 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                             <div class="input-field" style="color: #94a3b8;" id="outputAmount">0.0</div>
                             <div id="pillReceive" class="token-pill">
-                                <!-- 恢复原版精美小 UFO -->
                                 <svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="ufo-body-s" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#60a5fa" /><stop offset="100%" stop-color="#3b82f6" /></linearGradient><linearGradient id="ufo-glass-s" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#e0f2fe" /><stop offset="100%" stop-color="#bae6fd" /></linearGradient></defs><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="url(#ufo-glass-s)" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="url(#ufo-body-s)" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg>
                                 <span>UFO</span>
                             </div>
@@ -208,10 +206,9 @@
         </div>
     </div>
 
-    <!-- 引入 Ethers (jsdelivr) -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 
-    <!-- 纯 UI 交互层 -->
+    <!-- 原生 UI 逻辑（防卡死占位） -->
     <script>
         let isBuyingUFO = true;
         let currentNav = 10;
@@ -261,15 +258,15 @@
             else { el.innerText = text; el.style.display = 'block'; }
         };
 
-        // 占位，等 Reown 加载完成后覆盖
         window.openReown = () => {
             const btn = document.getElementById('connectBtn');
-            btn.innerText = "加载中...";
-            setTimeout(() => { btn.innerText = "连接钱包"; }, 3000);
+            const oldText = btn.innerText;
+            btn.innerText = "加载钱包组件...";
+            setTimeout(() => { btn.innerText = oldText; }, 2500);
         };
     </script>
 
-    <!-- Reown 模块层 -->
+    <!-- Reown 模块层（强制打开 All Wallets 视图） -->
     <script type="module">
         import { createAppKit } from 'https://esm.sh/@reown/appkit@1.6.5';
         import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.6.5';
@@ -289,34 +286,27 @@
             networks: [bsc],
             metadata: { name: 'UFO 生态', description: '兑换', url: window.location.origin, icons: [] },
             projectId: 'd6431212399f6c487b364387859983ea',
-            features: { analytics: true }
+            features: { analytics: true, allWallets: { showWallets: true } } // 核心：强制显示全量钱包网格
         });
 
         let currentAddress = null;
         let currentSigner = null;
 
-        // 覆盖占位符：现在点击按钮直接弹出 Reown 原生弹窗
+        // 核心：调起弹窗时，直接锁定到 'AllWallets' 视图
         window.openReown = () => {
             document.getElementById('connectBtn').innerText = "连接钱包";
-            modal.open();
+            modal.open({ view: 'AllWallets' }); 
         };
 
-        // 自动检测与连接（当用户从钱包 App 跳转进来时）
+        // 针对手机内置浏览器的自动连接（显示地址尾号）
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile && window.ethereum) {
-            // 延迟执行，确保 Reown 初始化完毕
             setTimeout(async () => {
                 try {
                     const provider = new ethers.BrowserProvider(window.ethereum);
                     const accounts = await window.ethereum.request({ method: 'eth_accounts' });
                     if (accounts && accounts.length > 0) {
                         await handleAutoConnect(provider, accounts[0]);
-                    } else {
-                        // 如果未授权，请求授权
-                        const reqAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                        if (reqAccounts && reqAccounts.length > 0) {
-                            await handleAutoConnect(provider, reqAccounts[0]);
-                        }
                     }
                 } catch (e) { console.log("Auto connect error", e); }
             }, 500);
@@ -338,7 +328,6 @@
             fetchBalances();
         }
 
-        // 监听 Reown 状态变化
         modal.subscribeAccount((account) => {
             if (account.isConnected) {
                 currentAddress = account.address;
