@@ -170,7 +170,6 @@
                     <div class="input-box">
                         <div class="input-row"><span>你支付</span></div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
-                            <!-- 绑定了 oninput 事件 -->
                             <input type="number" id="inputAmount" class="input-field" placeholder="0.0" oninput="calculateOutput()">
                             <div id="pillPay" class="token-pill">
                                 <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon">
@@ -269,15 +268,15 @@
         </div>
     </div>
 
-    <!-- ==================================================== -->
-    <!-- 第一部分：普通 JS，确保 UI 绝对能点，与网络无关 -->
-    <!-- ==================================================== -->
+    <!-- 更换为国内更稳定的 jsdelivr CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+
+    <!-- 第一部分：纯 UI 交互逻辑 -->
     <script>
         let isBuyingUFO = true;
         let currentNav = 10;
         const FEE_RATE = 0.005;
 
-        // 1. 切换 Tab
         window.switchTab = (tab) => {
             document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
@@ -285,7 +284,6 @@
             document.getElementById(`tab-${tab}`).classList.add('active');
         };
 
-        // 2. 切换模式
         window.toggleMode = () => {
             isBuyingUFO = !isBuyingUFO;
             if (isBuyingUFO) {
@@ -301,7 +299,6 @@
             document.getElementById('outputAmount').innerText = '0.0';
         };
 
-        // 3. 计算汇率 (输入框打字立刻能算)
         window.calculateOutput = () => {
             const input = parseFloat(document.getElementById('inputAmount').value);
             if (isNaN(input) || input <= 0) {
@@ -317,14 +314,12 @@
             document.getElementById('outputAmount').innerText = output.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 4. 全局消息展示
         window.showMsg = (text) => {
             const el = document.getElementById('msgBox');
             if (!text) { el.style.display = 'none'; } 
             else { el.innerText = text; el.style.display = 'block'; }
         };
 
-        // 格式化
         window.formatAmount = (val) => {
             if (!val) return '0.0';
             const num = parseFloat(val);
@@ -332,19 +327,25 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 防止 Module 崩溃导致按钮点不动，设置一个默认的 openReown 占位符
-        window.openReown = () => { alert("正在加载钱包组件，请稍后... 或检查网络是否屏蔽了 esm.sh"); };
-        window.handleAction = () => { alert("正在加载钱包组件，请稍后..."); };
+        // 降级处理：加载慢时给个提示
+        window.openReown = () => { 
+            document.getElementById('connectBtn').innerText = "加载中...";
+            setTimeout(() => {
+                if (document.getElementById('connectBtn').innerText === "加载中...") {
+                    alert("网络超时。由于需要加载海外钱包服务，请确保您的网络畅通，刷新重试。");
+                    document.getElementById('connectBtn').innerText = "连接钱包";
+                }
+            }, 4000);
+        };
+        window.handleAction = () => { window.openReown(); };
     </script>
 
-    <!-- ==================================================== -->
-    <!-- 第二部分：ES Module，负责链上交互和 Reown 弹窗 -->
-    <!-- ==================================================== -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+    <!-- 第二部分：Reown 钱包模块 (更换为 esm.run) -->
     <script type="module">
-        import { createAppKit } from 'https://esm.sh/@reown/appkit@1.6.5';
-        import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.6.5';
-        import { bsc } from 'https://esm.sh/@reown/appkit@1.6.5/networks';
+        // 使用 esm.run (即 jsdelivr 的 ESM 服务)，国内访问率极高
+        import { createAppKit } from 'https://esm.run/@reown/appkit@1.6.5';
+        import { EthersAdapter } from 'https://esm.run/@reown/appkit-adapter-ethers@1.6.5';
+        import { bsc } from 'https://esm.run/@reown/appkit@1.6.5/networks';
 
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
@@ -373,8 +374,11 @@
         let currentSigner = null;
         let currentNav = 10;
 
-        // 覆盖初始占位符，挂载真实的 Reown
-        window.openReown = () => { modal.open(); };
+        // 模块加载成功后，覆盖按钮行为
+        window.openReown = () => { 
+            document.getElementById('connectBtn').innerText = "连接钱包";
+            modal.open(); 
+        };
 
         modal.subscribeAccount((account) => {
             if (account.isConnected) {
@@ -408,7 +412,6 @@
                 const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
                 const rate = await vaultContract.getExchangeRate();
                 currentNav = parseFloat(ethers.formatUnits(rate, 18));
-                // 更新普通JS里的汇率
                 document.getElementById('rateValue').innerText = window.formatAmount(currentNav);
             } catch (err) {
                 document.getElementById('rateValue').innerText = "10.0"; 
@@ -444,7 +447,6 @@
 
             try {
                 const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, currentSigner);
-                // 判断当前模式
                 const isBuy = document.getElementById('pillPay').innerHTML.includes('Tether');
                 
                 if (isBuy) {
