@@ -34,12 +34,57 @@ const TABS = [
   { id: "status", label: "系统状态", icon: "📊" },
 ];
 
-// 主流钱包配置
+// 你指定的热门钱包配置
 const WALLETS = [
-  { id: "metamask", name: "MetaMask", icon: "🦊", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
-  { id: "trust", name: "Trust Wallet", icon: "🛡️", desc: "币安官方推荐钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
-  { id: "binance", name: "Binance Wallet", icon: "🟡", desc: "币安 Web3 钱包", url: "https://app.binance.com/en/download" },
-  { id: "okx", name: "OKX Web3", icon: "⭕", desc: "欧易 Web3 钱包", url: "okx://wallet/dapp/details?dappUrl=" }
+  { 
+    id: "phantom", 
+    name: "Phantom", 
+    icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Phantom_wallet_logo.svg/512px-Phantom_wallet_logo.svg.png", 
+    desc: "多链极简钱包", 
+    url: "https://phantom.app/ul/browse/" 
+  },
+  { 
+    id: "metamask", 
+    name: "MetaMask", 
+    icon: "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", 
+    desc: "全球最广泛使用的钱包", 
+    url: "https://metamask.app.link/dapp/" 
+  },
+  { 
+    id: "trust", 
+    name: "Trust Wallet", 
+    icon: "https://trustwallet.com/assets/images/media/assets/TWT.svg", 
+    desc: "全球领先的移动端钱包", 
+    url: "https://link.trustwallet.com/open_url?coin_id=60&url=" 
+  },
+  { 
+    id: "binance", 
+    name: "Binance Wallet", 
+    icon: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Binance_Logo.svg", 
+    desc: "币安官方 Web3 钱包", 
+    url: "https://app.binance.com/en/download" 
+  },
+  { 
+    id: "mywallet", 
+    name: "MyWallet", 
+    icon: "https://www.myetherwallet.com/favicon.ico", 
+    desc: "经典以太坊轻钱包", 
+    url: "https://www.myetherwallet.com/" 
+  },
+  { 
+    id: "safepal", 
+    name: "SafePal", 
+    icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png", 
+    desc: "币安投资的硬件/软件钱包", 
+    url: "https://www.safepal.com/" 
+  },
+  { 
+    id: "rainbow", 
+    name: "Rainbow", 
+    icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", 
+    desc: "以太坊上最绚丽的钱包", 
+    url: "https://rnbwapp.com/" 
+  }
 ];
 
 export default function App() {
@@ -49,13 +94,13 @@ export default function App() {
   const [signer, setSigner] = useState(null);
   const [msg, setMsg] = useState({ type: "", text: "" });
   
-  // 控制弹窗的显示
+  // 控制钱包选择弹窗的显示
   const [showWalletModal, setShowWalletModal] = useState(false);
 
   // 核心连接逻辑
   async function connectWallet(walletId) {
     if (window.ethereum) {
-      // 如果是在电脑浏览器，或者已经在钱包App的内置浏览器中
+      // 环境中有钱包插件 (电脑端 或 钱包App内置浏览器)
       try {
         const _provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await _provider.send("eth_requestAccounts", []);
@@ -69,14 +114,25 @@ export default function App() {
         showMsg("error", "连接失败: " + (err.shortMessage || err.message));
       }
     } else {
-      // 如果是在手机普通浏览器中，没有 window.ethereum，执行深度链接跳转
-      if (walletId && walletId !== "binance") {
+      // 普通手机浏览器 -> 尝试唤起 App
+      if (walletId) {
         const wallet = WALLETS.find(w => w.id === walletId);
         const currentUrl = window.location.href;
-        window.location.href = wallet.url + encodeURIComponent(currentUrl);
-      } else {
-        showMsg("error", "请复制当前网址，前往钱包 App 的内置浏览器中打开。");
-        setShowWalletModal(false);
+        let deepLink = wallet.url;
+        
+        // 特殊处理支持直接跳转的钱包
+        if (walletId === "metamask" || walletId === "trust" || walletId === "phantom") {
+          window.location.href = deepLink + encodeURIComponent(currentUrl);
+        } else {
+          // 其他不支持直接拼接跳转的，引导用户复制链接
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(currentUrl);
+            showMsg("success", "网址已复制！请手动打开对应钱包 App 粘贴访问。");
+          } else {
+            showMsg("error", "请复制当前网址，前往钱包 App 的内置浏览器打开。");
+          }
+          setShowWalletModal(false);
+        }
       }
     }
   }
@@ -86,40 +142,45 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-950 text-slate-200 font-sans relative">
       
-      {/* --- 多钱包选择弹窗 --- */}
+      {/* ==================== 钱包选择弹窗 ==================== */}
       {showWalletModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="flex justify-between items-center p-6 border-b border-slate-800">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-slate-800 shrink-0">
               <h3 className="text-lg font-bold text-white">连接钱包</h3>
               <button onClick={() => setShowWalletModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
             </div>
-            <div className="p-4 space-y-2">
-              <p className="text-sm text-slate-400 mb-4 px-2">请选择你的钱包。如果使用手机，将自动跳转到钱包 App。</p>
-              {WALLETS.map((w) => (
-                <button
-                  key={w.id}
-                  onClick={() => connectWallet(w.id)}
-                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-700"
-                >
-                  <div className="w-10 h-10 rounded-full bg-slate-950 flex items-center justify-center text-xl shadow-inner">
-                    {w.icon}
-                  </div>
-                  <div className="text-left">
-                    <div className="text-white font-medium">{w.name}</div>
-                    <div className="text-xs text-slate-500">{w.desc}</div>
-                  </div>
-                </button>
-              ))}
+            
+            <div className="p-4 overflow-y-auto">
+              <p className="text-sm text-slate-400 mb-4 px-2">请选择你的钱包。如果在手机浏览器中，将自动尝试唤起 App。</p>
+              
+              <div className="space-y-2">
+                {WALLETS.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => connectWallet(w.id)}
+                    className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-700"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center shadow-inner overflow-hidden p-1.5 shrink-0">
+                      <img src={w.icon} alt={w.name} className="w-full h-full object-contain" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-white font-medium">{w.name}</div>
+                      <div className="text-xs text-slate-500">{w.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+            
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 shrink-0">
               <p className="text-xs text-slate-500 text-center">连接即表示同意《UFO 服务条款》与《风险提示》</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 侧边栏 */}
+      {/* ==================== 侧边栏 ==================== */}
       <aside className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-2xl">🛸</div>
@@ -152,9 +213,9 @@ export default function App() {
         </div>
       </aside>
 
-      {/* 主内容区 */}
+      {/* ==================== 主内容区 ==================== */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm shrink-0">
+        <header className="h-16 border-b border-slate-800 flex items-center justify-between px-4 md:px-8 bg-slate-900/50 backdrop-blur-sm shrink-0">
           <div className="text-sm text-slate-400 hidden md:flex items-center gap-4">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -172,14 +233,14 @@ export default function App() {
           ) : (
             <button
               onClick={() => setShowWalletModal(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-medium px-6 py-2 rounded-lg transition-colors shadow-lg shadow-emerald-500/20"
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-medium px-4 md:px-6 py-2 rounded-lg transition-colors shadow-lg shadow-emerald-500/20 text-sm md:text-base"
             >
               连接钱包
             </button>
           )}
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-4xl mx-auto space-y-6">
             {msg.text && (
               <div className={`p-4 rounded-xl text-sm border flex items-start gap-3 ${
@@ -203,8 +264,9 @@ export default function App() {
 }
 
 // ==========================================
-// 子组件与 UI (保持原样)
+// 子组件：业务面板 (保持不变)
 // ==========================================
+
 function DepositPanel({ signer, showMsg }) {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -250,6 +312,7 @@ function DepositPanel({ signer, showMsg }) {
 function PayPanel({ signer, showMsg }) {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const handleShield = async () => {
     if (!signer) return showMsg("error", "请先连接钱包");
     try {
@@ -266,6 +329,7 @@ function PayPanel({ signer, showMsg }) {
       showMsg("error", err.shortMessage || err.message || "交易失败");
     } finally { setLoading(false); }
   };
+  
   return (
     <PanelCard title="保密付款 (屏蔽池)" desc="资金进入屏蔽池后，链上观察者无法追踪资金去向和具体金额。确保商业机密不外泄。">
       <InputBox label="支付金额" value={amount} onChange={setAmount} symbol="UFO" />
@@ -280,6 +344,7 @@ function PayPanel({ signer, showMsg }) {
 function WithdrawPanel({ signer, showMsg }) {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const handleWithdraw = async () => {
     if (!signer) return showMsg("error", "请先连接钱包");
     try {
@@ -295,6 +360,7 @@ function WithdrawPanel({ signer, showMsg }) {
       showMsg("error", err.shortMessage || err.message || "交易失败");
     } finally { setLoading(false); }
   };
+  
   return (
     <PanelCard title="赎回结算" desc="销毁 UFO，从隔离的储备地址中提取 USDT。赎回行为受合规审查约束。">
       <InputBox label="赎回数量" value={amount} onChange={setAmount} symbol="UFO" />
@@ -311,6 +377,7 @@ function DisclosurePanel({ signer, showMsg }) {
   const [commitment, setCommitment] = useState("");
   const [auditor, setAuditor] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const handleDisclose = async () => {
     if (!signer) return showMsg("error", "请先连接钱包");
     try {
@@ -325,6 +392,7 @@ function DisclosurePanel({ signer, showMsg }) {
       showMsg("error", err.shortMessage || err.message || "交易失败");
     } finally { setLoading(false); }
   };
+  
   return (
     <PanelCard title="选择性披露" desc="企业主动向税务、审计或监管方披露特定保密交易的细节。">
       <div className="space-y-4 mb-6">
@@ -349,6 +417,7 @@ function KYBPanel() {
     { title: "链上地址风控筛查", desc: "使用 Chainalysis 等工具排查企业地址，隔绝暗网、黑客及受制裁资金。" },
     { title: "白名单链上授权", desc: "审查通过后，地址写入智能合约白名单，方可使用保密支付功能。" }
   ];
+  
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
       <h2 className="text-2xl font-bold text-white mb-2">企业安全准入 (KYB)</h2>
@@ -374,6 +443,7 @@ function KYBPanel() {
 function StatusPanel({ provider }) {
   const [data, setData] = useState({ supply: "--", reserve: "--", coverage: "--" });
   const [loading, setLoading] = useState(false);
+  
   const fetchData = async () => {
     if (!provider) return;
     try {
@@ -392,7 +462,9 @@ function StatusPanel({ provider }) {
       setData({ supply: supplyStr, reserve: reserveStr, coverage: cov });
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
+  
   useEffect(() => { if (provider) fetchData(); }, [provider]);
+  
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
       <div className="flex justify-between items-end mb-8">
