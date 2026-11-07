@@ -3,18 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>UFO Lending</title>
+    <title>UFO 借贷</title>
     <style>
-      body { margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      /* === 合并进来的 index.css === */
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+      body {
+        background-color: #0f172a;
+        background-image: radial-gradient(circle at 15% 50%, rgba(20, 40, 120, 0.6), transparent 50%), radial-gradient(circle at 85% 30%, rgba(120, 20, 100, 0.5), transparent 50%);
+        color: #fff;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+      }
+      #root { width: 100%; max-width: 480px; }
     </style>
-    <script>
-      window.global = window;
-      window.process = { env: {} };
-    </script>
   </head>
   <body>
-    <div id="root"></div>
-    <!-- 仅保留这一行，不要在这里写任何 React 代码 -->
-    <script type="module" src="/src/main.jsx"></script>
+    <div id="root">
+      <!-- 放一个默认的加载提示，如果 JS 崩溃，你至少能看到这行字，不会白屏 -->
+      <div style="text-align: center; padding-top: 50px; color: #94a3b8;">正在加载应用...</div>
+    </div>
+    <!-- 直接引入合并后的 App.jsx -->
+    <script type="module" src="/src/App.jsx"></script>
   </body>
 </html>
