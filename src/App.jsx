@@ -16,9 +16,9 @@ try {
       analytics: true, 
       allWallets: { showWallets: true } 
     },
-    // 🌟 强制把 Phantom 钱包置顶 (这是 Phantom 的官方 WalletConnect ID)
+    // 🌟 修正：填入 Phantom 官方的完整 WalletConnect ID，确保排在首位
     featuredWalletIds: [
-      'a797aa35c0fadbfc1a53e7f675162e1526e96d1d', // Phantom
+      'a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393',
     ]
   });
 } catch (e) { console.error(e); }
@@ -31,9 +31,9 @@ const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org
 
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
 const VAULT_ABI = ["function getExchangeRate() view returns (uint256)"];
-const FEE_RATE = 0.005; // 0.5% Fee
+const FEE_RATE = 0.005;
 
-// 🌟 修复后的 UFO SVG：加上了深色描边，圆顶清晰可见
+// Gradient UFO SVG Icon
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -46,11 +46,8 @@ const UfoIcon = ({ size = 36 }) => (
         <stop offset="100%" stopColor="#bae6fd" />
       </linearGradient>
     </defs>
-    {/* 玻璃罩：加大了尺寸，并加上了蓝色边框，确保在白底上清晰可见 */}
     <path d="M 25 52 C 25 15, 75 15, 75 52 Z" fill="url(#ufo-glass)" stroke="#3b82f6" strokeWidth="3" />
-    {/* 飞碟底盘 */}
     <ellipse cx="50" cy="55" rx="45" ry="16" fill="url(#ufo-body)" />
-    {/* 飞碟底部的三盏灯 */}
     <circle cx="35" cy="55" r="4" fill="#fff" />
     <circle cx="50" cy="57" r="4" fill="#fff" />
     <circle cx="65" cy="55" r="4" fill="#fff" />
@@ -62,7 +59,7 @@ function App() {
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
 
-  const [activeTab, setActiveTab] = useState('swap'); // swap, assets, rules
+  const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.0');
@@ -71,7 +68,6 @@ function App() {
   const [usdtBal, setUsdtBal] = useState('0.0');
   const [ufoBal, setUfoBal] = useState('0.0');
 
-  // Fetch Exchange Rate
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -83,7 +79,6 @@ function App() {
     fetchNav();
   }, []);
 
-  // Fetch Balances
   const fetchBalances = async () => {
     if (!address) return;
     try {
@@ -100,7 +95,6 @@ function App() {
     if (isConnected) fetchBalances();
   }, [isConnected, address, activeTab]);
 
-  // Calculate Output
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0) {
@@ -122,17 +116,14 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc' }}>
       
-      {/* Background Glows */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
-      {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             <UfoIcon size={28} />
           </div>
-          {/* 🌟 标题改为 UFO Dollar */}
           <span style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
@@ -148,15 +139,12 @@ function App() {
         )}
       </div>
 
-      {/* Main Content Area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
-        {/* Tab 1: Swap */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '20px' }}>Swap</h3>
             
-            {/* Pay Input */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
@@ -174,14 +162,12 @@ function App() {
               </div>
             </div>
 
-            {/* Switch Button */}
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); }} style={{ background: '#fff', border: '4px solid #f8fafc', width: '44px', height: '44px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 10l5-5 5 5"/><path d="M7 14l5 5 5-5"/></svg>
               </button>
             </div>
 
-            {/* Receive Input */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive</span>
@@ -211,7 +197,6 @@ function App() {
           </div>
         )}
 
-        {/* Tab 2: Assets */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '16px' }}>
@@ -231,7 +216,6 @@ function App() {
           </div>
         )}
 
-        {/* Tab 3: Rules */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
@@ -251,7 +235,6 @@ function App() {
 
       </div>
 
-      {/* Bottom Navigation Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
