@@ -34,7 +34,7 @@
         .title-blue { color: #3b82f6; }
         .connect-btn { background: #3b82f6; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 999px; font-weight: 500; cursor: pointer; font-size: 0.875rem; box-shadow: 0 4px 10px rgba(59,130,246,0.3); transition: 0.2s; }
         .connect-btn:active { transform: scale(0.95); }
-        .wallet-info { background: #fff; padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.875rem; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: monospace; }
+        .wallet-info { background: #fff; padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.875rem; border: 1px solid #e2e8f0; display: none; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: monospace; }
         .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #10b981; }
 
         /* 余额卡片 */
@@ -85,26 +85,22 @@
 </head>
 <body>
 
-    <!-- 背景光晕 -->
     <div class="glow glow-1"></div>
     <div class="glow glow-2"></div>
 
     <div class="app-container">
-        <!-- Header -->
         <div class="header">
             <div class="logo-row">
                 <div class="logo-icon">🛸</div>
                 <div class="title">UFO<span class="title-blue">基金</span></div>
             </div>
-            <!-- 隐藏的已连接状态 -->
-            <div id="walletInfo" class="wallet-info" style="display: none;">
+            <div id="walletInfo" class="wallet-info">
                 <span class="dot"></span>
                 <span id="walletAddress">0x...</span>
             </div>
-            <button id="connectBtn" class="connect-btn" onclick="openAppKit()">连接钱包</button>
+            <button id="connectBtn" class="connect-btn" onclick="connectWallet()">连接钱包</button>
         </div>
 
-        <!-- 余额卡片 -->
         <div class="balance-card">
             <div>
                 <div class="balance-label">USDT余额</div>
@@ -117,14 +113,12 @@
             <button class="rules-btn" onclick="toggleRules(true)">规则</button>
         </div>
 
-        <!-- 主面板 -->
         <div class="panel">
             <div class="tab-container">
                 <button id="tabDeposit" class="tab active" onclick="switchMode(true)">订金</button>
                 <button id="tabWithdraw" class="tab" onclick="switchMode(false)">赎回</button>
             </div>
 
-            <!-- 支付区 -->
             <div class="input-box">
                 <div class="input-row">
                     <span id="labelPay">你支付</span>
@@ -139,14 +133,12 @@
                 </div>
             </div>
 
-            <!-- 切换按钮 -->
             <div class="switch-container">
                 <button class="switch-btn" onclick="toggleMode()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
                 </button>
             </div>
 
-            <!-- 接收区 -->
             <div class="input-box" style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
                 <div class="input-row">
                     <span>您收到的金额（扣除费用后）</span>
@@ -164,7 +156,6 @@
             <div id="msgBox" class="msg-text"></div>
         </div>
 
-        <!-- 底部 APY -->
         <div class="bottom-card">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <span style="font-size: 1.2rem;">🏦</span>
@@ -174,7 +165,6 @@
         </div>
     </div>
 
-    <!-- 规则弹窗 -->
     <div id="rulesModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-title">产品规则</div>
@@ -187,33 +177,16 @@
         </div>
     </div>
 
-    <!-- 引入 Ethers 和 AppKit -->
-    <script type="importmap">
-      {
-        "imports": {
-          "ethers": "https://esm.sh/ethers@6.13.4",
-          "@reown/appkit/react": "https://esm.sh/@reown/appkit@1.6.5",
-          "@reown/appkit-adapter-ethers": "https://esm.sh/@reown/appkit-adapter-ethers@1.6.5",
-          "@reown/appkit/networks": "https://esm.sh/@reown/appkit@1.6.5/networks"
-        }
-      }
-    </script>
+    <!-- 直接引入 Ethers CDN，抛弃 React -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 
-    <script type="module">
-        import { ethers } from 'ethers';
-        import { createAppKit } from '@reown/appkit/react';
-        import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-        import { bsc } from '@reown/appkit/networks';
-
+    <script>
         // ================= 配置区 =================
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
         const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
         const AAVE_POOL_ADDRESS = '0x6807dc923806fE8Fd134338EABCA509979a7e0cB';
         
-        // ✅ 已填入你的 Project ID
-        const PROJECT_ID = 'd6431212399f6c487b364387859983ea'; 
-
         const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
         const ERC20_ABI = [
@@ -230,64 +203,66 @@
             "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
         ];
 
-        // ================= AppKit 初始化 =================
-        const metadata = {
-            name: 'UFO Fund',
-            description: 'UFO Fund Web3 App',
-            url: window.location.origin,
-            icons: ['https://ufo-eea.pages.dev/logo.png']
-        };
-
-        const modal = createAppKit({
-            adapters: [new EthersAdapter()],
-            networks: [bsc],
-            metadata,
-            projectId: PROJECT_ID,
-            features: { analytics: true }
-        });
-
         // 全局变量
         let currentAddress = null;
-        let currentProvider = null;
         let currentSigner = null;
         let isDepositMode = true;
         let currentNav = 1;
+        let uBalanceStr = '0.0';
+        let ufoBalanceStr = '0.0';
 
-        // ================= 事件监听 (AppKit) =================
-        modal.subscribeAccount((account) => {
-            if (account.isConnected) {
-                currentAddress = account.address;
+        // ================= 核心交互逻辑 =================
+        
+        // 1. 连接钱包 (直接调用浏览器原生插件)
+        window.connectWallet = async () => {
+            if (!window.ethereum) {
+                alert("请先安装 MetaMask 或 Trust Wallet 插件！");
+                return;
+            }
+            try {
+                // 请求切换网络到 BSC
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x38' }], // BSC 主网
+                }).catch(async (err) => {
+                    if (err.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x38',
+                                chainName: 'BNB Smart Chain',
+                                nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+                                rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                                blockExplorerUrls: ['https://bscscan.com/']
+                            }],
+                        });
+                    }
+                });
+
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                
+                currentSigner = await provider.getSigner();
+                currentAddress = accounts[0];
+
+                // 更新 UI
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('walletInfo').style.display = 'flex';
-                document.getElementById('walletAddress').innerText = `${account.address.slice(0,4)}...${account.address.slice(-4)}`;
+                document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
                 document.getElementById('actionBtn').innerText = isDepositMode ? "存入" : "赎回";
+                
                 fetchBalances();
-            } else {
-                currentAddress = null;
-                document.getElementById('connectBtn').style.display = 'block';
-                document.getElementById('walletInfo').style.display = 'none';
-                document.getElementById('actionBtn').innerText = "连接钱包";
-                document.getElementById('usdtBalance').innerText = '0.0';
-                document.getElementById('ufoBalance').innerText = '0.0';
+            } catch (err) {
+                alert("连接失败: " + (err.message || "未知错误"));
             }
-        });
-
-        modal.subscribeProvider(async (provider) => {
-            if (provider && provider.walletProvider) {
-                currentProvider = new ethers.BrowserProvider(provider.walletProvider);
-                currentSigner = await currentProvider.getSigner();
-            }
-        });
-
-        // ================= UI 逻辑 =================
-        window.openAppKit = () => {
-            modal.open();
         };
 
+        // 2. 规则弹窗
         window.toggleRules = (show) => {
             document.getElementById('rulesModal').style.display = show ? 'flex' : 'none';
         };
 
+        // 3. 模式切换 (存入 / 赎回)
         window.switchMode = (isDeposit) => {
             isDepositMode = isDeposit;
             document.getElementById('tabDeposit').className = isDeposit ? 'tab active' : 'tab';
@@ -312,7 +287,18 @@
             window.switchMode(!isDepositMode);
         };
 
-        // ================= 数据交互 =================
+        // 4. 计算汇率
+        window.calculateOutput = () => {
+            const input = parseFloat(document.getElementById('inputAmount').value);
+            if (isNaN(input) || input <= 0) {
+                document.getElementById('outputAmount').innerText = '0.0';
+                return;
+            }
+            const output = isDepositMode ? (input / (currentNav || 1)) : (input * (currentNav || 1));
+            document.getElementById('outputAmount').innerText = formatAmount(output);
+        };
+
+        // 5. 读取 Aave 收益率
         const fetchAaveApy = async () => {
             try {
                 const pool = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
@@ -324,9 +310,7 @@
             }
         };
 
-        let uBalanceStr = '0.0';
-        let ufoBalanceStr = '0.0';
-
+        // 6. 读取余额
         const fetchBalances = async () => {
             if (!currentAddress) return;
             try {
@@ -353,19 +337,10 @@
             document.getElementById('balancePay').innerText = isDepositMode ? formatAmount(uBalanceStr) : formatAmount(ufoBalanceStr);
         };
 
-        window.calculateOutput = () => {
-            const input = parseFloat(document.getElementById('inputAmount').value);
-            if (isNaN(input) || input <= 0) {
-                document.getElementById('outputAmount').innerText = '0.0';
-                return;
-            }
-            const output = isDepositMode ? (input / (currentNav || 1)) : (input * (currentNav || 1));
-            document.getElementById('outputAmount').innerText = formatAmount(output);
-        };
-
+        // 7. 执行交易
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
-                modal.open();
+                window.connectWallet();
                 return;
             }
             const inputAmount = document.getElementById('inputAmount').value;
@@ -430,34 +405,7 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // ================= 音效 =================
-        let globalAudioCtx = null;
-        const playClickSound = () => {
-            try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                if (!globalAudioCtx) globalAudioCtx = new AudioContext();
-                if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
-                const ctx = globalAudioCtx;
-                const now = ctx.currentTime;
-                const osc = ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(140, now); 
-                osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
-                const gainNode = ctx.createGain();
-                gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-                osc.connect(gainNode);
-                gainNode.connect(ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.6);
-            } catch (e) { }
-        };
-
-        document.addEventListener('click', playClickSound);
-
-        // 初始化
+        // 初始化运行
         fetchAaveApy();
     </script>
 </body>
