@@ -2,20 +2,21 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>UFO 基金</title>
     <style>
         /* 基础重置与浅色背景 */
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; overflow-x: hidden; }
         body {
             background-color: #f4f6fb;
             color: #1e293b;
             min-height: 100vh;
+            min-height: 100dvh; /* 适配手机动态视口 */
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 2rem 1rem;
-            overflow-x: hidden;
             position: relative;
         }
 
@@ -45,7 +46,7 @@
         .rules-btn { background: #3b82f6; color: #fff; font-size: 0.75rem; padding: 0.4rem 1rem; border-radius: 999px; border: none; cursor: pointer; box-shadow: 0 2px 5px rgba(59,130,246,0.3); }
 
         /* 主交互面板 */
-        .panel { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); border-radius: 1.5rem; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); border: 1px solid #fff; }
+        .panel { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); border-radius: 1.5rem; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); border: 1px solid #fff; position: relative; }
         
         /* Tab 切换 */
         .tab-container { display: flex; background: #f1f5f9; border-radius: 1rem; padding: 0.25rem; margin-bottom: 1.5rem; }
@@ -55,7 +56,7 @@
         /* 输入框 */
         .input-box { background: #fff; border-radius: 1rem; padding: 1rem; border: 1px solid #f1f5f9; box-shadow: 0 1px 2px rgba(0,0,0,0.02); position: relative; margin-bottom: 0.5rem; }
         .input-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; }
-        .input-field { background: transparent; font-size: 2.25rem; font-weight: 700; color: #1e293b; border: none; outline: none; width: 100%; }
+        .input-field { background: transparent; font-size: 2rem; font-weight: 700; color: #1e293b; border: none; outline: none; width: 100%; }
         .token-pill { display: flex; align-items: center; gap: 0.5rem; background: #f8fafc; padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid #f1f5f9; font-weight: 700; }
         .token-icon { width: 1.5rem; height: 1.5rem; object-fit: contain; }
 
@@ -64,35 +65,38 @@
         .switch-btn { background: #fff; border: 1px solid #f1f5f9; padding: 0.5rem; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color: #3b82f6; cursor: pointer; margin: -14px auto; position: relative; z-index: 10; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
         .switch-btn:active { transform: scale(0.9); }
 
+        /* 实时汇率显示 */
+        .rate-display { text-align: center; font-size: 0.85rem; color: #64748b; margin-top: 1rem; padding-bottom: 0.5rem; font-weight: 500; background: rgba(59, 130, 246, 0.05); border-radius: 0.5rem; padding: 0.5rem; }
+        .rate-display span { color: #3b82f6; font-weight: 700; font-family: monospace; }
+
         /* 提交按钮 */
-        .action-btn { width: 100%; padding: 1.1rem; border-radius: 1rem; font-size: 1.1rem; font-weight: 700; background: #3b82f6; color: #fff; border: none; cursor: pointer; margin-top: 1.5rem; box-shadow: 0 10px 15px -3px rgba(59,130,246,0.3); transition: 0.2s; }
+        .action-btn { width: 100%; padding: 1.1rem; border-radius: 1rem; font-size: 1.1rem; font-weight: 700; background: #3b82f6; color: #fff; border: none; cursor: pointer; margin-top: 1rem; box-shadow: 0 10px 15px -3px rgba(59,130,246,0.3); transition: 0.2s; }
         .action-btn:active { transform: scale(0.98); }
         .action-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-
         .msg-text { margin-top: 1rem; text-align: center; font-size: 0.85rem; color: #ef4444; background: #fef2f2; padding: 0.5rem; border-radius: 0.5rem; display: none; }
-
-        /* 底部 APY */
-        .bottom-card { background: rgba(255,255,255,0.6); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; margin-top: 1rem; border: 1px solid #fff; display: flex; justify-content: space-between; align-items: center; }
-        .apy-text { color: #10b981; font-weight: 700; }
 
         /* 弹窗通用 */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 50; padding: 1rem; }
-        .modal-content { background: #fff; border-radius: 1.5rem; width: 100%; max-width: 380px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+        .modal-content { background: #fff; border-radius: 1.5rem; width: 100%; max-width: 380px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); max-height: 85vh; overflow-y: auto; }
         
-        /* 钱包列表样式 */
+        /* 钱包列表 */
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
         .modal-title { font-size: 1.25rem; font-weight: 700; }
         .close-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b; }
-        .wallet-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 60vh; overflow-y: auto; }
+        .wallet-list { display: flex; flex-direction: column; gap: 0.5rem; }
         .wallet-item { display: flex; align-items: center; gap: 1rem; padding: 0.8rem; border-radius: 1rem; cursor: pointer; background: #f8fafc; border: 1px solid transparent; transition: 0.2s; text-align: left; width: 100%; }
         .wallet-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
         .wallet-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: #fff; padding: 0.2rem; object-fit: contain; }
         .wallet-name { font-weight: 700; font-size: 0.95rem; color: #1e293b; }
         .wallet-desc { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
 
-        /* 规则列表 */
-        .modal-list { font-size: 0.9rem; color: #475569; line-height: 1.8; padding-left: 1.2rem; margin-bottom: 1.5rem; }
-        .modal-btn { width: 100%; background: #f1f5f9; color: #1e293b; font-weight: 700; padding: 0.8rem; border-radius: 0.8rem; border: none; cursor: pointer; }
+        /* 规则内容 */
+        .rules-section { margin-bottom: 1.2rem; }
+        .rules-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
+        .rules-content { font-size: 0.85rem; color: #475569; line-height: 1.6; }
+        .rules-list { padding-left: 1.2rem; margin: 0; }
+        .rules-list li { margin-bottom: 0.3rem; }
+        .modal-btn { width: 100%; background: #f1f5f9; color: #1e293b; font-weight: 700; padding: 0.8rem; border-radius: 0.8rem; border: none; cursor: pointer; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -151,7 +155,7 @@
                 </button>
             </div>
 
-            <div class="input-box" style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+            <div class="input-box" style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
                 <div class="input-row">
                     <span>您收到的金额（扣除费用后）</span>
                 </div>
@@ -164,16 +168,13 @@
                 </div>
             </div>
 
+            <!-- 实时汇率展示 -->
+            <div class="rate-display">
+                实时汇率: 1 UFO ≈ <span id="rateValue">--</span> USDT
+            </div>
+
             <button id="actionBtn" class="action-btn" onclick="handleAction()">连接钱包</button>
             <div id="msgBox" class="msg-text"></div>
-        </div>
-
-        <div class="bottom-card">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1.2rem;">🏦</span>
-                <span style="color: #475569; font-weight: 500;">净资产值</span>
-            </div>
-            <div class="apy-text" id="apyText">正在获取...</div>
         </div>
     </div>
 
@@ -184,9 +185,7 @@
                 <div class="modal-title">连接钱包</div>
                 <button class="close-btn" onclick="closeWalletModal()">✕</button>
             </div>
-            <div class="wallet-list" id="walletList">
-                <!-- 动态生成钱包列表 -->
-            </div>
+            <div class="wallet-list" id="walletList"></div>
         </div>
     </div>
 
@@ -194,15 +193,41 @@
     <div id="rulesModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">产品规则</div>
+                <div class="modal-title">📄 规则与须知</div>
                 <button class="close-btn" onclick="toggleRules(false)">✕</button>
             </div>
-            <ul class="modal-list">
-                <li>1 UFO 兑换比例随金库 NAV 浮动。</li>
-                <li>所有的 USDT 将进入底层 Aave 协议生息。</li>
-                <li>赎回时需销毁 UFO，并扣除手续费。</li>
-            </ul>
-            <button class="modal-btn" onclick="toggleRules(false)">我知道了</button>
+            
+            <div class="rules-section">
+                <div class="rules-title">🌐 UFO 应用场景</div>
+                <div class="rules-content">
+                    UFO 是一种基于 BSC 链发行的去中心化稳定资产，专为高频跨境支付与商业结算设计。应用场景包括但不限于：企业间大额跨境贸易结算、供应链金融支付、加密资产避险保值，以及全球商户收款。
+                </div>
+            </div>
+
+            <div class="rules-section">
+                <div class="rules-title">🛡️ 安全承诺</div>
+                <div class="rules-content">
+                    <ul class="rules-list">
+                        <li><b>100% 资金储备：</b> 底层由高流动性资产提供全额背书，不搞部分准备金。</li>
+                        <li><b>透明金库：</b> 所有的资金流向与铸造、销毁记录均可在区块链上公开审计。</li>
+                        <li><b>合约安全：</b> 智能合约已通过严格测试与审计，无后门，不可篡改。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="rules-section">
+                <div class="rules-title">⚠️ 使用须知</div>
+                <div class="rules-content">
+                    <ul class="rules-list">
+                        <li><b>非理财产品：</b> UFO 是支付结算工具，不承诺任何固定年化收益，无升值预期。</li>
+                        <li><b>汇率机制：</b> 铸造与赎回比例动态参考金库 NAV 浮动。</li>
+                        <li><b>手续费：</b> 赎回操作将收取极低比例的网络维护费（已自动在到账金额中扣除）。</li>
+                        <li><b>钱包安全：</b> 请务必自行保管好钱包私钥，本平台不托管用户资产。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button class="modal-btn" onclick="toggleRules(false)">我已阅读并知悉</button>
         </div>
     </div>
 
@@ -226,11 +251,7 @@
             "function withdraw(uint256)",
             "function getExchangeRate() view returns (uint256)"
         ];
-        const AAVE_POOL_ABI = [
-            "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
-        ];
 
-        // 指定的 7 个钱包
         const WALLETS = [
             { id: "metamask", name: "MetaMask", icon: "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
             { id: "trust", name: "Trust Wallet", icon: "https://trustwallet.com/assets/images/media/assets/TWT.svg", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
@@ -241,24 +262,64 @@
             { id: "rainbow", name: "Rainbow", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", desc: "以太坊最绚丽钱包", url: "https://rnbwapp.com/" }
         ];
 
-        // 全局变量
         let currentAddress = null;
         let currentSigner = null;
         let isDepositMode = true;
-        let currentNav = 1;
+        let currentNav = 10; // 默认 1 UFO = 10 USDT
         let uBalanceStr = '0.0';
         let ufoBalanceStr = '0.0';
 
-        // ================= 弹窗控制 =================
-        
-        // 渲染钱包列表并打开弹窗
-        window.openWalletModal = () => {
-            // 如果检测到了浏览器插件，直接连，不弹窗
+        // ================= 自动连接检测 =================
+        // 当从 Phantom 等 App 跳转过来时，内置浏览器有 window.ethereum，直接自动请求连接
+        async function autoConnect() {
             if (window.ethereum) {
-                connectBrowserWallet();
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    // 使用 eth_accounts 避免弹出授权框，仅在已授权时返回
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts && accounts.length > 0) {
+                        await handleConnection(provider, accounts[0]);
+                    } else {
+                        // 如果没授权过，尝试请求
+                        const reqAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        if (reqAccounts && reqAccounts.length > 0) {
+                            await handleConnection(provider, reqAccounts[0]);
+                        }
+                    }
+                } catch (err) {
+                    console.log("自动连接未就绪:", err);
+                }
+            }
+        }
+
+        const handleConnection = async (provider, address) => {
+            currentSigner = await provider.getSigner();
+            currentAddress = address;
+
+            // 自动尝试切换网络
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x38' }],
+                });
+            } catch (switchError) {}
+
+            // 更新 UI，显示尾号
+            document.getElementById('connectBtn').style.display = 'none';
+            document.getElementById('walletInfo').style.display = 'flex';
+            document.getElementById('walletAddress').innerText = `${address.slice(0,4)}...${address.slice(-4)}`;
+            document.getElementById('actionBtn').innerText = isDepositMode ? "存入" : "赎回";
+            
+            fetchBalances();
+        };
+
+        // ================= 弹窗控制 =================
+        window.openWalletModal = () => {
+            if (window.ethereum) {
+                // 如果有插件，直接走连接
+                autoConnect();
                 return;
             }
-            // 否则打开多钱包选择弹窗
             const listEl = document.getElementById('walletList');
             listEl.innerHTML = '';
             WALLETS.forEach(w => {
@@ -277,24 +338,15 @@
             document.getElementById('walletModal').style.display = 'flex';
         };
 
-        window.closeWalletModal = () => {
-            document.getElementById('walletModal').style.display = 'none';
-        };
+        window.closeWalletModal = () => { document.getElementById('walletModal').style.display = 'none'; };
+        window.toggleRules = (show) => { document.getElementById('rulesModal').style.display = show ? 'flex' : 'none'; };
 
-        window.toggleRules = (show) => {
-            document.getElementById('rulesModal').style.display = show ? 'flex' : 'none';
-        };
-
-        // 处理钱包点击
         const handleWalletClick = (wallet) => {
             closeWalletModal();
             const currentUrl = window.location.href;
-            
-            // 手机深度链接跳转
             if (wallet.id === "metamask" || wallet.id === "trust" || wallet.id === "phantom") {
                 window.location.href = wallet.url + encodeURIComponent(currentUrl);
             } else {
-                // 对于没有直接跳转协议的钱包，提示复制网址
                 navigator.clipboard.writeText(currentUrl).then(() => {
                     alert(`网址已复制！请打开 ${wallet.name} App，在 DApp 浏览器中粘贴访问即可连接。`);
                 }).catch(() => {
@@ -303,47 +355,7 @@
             }
         };
 
-        // ================= 核心交互逻辑 =================
-        
-        // 浏览器插件直接连接（如果在钱包内置浏览器或电脑上）
-        const connectBrowserWallet = async () => {
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x38' }], // BSC
-                }).catch(async (err) => {
-                    if (err.code === 4902) {
-                        await window.ethereum.request({
-                            method: 'wallet_addEthereumChain',
-                            params: [{
-                                chainId: '0x38',
-                                chainName: 'BNB Smart Chain',
-                                nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-                                rpcUrls: ['https://bsc-dataseed.binance.org/'],
-                                blockExplorerUrls: ['https://bscscan.com/']
-                            }],
-                        });
-                    }
-                });
-
-                const provider = new ethers.BrowserProvider(window.ethereum);
-                const accounts = await provider.send("eth_requestAccounts", []);
-                currentSigner = await provider.getSigner();
-                currentAddress = accounts[0];
-
-                // 更新 UI
-                document.getElementById('connectBtn').style.display = 'none';
-                document.getElementById('walletInfo').style.display = 'flex';
-                document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
-                document.getElementById('actionBtn').innerText = isDepositMode ? "存入" : "赎回";
-                
-                fetchBalances();
-            } catch (err) {
-                alert("连接失败: " + (err.message || "用户取消"));
-            }
-        };
-
-        // 模式切换
+        // ================= 交互逻辑 =================
         window.switchMode = (isDeposit) => {
             isDepositMode = isDeposit;
             document.getElementById('tabDeposit').className = isDeposit ? 'tab active' : 'tab';
@@ -364,11 +376,8 @@
             if(currentAddress) document.getElementById('actionBtn').innerText = isDeposit ? "存入" : "赎回";
         };
 
-        window.toggleMode = () => {
-            window.switchMode(!isDepositMode);
-        };
+        window.toggleMode = () => { window.switchMode(!isDepositMode); };
 
-        // 计算输出
         window.calculateOutput = () => {
             const input = parseFloat(document.getElementById('inputAmount').value);
             if (isNaN(input) || input <= 0) {
@@ -379,25 +388,24 @@
             document.getElementById('outputAmount').innerText = formatAmount(output);
         };
 
-        // 读取数据
-        const fetchAaveApy = async () => {
+        // ================= 数据拉取 =================
+        const fetchNav = async () => {
             try {
-                const pool = new ethers.Contract(AAVE_POOL_ADDRESS, AAVE_POOL_ABI, rpcProvider);
-                const data = await pool.getReserveData(USDT_ADDRESS);
-                const apyVal = (Number(data[2]) / 1e27) * 100;
-                document.getElementById('apyText').innerText = `APY ${apyVal.toFixed(2)}%`;
+                const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+                const rate = await vaultContract.getExchangeRate();
+                // 假设合约返回的是 1 UFO = X USDT (带 18 精度)
+                currentNav = parseFloat(ethers.formatUnits(rate, 18));
+                document.getElementById('rateValue').innerText = formatAmount(currentNav);
             } catch (err) {
-                document.getElementById('apyText').innerText = 'APY 获取失败';
+                console.error("获取汇率失败", err);
+                // 获取失败时兜底显示，不阻塞 UI
+                document.getElementById('rateValue').innerText = "10.0"; 
             }
         };
 
         const fetchBalances = async () => {
             if (!currentAddress) return;
             try {
-                const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-                const rate = await vaultContract.getExchangeRate();
-                currentNav = parseFloat(ethers.formatUnits(rate, 18));
-
                 const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
                 const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
                 
@@ -417,7 +425,7 @@
             document.getElementById('balancePay').innerText = isDepositMode ? formatAmount(uBalanceStr) : formatAmount(ufoBalanceStr);
         };
 
-        // 交易
+        // ================= 交易逻辑 =================
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
                 openWalletModal();
@@ -470,12 +478,8 @@
 
         const showMsg = (text) => {
             const el = document.getElementById('msgBox');
-            if (!text) {
-                el.style.display = 'none';
-            } else {
-                el.innerText = text;
-                el.style.display = 'block';
-            }
+            if (!text) { el.style.display = 'none'; } 
+            else { el.innerText = text; el.style.display = 'block'; }
         };
 
         const formatAmount = (val) => {
@@ -485,8 +489,11 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 初始化
-        fetchAaveApy();
+        // ================= 初始化 =================
+        window.addEventListener('load', () => {
+            fetchNav();      // 拉取汇率
+            autoConnect();   // 自动检测钱包连接
+        });
     </script>
 </body>
 </html>
