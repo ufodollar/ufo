@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>UFO 生态</title>
     <style>
-        /* ================= 全局重置与尺寸缩小 ================= */
+        /* ================= 全局重置 ================= */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
         html, body { width: 100vw; height: 100dvh; overflow: hidden; background-color: #f8fafc; font-size: 14px; }
         .app-container { width: 100vw; height: 100dvh; display: flex; flex-direction: column; position: relative; overflow: hidden; background-color: #f8fafc; }
@@ -14,7 +14,7 @@
         .glow-1 { top: -50px; left: -50px; width: 250px; height: 250px; background: #bfdbfe; opacity: 0.4; }
         .glow-2 { bottom: 50px; right: -50px; width: 250px; height: 250px; background: #ddd6fe; opacity: 0.4; }
 
-        /* Header 极度紧凑 */
+        /* Header 紧凑 */
         .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; z-index: 10; flex-shrink: 0; }
         .logo-row { display: flex; align-items: center; gap: 8px; }
         .logo-icon { width: 32px; height: 32px; background: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
@@ -29,13 +29,14 @@
         .page-view { display: none; padding: 10px 20px 30px 20px; height: 100%; }
         .page-view.active { display: flex; flex-direction: column; }
 
-        /* 兑换面板 紧凑化 */
+        /* 兑换面板 */
         .panel { background: #ffffff; border-radius: 24px; padding: 20px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06); margin-top: 10px; border: 1px solid #f1f5f9;}
         .panel-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 16px; text-align: center; }
         .input-box { background: #f8fafc; border-radius: 16px; padding: 16px; border: 1px solid #e2e8f0; margin-bottom: 4px; }
         .input-row { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 600; }
         .input-field { background: transparent; font-size: 28px; font-weight: 800; color: #1e293b; border: none; outline: none; width: 100%; }
         
+        /* 代币药丸 */
         .token-pill { display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 6px 12px; border-radius: 99px; border: 1px solid #e2e8f0; font-weight: 700; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);}
         .token-icon { width: 22px; height: 22px; object-fit: contain; }
 
@@ -49,7 +50,7 @@
         .action-btn { width: 100%; padding: 16px; border-radius: 16px; font-size: 16px; font-weight: 800; background: #3b82f6; color: #ffffff; border: none; cursor: pointer; margin-top: 20px; box-shadow: 0 8px 20px -5px rgba(59,130,246,0.4); }
         .msg-text { margin-top: 12px; text-align: center; font-size: 13px; color: #ef4444; background: #fef2f2; padding: 8px; border-radius: 8px; display: none; font-weight: 600;}
 
-        /* 资产面板紧凑化 */
+        /* 资产面板 */
         .balance-card { background: #ffffff; border-radius: 24px; padding: 20px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 16px; margin-top: 10px; border: 1px solid #f1f5f9;}
         .balance-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;}
         .balance-item:last-child { border-bottom: none; padding-bottom: 0;}
@@ -59,19 +60,19 @@
         .balance-name { font-size: 14px; font-weight: 700; color: #1e293b;}
         .balance-val { font-size: 18px; font-weight: 800; color: #1e293b; }
 
-        /* 规则面板紧凑化 */
+        /* 规则面板 */
         .rules-content { padding-top: 10px; color: #1e293b; padding-bottom: 40px;}
         .rules-section { margin-bottom: 16px; background: #ffffff; padding: 20px; border-radius: 20px; border: 1px solid #f1f5f9;}
         .rules-title { font-size: 15px; font-weight: 800; margin-bottom: 10px; }
         .rules-text { font-size: 13px; color: #475569; line-height: 1.6; }
 
-        /* 底部导航 紧凑化 */
+        /* 底部导航 紧凑 */
         .tab-bar { display: flex; justify-content: space-around; align-items: center; background: #ffffff; border-top: 1px solid #f1f5f9; padding: 10px 0 20px 0; z-index: 20; flex-shrink: 0;}
         .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #94a3b8; font-size: 11px; font-weight: 600; cursor: pointer;}
         .tab-item.active { color: #3b82f6; }
         .tab-icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;}
 
-        /* 钱包选择弹窗（全量图标 + 紧凑） */
+        /* 钱包选择弹窗 */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: flex-end; z-index: 999; padding: 16px; }
         .modal-content { background: #ffffff; border-radius: 20px; width: 100%; max-width: 340px; padding: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); margin-bottom: 10px; animation: slideUp 0.2s ease-out; }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0;} to { transform: translateY(0); opacity: 1;} }
@@ -97,14 +98,14 @@
 
         <div class="header">
             <div class="logo-row">
-                <!-- 纯几何 UFO（无渐变，极简线条） -->
+                <!-- 纯几何 UFO：蓝色正圆 + 深蓝半椭圆 -->
                 <div class="logo-icon">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="50" cy="40" r="15" fill="#3b82f6" opacity="0.8"/>
-                        <ellipse cx="50" cy="55" rx="40" ry="12" fill="#1e293b" />
-                        <circle cx="30" cy="55" r="3" fill="#fff" />
-                        <circle cx="50" cy="57" r="3" fill="#fff" />
-                        <circle cx="70" cy="55" r="3" fill="#fff" />
+                        <circle cx="50" cy="35" r="18" fill="#60a5fa" opacity="0.9"/>
+                        <path d="M 10 60 Q 50 90 90 60 Q 50 50 10 60 Z" fill="#1e3a8a"/>
+                        <circle cx="35" cy="62" r="3" fill="#fff" />
+                        <circle cx="50" cy="64" r="3" fill="#fff" />
+                        <circle cx="65" cy="62" r="3" fill="#fff" />
                     </svg>
                 </div>
                 <div class="title">UFO<span class="title-blue">生态</span></div>
@@ -125,22 +126,26 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                             <input type="number" id="inputAmount" class="input-field" placeholder="0.0" oninput="calculateOutput()">
                             <div id="pillPay" class="token-pill">
-                                <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/825.png" class="token-icon"><span>USDT</span>
+                                <!-- 稳定 USDT 图标 -->
+                                <img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png" class="token-icon" onerror="this.src='https://cryptologos.cc/logos/tether-usdt-logo.png'">
+                                <span>USDT</span>
                             </div>
                         </div>
                     </div>
+                    
                     <div class="switch-container">
                         <button class="switch-btn" onclick="toggleMode()">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 10l5-5 5 5"/><path d="M7 14l5 5 5-5"/></svg>
                         </button>
                     </div>
+
                     <div class="input-box" style="margin-top: 4px;">
                         <div class="input-row"><span>您收到</span></div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                             <div class="input-field" style="color: #94a3b8;" id="outputAmount">0.0</div>
                             <div id="pillReceive" class="token-pill">
-                                <!-- 小几何 UFO -->
-                                <svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="40" r="15" fill="#3b82f6" opacity="0.8"/><ellipse cx="50" cy="55" rx="40" ry="12" fill="#1e293b" /><circle cx="30" cy="55" r="3" fill="#fff" /><circle cx="50" cy="57" r="3" fill="#fff" /><circle cx="70" cy="55" r="3" fill="#fff" /></svg>
+                                <!-- 小尺寸几何 UFO -->
+                                <svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="35" r="18" fill="#60a5fa" opacity="0.9"/><path d="M 10 60 Q 50 90 90 60 Q 50 50 10 60 Z" fill="#1e3a8a"/><circle cx="35" cy="62" r="3" fill="#fff" /><circle cx="50" cy="64" r="3" fill="#fff" /><circle cx="65" cy="62" r="3" fill="#fff" /></svg>
                                 <span>UFO</span>
                             </div>
                         </div>
@@ -157,14 +162,14 @@
                 <div class="balance-card">
                     <div class="balance-item">
                         <div class="balance-left">
-                            <div class="balance-logo"><img src="https://s2.coinmarketcap.com/static/img/coins/64x64/825.png"></div>
+                            <div class="balance-logo"><img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png" onerror="this.src='https://cryptologos.cc/logos/tether-usdt-logo.png'"></div>
                             <div class="balance-name">USDT</div>
                         </div>
                         <div class="balance-val"><span id="usdtBalance">0.0</span></div>
                     </div>
                     <div class="balance-item">
                         <div class="balance-left">
-                            <div class="balance-logo"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="40" r="15" fill="#3b82f6" opacity="0.8"/><ellipse cx="50" cy="55" rx="40" ry="12" fill="#1e293b" /><circle cx="30" cy="55" r="3" fill="#fff" /><circle cx="50" cy="57" r="3" fill="#fff" /><circle cx="70" cy="55" r="3" fill="#fff" /></svg></div>
+                            <div class="balance-logo"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="35" r="18" fill="#60a5fa" opacity="0.9"/><path d="M 10 60 Q 50 90 90 60 Q 50 50 10 60 Z" fill="#1e3a8a"/><circle cx="35" cy="62" r="3" fill="#fff" /><circle cx="50" cy="64" r="3" fill="#fff" /><circle cx="65" cy="62" r="3" fill="#fff" /></svg></div>
                             <div class="balance-name">UFO</div>
                         </div>
                         <div class="balance-val"><span id="ufoBalance">0.0</span></div>
@@ -187,7 +192,6 @@
             </div>
         </div>
 
-        <!-- 底部导航栏（全几何线条图标） -->
         <div class="tab-bar">
             <div id="tab-swap" class="tab-item active" onclick="switchTab('swap')">
                 <svg class="tab-icon" viewBox="0 0 24 24"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
@@ -204,42 +208,42 @@
         </div>
     </div>
 
-    <!-- 手机端全量钱包选择弹窗 -->
+    <!-- 手机端钱包选择弹窗（全量极稳图标） -->
     <div id="walletModal" class="modal-overlay" onclick="closeModal(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 800; color: #1e293b;">选择钱包</h3>
             <div id="walletList" style="max-height: 50vh; overflow-y: auto; padding-right: 4px;">
-                <!-- 图标全部换为 CoinMarketCap 高清无损，尺寸 32px -->
+                <!-- 图标全部换为极其稳定的开源图库或官方直链，并加入防裂图错误处理 -->
                 <button class="wallet-item" onclick="openDeepLink('metamask')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/11419.png" class="wallet-icon">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">MetaMask</div><div class="wallet-desc">全球最广泛使用</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('trust')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/3717.png" class="wallet-icon">
+                    <img src="https://trustwallet.com/assets/images/media/assets/TWT.svg" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">Trust Wallet</div><div class="wallet-desc">官方多链钱包</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('phantom')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/21795.png" class="wallet-icon">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Phantom_wallet_logo.svg/512px-Phantom_wallet_logo.svg.png" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">Phantom</div><div class="wallet-desc">多链极简钱包</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('okx')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/24476.png" class="wallet-icon">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/OKX_Logo.svg/512px-OKX_Logo.svg.png" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">OKX Web3</div><div class="wallet-desc">欧易钱包</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('binance')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/1839.png" class="wallet-icon">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/e/e8/Binance_Logo.svg" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">Binance Wallet</div><div class="wallet-desc">币安官方 Web3 钱包</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('tokenpocket')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/4380.png" class="wallet-icon">
+                    <img src="https://www.tokenpocket.pro/favicon.ico" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">TokenPocket</div><div class="wallet-desc">华人圈最常用</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('safepal')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png" class="wallet-icon">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">SafePal</div><div class="wallet-desc">币安投资</div></div>
                 </button>
                 <button class="wallet-item" onclick="openDeepLink('rainbow')">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png" class="wallet-icon">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png" class="wallet-icon" onerror="this.src='https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1.0.0/128/color/generic.png'">
                     <div><div class="wallet-name">Rainbow</div><div class="wallet-desc">以太坊绚丽钱包</div></div>
                 </button>
             </div>
@@ -247,7 +251,7 @@
         </div>
     </div>
 
-    <!-- Ethers (更换为更稳定的 jsdelivr) -->
+    <!-- Ethers -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 
     <!-- 核心逻辑 -->
@@ -276,8 +280,8 @@
         window.toggleMode = () => {
             isBuyingUFO = !isBuyingUFO;
             // 极简几何 SVG 代码
-            const ufoSvg = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="40" r="15" fill="#3b82f6" opacity="0.8"/><ellipse cx="50" cy="55" rx="40" ry="12" fill="#1e293b" /><circle cx="30" cy="55" r="3" fill="#fff" /><circle cx="50" cy="57" r="3" fill="#fff" /><circle cx="70" cy="55" r="3" fill="#fff" /></svg>`;
-            const usdtSvg = `<img src="https://s2.coinmarketcap.com/static/img/coins/64x64/825.png" class="token-icon">`;
+            const ufoSvg = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="35" r="18" fill="#60a5fa" opacity="0.9"/><path d="M 10 60 Q 50 90 90 60 Q 50 50 10 60 Z" fill="#1e3a8a"/><circle cx="35" cy="62" r="3" fill="#fff" /><circle cx="50" cy="64" r="3" fill="#fff" /><circle cx="65" cy="62" r="3" fill="#fff" /></svg>`;
+            const usdtSvg = `<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png" class="token-icon" onerror="this.src='https://cryptologos.cc/logos/tether-usdt-logo.png'">`;
 
             if (isBuyingUFO) {
                 document.getElementById('pillPay').innerHTML = `${usdtSvg}<span>USDT</span>`;
