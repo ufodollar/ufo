@@ -8,29 +8,22 @@
         /* 基础重置 */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        /* 默认背景设为深色（电脑端看两边好看） */
+        /* 全局背景（电脑端深色，手机端由容器覆盖） */
         html, body { 
-            width: 100%; 
-            height: 100%; 
-            overflow: hidden; 
+            width: 100%; height: 100%; overflow: hidden; 
             background-color: #0f172a; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: flex; justify-content: center; align-items: center;
         }
 
-        /* 核心容器：高度永远占满 100dvh，宽度最大 420px */
+        /* 核心容器：锁定 9:16 比例 */
         .app-container {
             width: 100%;
-            max-width: 420px;
-            height: 100vh;
-            height: 100dvh; /* 适配移动端地址栏 */
-            background-color: #f4f6fb; 
+            height: 100dvh;
+            background-color: #f4f6fb;
             display: flex;
             flex-direction: column;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 0 30px rgba(0,0,0,0.3); /* 电脑端两边有一点点阴影区分 */
         }
 
         /* 浅色毛玻璃渐变光晕 */
@@ -38,15 +31,14 @@
         .glow-1 { top: -10%; left: -10%; width: 80vw; height: 80vw; max-width: 400px; max-height: 400px; background: #93c5fd; opacity: 0.4; }
         .glow-2 { top: 30%; right: -10%; width: 80vw; height: 80vw; max-width: 400px; max-height: 400px; background: #d8b4fe; opacity: 0.4; }
 
-        /* 页面内容区：flex 自动分配空间 */
+        /* 页面内容区 */
         .content-wrapper {
             flex: 1;
-            padding: 1rem 1.25rem; 
+            padding: 1.25rem 1rem;
             display: flex;
             flex-direction: column;
             z-index: 10;
             justify-content: space-between; 
-            overflow-y: auto;
         }
 
         /* 顶部 Header */
@@ -69,7 +61,7 @@
         .rules-btn:active { background: rgba(59,130,246,0.2); }
 
         /* 主交互面板 */
-        .panel { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); border: 1px solid #fff; position: relative; margin-bottom: 0.5rem;}
+        .panel { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); border: 1px solid #fff; position: relative; margin-bottom: 0.5rem; }
         
         .panel-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; text-align: center; }
 
@@ -137,26 +129,10 @@
         .modal-title { font-size: 1.1rem; font-weight: 800; color: #1e293b; }
         .close-btn { background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b; padding: 0.2rem; line-height: 1; }
 
-        .modal-scroll-area { 
-            padding: 1.25rem; 
-            overflow-y: auto; 
-            flex: 1; 
-        }
+        .modal-scroll-area { padding: 1.25rem; overflow-y: auto; flex: 1; }
         .modal-scroll-area::-webkit-scrollbar { display: none; }
 
-        .modal-footer { 
-            padding: 1rem 1.25rem; 
-            border-top: 1px solid #f1f5f9; 
-            flex-shrink: 0; 
-        }
-
-        /* 钱包列表 */
-        .wallet-list { display: flex; flex-direction: column; gap: 0.4rem; }
-        .wallet-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem; border-radius: 0.8rem; cursor: pointer; background: #f8fafc; border: 1px solid transparent; transition: 0.2s; text-align: left; width: 100%; }
-        .wallet-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
-        .wallet-icon { width: 2.2rem; height: 2.2rem; border-radius: 50%; background: #fff; padding: 0.1rem; object-fit: contain; border: 1px solid #f1f5f9; }
-        .wallet-name { font-weight: 700; font-size: 0.9rem; color: #1e293b; }
-        .wallet-desc { font-size: 0.7rem; color: #94a3b8; margin-top: 2px; }
+        .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid #f1f5f9; flex-shrink: 0; }
 
         /* 规则内容 */
         .rules-section { margin-bottom: 1rem; }
@@ -167,6 +143,20 @@
         
         .modal-btn { width: 100%; background: #3b82f6; color: #fff; font-weight: 700; padding: 0.9rem; border-radius: 0.8rem; border: none; cursor: pointer; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(59,130,246,0.3); transition: 0.2s; }
         .modal-btn:active { transform: scale(0.98); }
+
+        /* ========================================= */
+        /* 电脑端自适应：严格 9:16 比例模拟器 */
+        /* ========================================= */
+        @media (min-width: 500px) {
+            .app-container {
+                width: auto;
+                height: 90vh; /* 占据屏幕90%高度 */
+                aspect-ratio: 9 / 16; /* 强制 9:16 */
+                border-radius: 32px; 
+                box-shadow: 0 0 60px rgba(0,0,0,0.5), inset 0 0 0 6px #1e293b;
+                border: 1px solid #334155;
+            }
+        }
     </style>
 </head>
 <body>
@@ -185,7 +175,7 @@
                     <span class="dot"></span>
                     <span id="walletAddress">0x...</span>
                 </div>
-                <button id="connectBtn" class="connect-btn" onclick="openWalletModal()">连接钱包</button>
+                <button id="connectBtn" class="connect-btn" onclick="openReown()">连接钱包</button>
             </div>
 
             <div class="balance-card">
@@ -265,18 +255,7 @@
         </div>
     </div>
 
-    <div id="walletModal" class="modal-overlay" onclick="closeWalletModalOnBg(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <div class="modal-title">连接钱包</div>
-                <button class="close-btn" onclick="closeWalletModal()">✕</button>
-            </div>
-            <div class="modal-scroll-area">
-                <div class="wallet-list" id="walletList"></div>
-            </div>
-        </div>
-    </div>
-
+    <!-- 规则弹窗 -->
     <div id="rulesModal" class="modal-overlay" onclick="toggleRules(false)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -322,9 +301,15 @@
         </div>
     </div>
 
+    <!-- 引入 Ethers -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 
-    <script>
+    <!-- 引入 Reown AppKit (ESM) -->
+    <script type="module">
+        import { createAppKit } from 'https://esm.sh/@reown/appkit@1.6.5';
+        import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.6.5';
+        import { bsc } from 'https://esm.sh/@reown/appkit@1.6.5/networks';
+
         // ================= 配置区 =================
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
@@ -342,15 +327,21 @@
             "function getExchangeRate() view returns (uint256)"
         ];
 
-        // 更换为绝对稳定的 CoinMarketCap 图标，国内秒开，防止裂图
-        const WALLETS = [
-            { id: "metamask", name: "MetaMask", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/11419.png", desc: "全球最广泛使用的钱包", url: "https://metamask.app.link/dapp/" },
-            { id: "trust", name: "Trust Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/3717.png", desc: "全球领先的移动端钱包", url: "https://link.trustwallet.com/open_url?coin_id=60&url=" },
-            { id: "phantom", name: "Phantom", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/21795.png", desc: "多链极简钱包", url: "https://phantom.app/ul/browse/" },
-            { id: "binance", name: "Binance Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1839.png", desc: "币安官方 Web3 钱包", url: "https://app.binance.com/en/download" },
-            { id: "safepal", name: "SafePal", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png", desc: "币安投资的硬件钱包", url: "https://www.safepal.com/" },
-            { id: "rainbow", name: "Rainbow", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", desc: "以太坊最绚丽钱包", url: "https://rnbwapp.com/" }
-        ];
+        // 初始化 Reown AppKit
+        const PROJECT_ID = 'd6431212399f6c487b364387859983ea'; 
+
+        const modal = createAppKit({
+            adapters: [new EthersAdapter()],
+            networks: [bsc],
+            metadata: {
+                name: 'UFO 兑换',
+                description: 'UFO 去中心化稳定资产兑换',
+                url: window.location.origin,
+                icons: ['https://assets.coingecko.com/coins/images/325/large/Tether.png']
+            },
+            projectId: PROJECT_ID,
+            features: { analytics: true }
+        });
 
         let currentAddress = null;
         let currentSigner = null;
@@ -361,83 +352,42 @@
         
         const FEE_RATE = 0.005;
 
-        // ================= 自动连接 =================
-        async function autoConnect() {
-            if (window.ethereum) {
-                try {
-                    const provider = new ethers.BrowserProvider(window.ethereum);
-                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                    if (accounts && accounts.length > 0) {
-                        await handleConnection(provider, accounts[0]);
-                    } else {
-                        const reqAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                        if (reqAccounts && reqAccounts.length > 0) {
-                            await handleConnection(provider, reqAccounts[0]);
-                        }
-                    }
-                } catch (err) { console.log("自动连接未就绪:", err); }
-            }
-        }
-
-        const handleConnection = async (provider, address) => {
-            currentSigner = await provider.getSigner();
-            currentAddress = address;
-
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x38' }],
-                });
-            } catch (switchError) {}
-
-            document.getElementById('connectBtn').style.display = 'none';
-            document.getElementById('walletInfo').style.display = 'flex';
-            document.getElementById('walletAddress').innerText = `${address.slice(0,4)}...${address.slice(-4)}`;
-            document.getElementById('actionBtn').innerText = isBuyingUFO ? "立即兑换" : "立即赎回";
-            
-            fetchBalances();
+        // 挂载到全局，供按钮调用
+        window.openReown = () => {
+            modal.open();
         };
 
-        // ================= 弹窗控制 =================
-        window.openWalletModal = () => {
-            if (window.ethereum) { autoConnect(); return; }
-            const listEl = document.getElementById('walletList');
-            listEl.innerHTML = '';
-            WALLETS.forEach(w => {
-                const btn = document.createElement('button');
-                btn.className = 'wallet-item';
-                btn.onclick = () => handleWalletClick(w);
-                btn.innerHTML = `
-                    <img src="${w.icon}" class="wallet-icon" alt="${w.name}">
-                    <div>
-                        <div class="wallet-name">${w.name}</div>
-                        <div class="wallet-desc">${w.desc}</div>
-                    </div>
-                `;
-                listEl.appendChild(btn);
-            });
-            document.getElementById('walletModal').style.display = 'flex';
-        };
-
-        window.closeWalletModal = () => { document.getElementById('walletModal').style.display = 'none'; };
-        window.closeWalletModalOnBg = (e) => { if(e.target.id === 'walletModal') closeWalletModal(); };
-        window.toggleRules = (show) => { document.getElementById('rulesModal').style.display = show ? 'flex' : 'none'; };
-
-        const handleWalletClick = (wallet) => {
-            closeWalletModal();
-            const currentUrl = window.location.href;
-            if (wallet.id === "metamask" || wallet.id === "trust" || wallet.id === "phantom") {
-                window.location.href = wallet.url + encodeURIComponent(currentUrl);
+        // ================= 监听 Reown 状态 =================
+        modal.subscribeAccount((account) => {
+            if (account.isConnected) {
+                currentAddress = account.address;
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('walletInfo').style.display = 'flex';
+                document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
+                document.getElementById('actionBtn').innerText = isBuyingUFO ? "立即兑换" : "立即赎回";
+                fetchBalances();
             } else {
-                navigator.clipboard.writeText(currentUrl).then(() => {
-                    alert(`网址已复制！请打开 ${wallet.name} App，在 DApp 浏览器中粘贴访问即可连接。`);
-                }).catch(() => {
-                    alert(`请手动复制当前网址，打开 ${wallet.name} App 进行访问。`);
-                });
+                currentAddress = null;
+                document.getElementById('connectBtn').style.display = 'block';
+                document.getElementById('walletInfo').style.display = 'none';
+                document.getElementById('actionBtn').innerText = "连接钱包";
+                document.getElementById('usdtBalance').innerText = '0.0';
+                document.getElementById('ufoBalance').innerText = '0.0';
             }
-        };
+        });
+
+        modal.subscribeProvider(async (provider) => {
+            if (provider && provider.walletProvider) {
+                const ethersProvider = new ethers.BrowserProvider(provider.walletProvider);
+                currentSigner = await ethersProvider.getSigner();
+            }
+        });
 
         // ================= 交互逻辑 =================
+        window.toggleRules = (show) => { 
+            document.getElementById('rulesModal').style.display = show ? 'flex' : 'none'; 
+        };
+
         window.toggleMode = () => {
             isBuyingUFO = !isBuyingUFO;
             
@@ -515,7 +465,7 @@
         // ================= 交易逻辑 =================
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
-                openWalletModal();
+                window.openReown();
                 return;
             }
             const inputAmount = document.getElementById('inputAmount').value;
@@ -576,11 +526,8 @@
             return num.toFixed(4).replace(/\.?0+$/, '');
         };
 
-        // 初始化
-        window.addEventListener('load', () => {
-            fetchNav();
-            autoConnect();
-        });
+        // 页面加载完成后拉取汇率
+        window.addEventListener('load', fetchNav);
     </script>
 </body>
 </html>
