@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>UFO 基金 - 液态玻璃版</title>
+    <style>
+        /* 基础重置 */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        /* 液态深色背景与光斑 */
+        body {
+            background-color: #05050f;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(20, 40, 120, 0.6), transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(120, 20, 100, 0.5), transparent 50%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 1rem;
+            overflow-x: hidden;
+        }
+
+        .blob { position: fixed; border-radius: 50%; filter: blur(100px); z-index: -1; }
+        .blob-1 { top: -5%; left: -10%; width: 400px; height: 400px; background: #00d2ff; opacity: 0.3; }
+        .blob-2 { bottom: 10%; right: -10%; width: 350px; height: 350px; background: #ff00cc; opacity: 0.25; }
+        .blob-3 { top: 40%; left: 20%; width: 250px; height: 250px; background: #9d4edd; opacity: 0.2; }
+
+        .app-container { width: 100%; max-width: 420px; z-index: 10; }
+
+        /* 顶部 Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        .logo-row { display: flex; align-items: center; gap: 0.75rem; }
+        .logo-icon { width: 2.5rem; height: 2.5rem; background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05)); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .title { font-size: 1.5rem; font-weight: 700; }
+        .title-blue { background: linear-gradient(to right, #00f2fe, #4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .connect-btn { background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.1)); color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.3); padding: 0.6rem 1.2rem; border-radius: 12px; font-weight: 600; cursor: pointer; backdrop-filter: blur(10px); font-size: 0.9rem; transition: 0.2s; }
+        .connect-btn:active { transform: scale(0.95); }
+
+        /* 玻璃卡片基础样式 */
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 24px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            margin-bottom: 1rem;
+        }
+
+        /* 余额卡片 */
+        .balance-row { display: flex; justify-content: space-between; align-items: center; }
+        .balance-label { color: rgba(255,255,255,0.6); font-size: 0.75rem; margin-bottom: 0.2rem; }
+        .balance-val { color: #fff; font-weight: 700; font-size: 1.4rem; }
+        .balance-unit { font-size: 0.75rem; color: rgba(255,255,255,0.5); font-weight: normal; }
+        .rules-btn { background: rgba(255,255,255,0.1); color: #fff; font-size: 0.75rem; padding: 0.4rem 1rem; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; }
+
+        /* Tab 切换 */
+        .tab-container { display: flex; background: rgba(0,0,0,0.3); border-radius: 16px; padding: 0.3rem; margin-bottom: 1.5rem; border: 1px solid rgba(255,255,255,0.05); }
+        .tab { flex: 1; padding: 0.7rem; font-size: 0.9rem; font-weight: 600; border-radius: 12px; border: none; cursor: pointer; text-align: center; transition: 0.3s; }
+        .tab.active { background: rgba(255,255,255,0.1); color: #fff; }
+        .tab.inactive { background: transparent; color: rgba(255,255,255,0.4); }
+
+        /* 输入框区域 */
+        .input-box { background: rgba(0, 0, 0, 0.2); border-radius: 16px; padding: 1rem 1.2rem; border: 1px solid rgba(255, 255, 255, 0.05); position: relative; margin-bottom: 0.5rem; }
+        .input-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 0.5rem; }
+        .input-field { background: transparent; font-size: 2.2rem; font-weight: 700; color: #fff; border: none; outline: none; width: 100%; font-family: monospace; }
+        .token-pill { display: flex; align-items: center; gap: 0.4rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); font-weight: 600; font-size: 0.9rem; }
+
+        /* 中间切换按钮 */
+        .switch-container { display: flex; justify-content: center; }
+        .switch-btn { background: linear-gradient(135deg, #1e1e2f, #0a0a15); border: 1px solid rgba(255,255,255,0.15); padding: 0.6rem; border-radius: 50%; color: #00f2fe; cursor: pointer; margin: -14px auto; position: relative; z-index: 10; display: flex; justify-content: center; align-items: center; }
+
+        /* 提交按钮 */
+        .action-btn { width: 100%; padding: 1.1rem; border-radius: 16px; font-size: 1.1rem; font-weight: 700; background: linear-gradient(135deg, #00f2fe, #4facfe); color: #000; border: none; cursor: pointer; margin-top: 1.5rem; box-shadow: 0 10px 25px rgba(0, 242, 254, 0.4); transition: 0.2s; }
+        .action-btn:active { transform: scale(0.98); }
+
+        /* 底部 APY */
+        .bottom-card { background: rgba(255,255,255,0.03); backdrop-filter: blur(10px); border-radius: 16px; padding: 1rem 1.2rem; margin-top: 1rem; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .apy-text { color: #00f2fe; font-weight: 700; }
+
+        /* 弹窗 (Modal) */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); display: none; justify-content: center; align-items: center; z-index: 50; padding: 1rem; }
+        .modal-content { background: linear-gradient(180deg, rgba(30,30,50,0.95), rgba(10,10,20,0.95)); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; width: 100%; max-width: 380px; padding: 0; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .modal-body { padding: 0.75rem; max-height: 60vh; overflow-y: auto; }
+        .close-btn { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; }
+
+        /* 钱包列表项 */
+        .wallet-item { width: 100%; display: flex; align-items: center; gap: 1rem; padding: 0.8rem; border-radius: 16px; cursor: pointer; transition: 0.2s; background: transparent; border: none; text-align: left; }
+        .wallet-item:hover { background: rgba(255,255,255,0.08); }
+        .wallet-icon { width: 2.5rem; height: 2.5rem; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; justify-content: center; align-items: center; padding: 0.4rem; }
+        .wallet-icon img { width: 100%; height: 100%; object-fit: contain; }
+        .wallet-name { font-weight: 600; color: #fff; font-size: 0.9rem; }
+        .wallet-desc { font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 2px; }
+    </style>
+</head>
+<body>
+
+    <!-- 背景光斑 -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <div class="app-container">
+        <!-- 头部 -->
+        <div class="header">
+            <div class="logo-row">
+                <div class="logo-icon">🛸</div>
+                <div class="title">UFO<span class="title-blue">基金</span></div>
+            </div>
+            <button class="connect-btn" onclick="openModal()">连接钱包</button>
+        </div>
+
+        <!-- 余额卡片 -->
+        <div class="glass-card">
+            <div class="balance-row">
+                <div>
+                    <div class="balance-label">USDT余额</div>
+                    <div class="balance-val">0.00 <span class="balance-unit">美元</span></div>
+                </div>
+                <div>
+                    <div class="balance-label">UFO 平衡</div>
+                    <div class="balance-val">0.00 <span class="balance-unit">美元</span></div>
+                </div>
+                <button class="rules-btn">规则</button>
+            </div>
+        </div>
+
+        <!-- 交互面板 -->
+        <div class="glass-card">
+            <div class="tab-container">
+                <button class="tab active">订金</button>
+                <button class="tab inactive">赎回</button>
+            </div>
+
+            <div class="input-box">
+                <div class="input-row">
+                    <span>你支付</span>
+                    <span>余额: 0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                    <input type="number" class="input-field" placeholder="0.0">
+                    <div class="token-pill">USDT</div>
+                </div>
+            </div>
+
+            <div class="switch-container">
+                <button class="switch-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+                </button>
+            </div>
+
+            <div class="input-box" style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+                <div class="input-row">
+                    <span>您收到的金额</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                    <div class="input-field" style="color: rgba(255,255,255,0.4);">0.0</div>
+                    <div class="token-pill">UFO</div>
+                </div>
+            </div>
+
+            <button class="action-btn">确认操作</button>
+        </div>
+
+        <!-- 底部 APY -->
+        <div class="bottom-card">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <span style="font-size: 1.2rem;">⚡</span>
+                <span style="color: rgba(255,255,255,0.7); font-weight: 500; font-size: 0.9rem;">当前净资产收益 (Aave)</span>
+            </div>
+            <div class="apy-text">APY 3.05%</div>
+        </div>
+    </div>
+
+    <!-- 钱包连接弹窗 -->
+    <div id="walletModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin: 0; font-size: 1.1rem;">连接钱包</h3>
+                <button class="close-btn" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body" id="walletList">
+                <!-- JS 会在这里自动插入钱包列表 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 指定的 7 个钱包数据
+        const wallets = [
+            { name: "MetaMask", icon: "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", desc: "全球最广泛使用的钱包" },
+            { name: "Trust Wallet", icon: "https://trustwallet.com/assets/images/media/assets/TWT.svg", desc: "全球领先的移动端钱包" },
+            { name: "Phantom", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Phantom_wallet_logo.svg/512px-Phantom_wallet_logo.svg.png", desc: "多链极简钱包" },
+            { name: "Binance Wallet", icon: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Binance_Logo.svg", desc: "币安官方 Web3 钱包" },
+            { name: "MyWallet", icon: "https://www.myetherwallet.com/favicon.ico", desc: "经典以太坊轻钱包" },
+            { name: "SafePal", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5864.png", desc: "硬件/软件钱包" },
+            { name: "Rainbow", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20755.png", desc: "以太坊上最绚丽的钱包" }
+        ];
+
+        // 动态渲染钱包列表
+        const walletListContainer = document.getElementById('walletList');
+        wallets.forEach(w => {
+            const btn = document.createElement('button');
+            btn.className = 'wallet-item';
+            btn.innerHTML = `
+                <div class="wallet-icon"><img src="${w.icon}" alt="${w.name}"></div>
+                <div>
+                    <div class="wallet-name">${w.name}</div>
+                    <div class="wallet-desc">${w.desc}</div>
+                </div>
+            `;
+            // 点击事件，这里先做个假的关闭动作，后续可接 ethers.js
+            btn.onclick = () => {
+                alert(`你点击了 ${w.name}。\n（真实环境这里会唤起钱包授权）`);
+                closeModal();
+            };
+            walletListContainer.appendChild(btn);
+        });
+
+        // 弹窗控制
+        function openModal() {
+            document.getElementById('walletModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('walletModal').style.display = 'none';
+        }
+
+        // 点击弹窗外部关闭
+        document.getElementById('walletModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
