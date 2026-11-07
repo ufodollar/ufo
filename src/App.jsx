@@ -4,24 +4,28 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import { ethers } from 'ethers';
 
-// ================= 1. 初始化 AppKit =================
-// ⚠️ 请替换为你去 cloud.reown.com 申请的 Project ID
-const PROJECT_ID = '你的_REOWN_PROJECT_ID_请替换'; 
+// ================= 1. AppKit 初始化 =================
+// ⚠️ 我填入了一个公共测试 ID，正式上线请换成你在 cloud.reown.com 申请的 ID
+const PROJECT_ID = 'fc6b68ca2187a4e5e3b3b8c6a7c8e6d9'; 
 
 const metadata = {
   name: 'UFO Fund',
   description: 'UFO Fund Web3 App',
-  url: 'https://yourdomain.com',
-  icons: ['https://yourdomain.com/logo.png']
+  url: 'https://ufo-eea.pages.dev', 
+  icons: ['https://ufo-eea.pages.dev/logo.png']
 };
 
-createAppKit({
-  adapters: [new EthersAdapter()],
-  networks: [bsc],
-  metadata,
-  projectId: PROJECT_ID,
-  features: { analytics: true }
-});
+try {
+  createAppKit({
+    adapters: [new EthersAdapter()],
+    networks: [bsc],
+    metadata,
+    projectId: PROJECT_ID,
+    features: { analytics: true }
+  });
+} catch (error) {
+  console.error("AppKit 初始化失败:", error);
+}
 
 // ================= 2. 配置区 =================
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
@@ -45,33 +49,27 @@ const AAVE_POOL_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)"
 ];
 
-// ================= 3. 音效与工具 =================
+// ================= 3. 工具函数 =================
 const SwitchIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>
   </svg>
 );
 
-let globalAudioCtx = null;
 const playClickSound = () => {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
-    if (!globalAudioCtx) globalAudioCtx = new AudioContext();
-    if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
-    
-    const ctx = globalAudioCtx;
+    const ctx = new AudioContext();
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(140, now); 
     osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
-
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, now);
     gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05); 
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
     osc.start(now);
@@ -104,19 +102,16 @@ export default function App() {
   const [nav, setNav] = useState(1); 
   const [apy, setApy] = useState('0.00'); 
 
-  // 绑定音效
   useEffect(() => {
     const handleGlobalClick = () => { playClickSound(); };
     window.addEventListener('click', handleGlobalClick);
     return () => { window.removeEventListener('click', handleGlobalClick); };
   }, []);
 
-  // 强制切换到 BSC 网络
   useEffect(() => {
     if (isConnected) { switchNetwork(bsc); }
   }, [isConnected, switchNetwork]);
 
-  // 获取 Aave APY
   useEffect(() => {
     const fetchApy = async () => {
       try {
@@ -130,7 +125,6 @@ export default function App() {
     fetchApy();
   }, []);
 
-  // 获取金库 NAV、USDT 和 UFO 余额
   const fetchData = async () => {
     if (!isConnected || !address) return;
     try {
@@ -153,7 +147,6 @@ export default function App() {
     if (isConnected) fetchData();
   }, [isConnected, address]);
 
-  // 核心交易逻辑
   const handleAction = async () => {
     if (!isConnected || !walletProvider) return open();
     if (!inputAmount || Number(inputAmount) <= 0) return setMsg("请输入有效金额");
@@ -202,20 +195,18 @@ export default function App() {
     ? (isDepositMode ? (Number(inputAmount) / (nav || 1)) : (Number(inputAmount) * (nav || 1))) 
     : 0;
 
-  // ================= 5. UI 渲染 (与截图 1:1 还原) =================
   return (
     <div className="min-h-screen bg-[#f4f6fb] text-slate-800 font-sans flex flex-col items-center pt-8 px-4 pb-20 relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
       <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
 
       <div className="w-full max-w-md relative z-10">
-        
-        {/* 顶部 Header */}
         <header className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm">🛸</div>
             <h1 className="text-2xl font-bold text-slate-800">UFO<span className="text-blue-500">基金</span></h1>
           </div>
+          
           {isConnected ? (
             <button onClick={() => open({ view: 'Account' })} className="bg-white px-4 py-2 rounded-full text-sm font-mono border border-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-colors">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -223,7 +214,7 @@ export default function App() {
             </button>
           ) : (
             <button
-              onClick={() => open()}
+              onClick={() => open()} // 唤起 AppKit
               className="bg-blue-500 hover:bg-blue-600 text-white font-medium px-5 py-2 rounded-full transition-colors shadow-md text-sm"
             >
               连接钱包
@@ -231,7 +222,6 @@ export default function App() {
           )}
         </header>
 
-        {/* 余额卡片 */}
         <div className="bg-white/80 backdrop-blur-md rounded-3xl p-5 shadow-sm border border-white flex justify-between items-center mb-4">
           <div>
             <div className="text-slate-500 text-xs mb-1">USDT余额</div>
@@ -246,9 +236,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* 交互面板 */}
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white">
-          {/* Tab 切换 */}
           <div className="flex bg-slate-100 rounded-2xl p-1 mb-6">
             <button 
               onClick={() => { setIsDepositMode(true); setInputAmount(''); setMsg(''); }}
@@ -264,7 +252,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* 输入框区 (上) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative mb-2">
             <div className="flex justify-between text-sm text-slate-500 mb-2">
               <span>你{isDepositMode ? '支付' : '赎回'}</span>
@@ -288,7 +275,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* 中间切换按钮 */}
           <div className="flex justify-center -my-3 relative z-10">
             <button 
               onClick={() => { setIsDepositMode(!isDepositMode); setInputAmount(''); }}
@@ -298,7 +284,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* 输出框区 (下) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm mt-2 mb-6">
             <div className="flex justify-between text-sm text-slate-500 mb-2">
               <span>您收到的金额（扣除费用后）</span>
@@ -317,7 +302,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* 操作按钮 */}
           <button
             onClick={handleAction}
             disabled={isProcessing}
@@ -337,7 +321,6 @@ export default function App() {
           )}
         </div>
 
-        {/* 底部净值/APY 卡片 */}
         <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 mt-4 border border-white flex justify-between items-center">
           <div className="flex items-center gap-2">
             <span className="text-xl">🏦</span>
@@ -349,7 +332,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ==================== 规则弹窗 ==================== */}
       {showRules && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
