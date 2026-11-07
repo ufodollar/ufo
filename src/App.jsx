@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { createRoot } from 'react-dom/client';
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit } from '@reown/appkit/react';
@@ -30,7 +30,6 @@ const ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "functi
 const VAULT_ABI = ["function deposit(uint256 usdtAmount)", "function withdraw(uint256 ufoAmount)", "function getExchangeRate() view returns (uint256)"];
 const FEE_RATE = 0.005;
 
-// UFO 图标组件
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -51,7 +50,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// 🌟 全局音效：低沉的 UFO 呜声
+// 🌟 空心、高频、长音调的 UFO 呜声
 let globalAudioCtx = null;
 const playUfoSound = () => {
   try {
@@ -63,19 +62,23 @@ const playUfoSound = () => {
     const osc = globalAudioCtx.createOscillator();
     const gain = globalAudioCtx.createGain();
     
-    // sine 波平直且低沉
-    osc.type = 'sine'; 
-    // 频率从 150Hz 平滑滑落到 80Hz，模拟飞碟悬停的音效
-    osc.frequency.setValueAtTime(150, globalAudioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(80, globalAudioCtx.currentTime + 0.3); 
+    // 使用三角波，稍微带一点空心感，不像正弦波那么闷
+    osc.type = 'triangle'; 
     
-    gain.gain.setValueAtTime(0.1, globalAudioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 0.3);
+    // 频率设定在 600Hz 左右，缓慢下滑，持续 0.8 秒
+    osc.frequency.setValueAtTime(650, globalAudioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(550, globalAudioCtx.currentTime + 0.8); 
+    
+    // 音量包络：迅速起音，然后慢慢淡出，形成“呜——”的拖尾
+    gain.gain.setValueAtTime(0, globalAudioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.08, globalAudioCtx.currentTime + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 0.8);
     
     osc.connect(gain);
     gain.connect(globalAudioCtx.destination);
+    
     osc.start();
-    osc.stop(globalAudioCtx.currentTime + 0.3);
+    osc.stop(globalAudioCtx.currentTime + 0.8);
   } catch (e) {}
 };
 
@@ -90,13 +93,14 @@ function App() {
   const [outputAmount, setOutputAmount] = useState('0.0');
   const [currentNav, setCurrentNav] = useState(10);
   
+  // 使用精确的字符串存储余额
   const [usdtBal, setUsdtBal] = useState('0.0');
   const [ufoBal, setUfoBal] = useState('0.0');
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
-  // 🌟 全局点击事件绑定音效
+  // 全局点击音效
   useEffect(() => {
     document.addEventListener('click', playUfoSound);
     return () => document.removeEventListener('click', playUfoSound);
@@ -120,8 +124,13 @@ function App() {
       const ufo = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
-      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 6)).toFixed(4));
-      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(4));
+      
+      // 获取精确数字符串，去除多余的小数点后的0
+      const exactUsdt = parseFloat(ethers.formatUnits(uBal, 6)).toString();
+      const exactUfo = parseFloat(ethers.formatUnits(ufoBalData, 18)).toString();
+      
+      setUsdtBal(exactUsdt);
+      setUfoBal(exactUfo);
     } catch (e) {}
   };
 
@@ -187,6 +196,13 @@ function App() {
     }
   };
 
+  // 格式化法币价值（两位小数，千位分割）
+  const formatUsd = (val) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc' }}>
       
@@ -230,7 +246,7 @@ function App() {
                   {isBuyingUFO ? (
                     <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
                   ) : (
-                    <><UfoIcon size={28}/><span>UFO</span></> // 🌟 UFO图标放大
+                    <><UfoIcon size={28}/><span>UFO</span></>
                   )}
                 </div>
               </div>
@@ -238,10 +254,10 @@ function App() {
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '44px', height: '44px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
-                {/* 🌟 纯正的上下箭头 */}
+                {/* 🌟 极简的 ↑↓ 箭头 */}
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20V4" />
-                  <path d="M5 11l7-7 7 7" />
+                  <path d="M8 10l4-4 4 4" />
+                  <path d="M8 14l4 4 4-4" />
                 </svg>
               </button>
             </div>
@@ -254,7 +270,7 @@ function App() {
                 <div style={{ fontSize: '28px', fontWeight: '800', color: '#94a3b8' }}>{outputAmount}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: 'bold' }}>
                   {isBuyingUFO ? (
-                    <><UfoIcon size={28}/><span>UFO</span></> // 🌟 UFO图标放大
+                    <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
                     <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
                   )}
@@ -281,21 +297,39 @@ function App() {
           </div>
         )}
 
+        {/* 🌟 钱包页面：精确显示和绿色法币价值 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 36, height: 36}} alt="USDT"/>
-                <span style={{ fontSize: '16px', fontWeight: '700' }}>USDT</span>
+            {/* USDT 资产行 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 40, height: 40}} alt="USDT"/>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '800', color: '#1e293b' }}>USDT</span>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Tether USD</span>
+                </div>
               </div>
-              <span style={{ fontSize: '18px', fontWeight: '800' }}>{isConnected ? usdtBal : '0.0'}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? usdtBal : '0.0'}</span>
+                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600' }}>≈ ${formatUsd(usdtBal)}</span>
+              </div>
             </div>
+
+            {/* UFO 资产行 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{width: 36, height: 36, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}><UfoIcon size={24}/></div>
-                <span style={{ fontSize: '16px', fontWeight: '700' }}>UFO</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                  <UfoIcon size={28}/>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '800', color: '#1e293b' }}>UFO</span>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>UFO Dollar</span>
+                </div>
               </div>
-              <span style={{ fontSize: '18px', fontWeight: '800' }}>{isConnected ? ufoBal : '0.0'}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? ufoBal : '0.0'}</span>
+                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600' }}>≈ ${formatUsd(Number(ufoBal) * currentNav)}</span>
+              </div>
             </div>
           </div>
         )}
@@ -327,7 +361,6 @@ function App() {
         </div>
         
         <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
-          {/* 🌟 真正的钱包图标：带扣子的钱包形状 */}
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
             <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
