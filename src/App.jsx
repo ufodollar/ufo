@@ -50,44 +50,6 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// 🌟 纯正、平直、空心的 UFO 长音“呜——”
-let globalAudioCtx = null;
-const playUfoSound = () => {
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    if (!globalAudioCtx) globalAudioCtx = new AudioContext();
-    if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
-    
-    const osc1 = globalAudioCtx.createOscillator();
-    const osc2 = globalAudioCtx.createOscillator();
-    const gain = globalAudioCtx.createGain();
-    
-    osc1.type = 'sine';
-    osc2.type = 'sine';
-    
-    // 核心：不滑音，保持频率绝对平直。
-    // 使用 600Hz 和 602Hz 两个微差频率，会产生声学上的“拍频”，听起来极其空心和神秘。
-    osc1.frequency.setValueAtTime(600, globalAudioCtx.currentTime);
-    osc2.frequency.setValueAtTime(602, globalAudioCtx.currentTime); 
-    
-    // 音量包络：快速起音 (0.05s)，持续长音，极长淡出 (1.5s)
-    gain.gain.setValueAtTime(0, globalAudioCtx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.1, globalAudioCtx.currentTime + 0.05);
-    gain.gain.setValueAtTime(0.1, globalAudioCtx.currentTime + 0.5);
-    gain.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + 1.5); 
-    
-    osc1.connect(gain);
-    osc2.connect(gain);
-    gain.connect(globalAudioCtx.destination);
-    
-    osc1.start();
-    osc2.start();
-    osc1.stop(globalAudioCtx.currentTime + 1.5);
-    osc2.stop(globalAudioCtx.currentTime + 1.5);
-  } catch (e) {}
-};
-
 function App() {
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
@@ -104,11 +66,6 @@ function App() {
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
-
-  useEffect(() => {
-    document.addEventListener('click', playUfoSound);
-    return () => document.removeEventListener('click', playUfoSound);
-  }, []);
 
   useEffect(() => {
     const fetchNav = async () => {
@@ -256,7 +213,6 @@ function App() {
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
-                {/* 🌟 两个箭头之间拉开间隔的上下箭头 */}
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 20V4" />
                   <path d="M3 8l4-4 4 4" />
@@ -346,8 +302,12 @@ function App() {
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>100% capital reserves, transparent vault (on-chain auditable fund flows), and smart contracts strictly tested and audited.</p>
             </div>
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>⚠️ Disclaimer</h4>
-              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>UFO is a payment and settlement tool, not an investment product. We do not promise any fixed annualized yield.</p>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px' }}>⚠️ Disclaimer & Jurisdiction</h4>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
+                UFO is a payment and settlement tool, not an investment product. We do not promise any fixed annualized yield.
+                <br/><br/>
+                <strong>User Jurisdiction Notice:</strong> Users are solely responsible for ensuring that their access to and use of the UFO protocol complies with the laws, regulations, and policies of their local jurisdiction. UFO is not available to persons located in jurisdictions where such use is prohibited or restricted.
+              </p>
             </div>
           </div>
         )}
