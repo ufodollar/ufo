@@ -67,6 +67,17 @@
         .tab-item.active { color: #3b82f6; }
         .tab-icon { font-size: 24px; }
 
+        /* 钱包选择弹窗 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: flex-end; z-index: 999; padding: 24px; }
+        .modal-content { background: #ffffff; border-radius: 32px; width: 100%; max-width: 380px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); margin-bottom: 20px; transform: translateY(0); animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .wallet-item { display: flex; align-items: center; gap: 16px; padding: 16px; border-radius: 20px; background: #f8fafc; border: 1px solid #f1f5f9; width: 100%; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
+        .wallet-item:active { background: #f1f5f9; transform: scale(0.98); }
+        .wallet-icon { width: 40px; height: 40px; border-radius: 50%; background: #fff; padding: 4px; object-fit: contain; }
+        .wallet-name { font-weight: 800; font-size: 16px; color: #1e293b; }
+        .wallet-desc { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+        .close-modal { width: 100%; padding: 16px; border-radius: 20px; border: none; background: #e2e8f0; color: #475569; font-weight: 800; font-size: 16px; cursor: pointer; }
+
         @media (min-width: 768px) {
             body { background-color: #0f172a; display: flex; justify-content: center; align-items: center; }
             .app-container { width: 390px; height: 844px; border-radius: 45px; box-shadow: 0 0 0 10px #1e293b, 0 20px 50px rgba(0,0,0,0.5); border: 2px solid #334155; }
@@ -89,7 +100,8 @@
             <div id="walletInfo" class="wallet-info">
                 <span class="dot"></span><span id="walletAddress">0x...</span>
             </div>
-            <button id="connectBtn" class="connect-btn" onclick="openReown()">连接钱包</button>
+            <!-- 纯原生点击事件 -->
+            <button id="connectBtn" class="connect-btn" onclick="connectWallet()">连接钱包</button>
         </div>
 
         <div class="page-container">
@@ -170,63 +182,33 @@
         </div>
     </div>
 
-    <!-- 引入 Ethers -->
+    <!-- 手机端钱包选择弹窗 -->
+    <div id="walletModal" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 style="margin-bottom: 20px; font-size: 20px; font-weight: 800; color: #1e293b;">选择钱包</h3>
+            <div id="walletList">
+                <button class="wallet-item" onclick="openDeepLink('metamask')">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/11419.png" class="wallet-icon">
+                    <div><div class="wallet-name">MetaMask</div><div class="wallet-desc">全球最广泛使用的钱包</div></div>
+                </button>
+                <button class="wallet-item" onclick="openDeepLink('trust')">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/3717.png" class="wallet-icon">
+                    <div><div class="wallet-name">Trust Wallet</div><div class="wallet-desc">全球领先的移动端钱包</div></div>
+                </button>
+                <button class="wallet-item" onclick="openDeepLink('phantom')">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/21795.png" class="wallet-icon">
+                    <div><div class="wallet-name">Phantom</div><div class="wallet-desc">多链极简钱包</div></div>
+                </button>
+            </div>
+            <button class="close-modal" onclick="closeModal(event)">取消</button>
+        </div>
+    </div>
+
+    <!-- Ethers -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 
-    <!-- 原生交互逻辑（秒开不卡） -->
+    <!-- 核心逻辑 (纯原生，没有任何 Module 阻塞) -->
     <script>
-        let isBuyingUFO = true;
-        let currentNav = 10;
-        const FEE_RATE = 0.005;
-
-        window.switchTab = (tab) => {
-            document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
-            document.getElementById(`view-${tab}`).classList.add('active');
-            document.getElementById(`tab-${tab}`).classList.add('active');
-        };
-
-        window.toggleMode = () => {
-            isBuyingUFO = !isBuyingUFO;
-            if (isBuyingUFO) {
-                document.getElementById('pillPay').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
-                document.getElementById('pillReceive').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
-                if(window.currentAddress) document.getElementById('actionBtn').innerText = "立即兑换";
-            } else {
-                document.getElementById('pillPay').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
-                document.getElementById('pillReceive').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
-                if(window.currentAddress) document.getElementById('actionBtn').innerText = "立即赎回";
-            }
-            document.getElementById('inputAmount').value = '';
-            document.getElementById('outputAmount').innerText = '0.0';
-        };
-
-        window.calculateOutput = () => {
-            const input = parseFloat(document.getElementById('inputAmount').value);
-            if (isNaN(input) || input <= 0) return document.getElementById('outputAmount').innerText = '0.0';
-            let output = isBuyingUFO ? (input * (1 - FEE_RATE)) / (currentNav || 1) : (input * (currentNav || 1)) * (1 - FEE_RATE);
-            document.getElementById('outputAmount').innerText = output.toFixed(4).replace(/\.?0+$/, '');
-        };
-
-        window.showMsg = (text) => {
-            const el = document.getElementById('msgBox');
-            if (!text) el.style.display = 'none'; 
-            else { el.innerText = text; el.style.display = 'block'; }
-        };
-
-        window.formatAmount = (val) => {
-            if (!val) return '0.0';
-            const num = parseFloat(val);
-            return num === 0 ? '0.0' : num.toFixed(4).replace(/\.?0+$/, '');
-        };
-    </script>
-
-    <!-- Reown 钱包模块 -->
-    <script type="module">
-        import { createAppKit } from 'https://esm.sh/@reown/appkit@1.6.5';
-        import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.6.5';
-        import { bsc } from 'https://esm.sh/@reown/appkit@1.6.5/networks';
-
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
         const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -235,116 +217,171 @@
         const ERC20_ABI = ["function allowance(address, address) view returns (uint256)", "function approve(address, uint256) returns (bool)", "function balanceOf(address) view returns (uint256)"];
         const VAULT_ABI = ["function deposit(uint256)", "function withdraw(uint256)", "function getExchangeRate() view returns (uint256)"];
 
-        const modal = createAppKit({
-            adapters: [new EthersAdapter()],
-            networks: [bsc],
-            metadata: { name: 'UFO 生态', description: '兑换', url: window.location.origin, icons: [] },
-            projectId: 'd6431212399f6c487b364387859983ea',
-            features: { analytics: true }
-        });
-
         let currentAddress = null;
         let currentSigner = null;
+        let isBuyingUFO = true;
         let currentNav = 10;
+        const FEE_RATE = 0.005;
 
-        // 替换全局提示：如果模块加载成功，点击按钮直接弹出
-        window.openReown = () => modal.open();
-
-        // 自动检测环境 (对应你发的 React 代码里的 useEffect)
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        if (isMobile && (window.ethereum || window.phantom)) {
-            setTimeout(() => {
-                if (!currentAddress) modal.open({ view: 'Connect' });
-            }, 500);
-        }
-
-        modal.subscribeAccount((account) => {
-            if (account.isConnected) {
-                currentAddress = account.address;
-                window.currentAddress = account.address;
-                document.getElementById('connectBtn').style.display = 'none';
-                document.getElementById('walletInfo').style.display = 'flex';
-                document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
-                document.getElementById('actionBtn').innerText = "立即兑换";
-                fetchBalances();
-            } else {
-                currentAddress = null;
-                window.currentAddress = null;
-                document.getElementById('connectBtn').style.display = 'block';
-                document.getElementById('walletInfo').style.display = 'none';
-                document.getElementById('actionBtn').innerText = "连接钱包";
-            }
-        });
-
-        modal.subscribeProvider(async (provider) => {
-            if (provider && provider.walletProvider) {
-                const ethersProvider = new ethers.BrowserProvider(provider.walletProvider);
-                currentSigner = await ethersProvider.getSigner();
-                // 强制切换 BSC (对应你发的 React 代码)
-                try {
-                    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-                } catch (e) {}
-            }
-        });
-
-        const fetchNav = async () => {
-            try {
-                const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-                const rate = await vaultContract.getExchangeRate();
-                currentNav = parseFloat(ethers.formatUnits(rate, 18));
-                document.getElementById('rateValue').innerText = window.formatAmount(currentNav);
-            } catch (err) { document.getElementById('rateValue').innerText = "10.0"; }
+        // 切换 Tab
+        window.switchTab = (tab) => {
+            document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${tab}`).classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
         };
 
+        // 切换模式
+        window.toggleMode = () => {
+            isBuyingUFO = !isBuyingUFO;
+            if (isBuyingUFO) {
+                document.getElementById('pillPay').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
+                document.getElementById('pillReceive').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
+                if(currentAddress) document.getElementById('actionBtn').innerText = "立即兑换";
+            } else {
+                document.getElementById('pillPay').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
+                document.getElementById('pillReceive').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
+                if(currentAddress) document.getElementById('actionBtn').innerText = "立即赎回";
+            }
+            document.getElementById('inputAmount').value = '';
+            document.getElementById('outputAmount').innerText = '0.0';
+        };
+
+        // 计算汇率
+        window.calculateOutput = () => {
+            const input = parseFloat(document.getElementById('inputAmount').value);
+            if (isNaN(input) || input <= 0) return document.getElementById('outputAmount').innerText = '0.0';
+            let output = isBuyingUFO ? (input * (1 - FEE_RATE)) / (currentNav || 1) : (input * (currentNav || 1)) * (1 - FEE_RATE);
+            document.getElementById('outputAmount').innerText = output.toFixed(4).replace(/\.?0+$/, '');
+        };
+
+        // 格式化
+        const formatAmount = (val) => {
+            if (!val) return '0.0';
+            const num = parseFloat(val);
+            return num === 0 ? '0.0' : num.toFixed(4).replace(/\.?0+$/, '');
+        };
+
+        // 提示信息
+        window.showMsg = (text) => {
+            const el = document.getElementById('msgBox');
+            if (!text) el.style.display = 'none'; 
+            else { el.innerText = text; el.style.display = 'block'; }
+        };
+
+        // 核心：连接钱包逻辑
+        window.connectWallet = async () => {
+            // 1. 如果是在钱包 App 内置浏览器里，或者电脑装了插件
+            if (window.ethereum) {
+                try {
+                    // 请求切换 BSC
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x38' }],
+                    }).catch(async (err) => {
+                        if (err.code === 4902) {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com/'] }],
+                            });
+                        }
+                    });
+
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const accounts = await provider.send("eth_requestAccounts", []);
+                    currentSigner = await provider.getSigner();
+                    currentAddress = accounts[0];
+
+                    // 更新 UI
+                    document.getElementById('connectBtn').style.display = 'none';
+                    document.getElementById('walletInfo').style.display = 'flex';
+                    document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
+                    document.getElementById('actionBtn').innerText = isBuyingUFO ? "立即兑换" : "立即赎回";
+                    
+                    fetchBalances();
+                } catch (err) {
+                    alert("连接被拒绝或失败");
+                }
+            } else {
+                // 2. 普通手机浏览器（没有插件），弹窗让用户选钱包跳转
+                document.getElementById('walletModal').style.display = 'flex';
+            }
+        };
+
+        window.closeModal = (e) => {
+            if (e) e.stopPropagation();
+            document.getElementById('walletModal').style.display = 'none';
+        };
+
+        // 手机端深度链接唤起
+        window.openDeepLink = (wallet) => {
+            const currentUrl = window.location.href;
+            if (wallet === 'metamask') {
+                window.location.href = "https://metamask.app.link/dapp/" + encodeURIComponent(currentUrl);
+            } else if (wallet === 'trust') {
+                window.location.href = "https://link.trustwallet.com/open_url?coin_id=60&url=" + encodeURIComponent(currentUrl);
+            } else if (wallet === 'phantom') {
+                window.location.href = "https://phantom.app/ul/browse/" + encodeURIComponent(currentUrl);
+            }
+        };
+
+        // 读取余额
         const fetchBalances = async () => {
             if (!currentAddress) return;
             try {
-                const uBal = await new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(currentAddress);
-                const ufoBal = await new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(currentAddress);
-                document.getElementById('usdtBalance').innerText = window.formatAmount(ethers.formatUnits(uBal, 6));
-                document.getElementById('ufoBalance').innerText = window.formatAmount(ethers.formatUnits(ufoBal, 18));
-            } catch (err) { console.error(err); }
+                const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
+                const ufo = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
+                document.getElementById('usdtBalance').innerText = formatAmount(ethers.formatUnits(await usdt.balanceOf(currentAddress), 6));
+                document.getElementById('ufoBalance').innerText = formatAmount(ethers.formatUnits(await ufo.balanceOf(currentAddress), 18));
+            } catch (e) {}
         };
 
+        // 执行交易
         window.handleAction = async () => {
-            if (!currentAddress || !currentSigner) return modal.open();
-            const inputAmount = document.getElementById('inputAmount').value;
-            if (!inputAmount || Number(inputAmount) <= 0) return window.showMsg("请输入有效金额");
+            if (!currentAddress || !currentSigner) return connectWallet();
+            const amount = document.getElementById('inputAmount').value;
+            if (!amount || Number(amount) <= 0) return showMsg("请输入有效金额");
             
             const btn = document.getElementById('actionBtn');
-            btn.disabled = true; btn.innerText = "处理中..."; window.showMsg('');
+            btn.disabled = true; btn.innerText = "处理中..."; showMsg('');
 
             try {
                 const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, currentSigner);
-                const isBuy = document.getElementById('pillPay').innerHTML.includes('Tether');
-                
-                if (isBuy) {
+                if (isBuyingUFO) {
                     const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, currentSigner);
-                    const rawAmount = ethers.parseUnits(inputAmount, 6);
+                    const rawAmount = ethers.parseUnits(amount, 6);
                     if (await usdt.allowance(currentAddress, VAULT_ADDRESS) < rawAmount) {
-                        window.showMsg("正在授权 USDT...");
+                        showMsg("正在授权 USDT...");
                         await (await usdt.approve(VAULT_ADDRESS, ethers.MaxUint256)).wait();
                     }
-                    window.showMsg("正在兑换...");
+                    showMsg("正在兑换 UFO...");
                     await (await vault.deposit(rawAmount)).wait();
-                    window.showMsg("兑换成功！");
+                    showMsg("兑换成功！");
                 } else {
-                    const rawAmount = ethers.parseUnits(inputAmount, 18);
-                    window.showMsg("正在赎回...");
-                    await (await vault.withdraw(rawAmount)).wait();
-                    window.showMsg("赎回成功！");
+                    showMsg("正在赎回 USDT...");
+                    await (await vault.withdraw(ethers.parseUnits(amount, 18))).wait();
+                    showMsg("赎回成功！");
                 }
                 document.getElementById('inputAmount').value = '';
                 document.getElementById('outputAmount').innerText = '0.0';
                 fetchBalances();
             } catch (err) {
-                window.showMsg(err.reason || err.shortMessage || err.message || "交易失败");
+                showMsg("交易失败或被取消");
             } finally {
                 btn.disabled = false; btn.innerText = "立即操作";
             }
         };
 
-        window.addEventListener('load', fetchNav);
+        // 初始化读汇率
+        window.addEventListener('load', async () => {
+            try {
+                const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+                currentNav = parseFloat(ethers.formatUnits(await vault.getExchangeRate(), 18));
+                document.getElementById('rateValue').innerText = formatAmount(currentNav);
+            } catch (e) {
+                document.getElementById('rateValue').innerText = "10.0";
+            }
+        });
     </script>
 </body>
 </html>
