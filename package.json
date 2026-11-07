@@ -1,26 +1,11 @@
-{
-  "name": "ufo-app",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@reown/appkit": "^1.6.5",
-    "@reown/appkit-adapter-ethers": "^1.6.5",
-    "@reown/appkit-react": "^1.6.5",
-    "ethers": "^6.13.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.2"
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  define: {
+    // 修复钱包插件底层的 process/global 变量缺失导致的崩溃
+    global: 'globalThis',
+    'process.env': {}
   }
-}
+})
