@@ -1,578 +1,351 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
-import { ethers } from 'ethers';
+import { useState } from "react";
+import { ethers } from "ethers";
+import { CONFIG, RULES } from "./config";
+import { ERC20_ABI, VAULT_ABI, PRIVACY_POOL_ABI, DISCLOSURE_ABI } from "./abi";
 
-// ================= 配置区 =================
-// ⚠️ 请务必替换为你真实的最新合约地址
-const VAULT_ADDRESS = '0x你的BSC金库地址'; 
-const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+const TABS = ["存入", "保密付款", "赎回", "审计披露", "系统状态"];
 
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
-// ==========================================
+export default function App() {
+  const [tab, setTab] = useState("存入");
+  const [provider, setProvider] = useState(null);
+  const [signer, setSigner] = useState(null);
+  const [account, setAccount] = useState("");
+  const [msg, setMsg] = useState("");
 
-const UFO_LOGO = '/logo.png'; 
-const USDT_LOGO = 'https://assets.coingecko.com/coins/images/325/large/Tether.png';
-
-const ERC20_ABI = [
-  "function allowance(address, address) view returns (uint256)",
-  "function approve(address, uint256) returns (bool)",
-  "function balanceOf(address) view returns (uint256)",
-  "function totalSupply() view returns (uint256)" 
-];
-
-const VAULT_ABI = [
-  "function deposit(uint256)", 
-  "function withdraw(uint256)",
-  "function getExchangeRate() view returns (uint256)"
-];
-
-const SwitchIcon = () => (
-  <svg className="switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>
-  </svg>
-);
-
-let globalAudioCtx = null;
-const getAudioContext = () => {
-  if (!globalAudioCtx) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return null;
-    globalAudioCtx = new AudioContext();
+  async function connect() {
+    if (!window.ethereum) return setMsg("请安装 MetaMask 或兼容钱包");
+    const _provider = new ethers.BrowserProvider(window.ethereum);
+    await _provider.send("eth_requestAccounts", []);
+    const _signer = await _provider.getSigner();
+    setProvider(_provider);
+    setSigner(_signer);
+    setAccount(await _signer.getAddress());
+    setMsg("");
   }
-  if (globalAudioCtx.state === 'suspended') {
-    globalAudioCtx.resume();
-  }
-  return globalAudioCtx;
-};
-
-const playClickSound = () => {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(140, now); 
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
-
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 15; 
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 15; 
-    lfo.connect(lfoGain);
-    lfoGain.connect(osc.frequency);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(280, now);
-    osc2.frequency.exponentialRampToValueAtTime(140, now + 0.3);
-
-    const gainNode = ctx.createGain();
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); 
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-
-    const gain2 = ctx.createGain();
-    gain2.gain.setValueAtTime(0, now);
-    gain2.gain.linearRampToValueAtTime(0.1, now + 0.05);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-    osc.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.6);
-    osc2.start(now);
-    osc2.stop(now + 0.4);
-    lfo.start(now);
-    lfo.stop(now + 0.6);
-
-  } catch (e) { }
-};
-
-const formatAmount = (val) => {
-  if (!val) return '0.0';
-  const num = parseFloat(val);
-  if (num === 0) return '0.0';
-  return num.toFixed(6).replace(/\.?0+$/, ''); 
-};
-
-function App() {
-  const { open, close } = useAppKit();
-  const { address, isConnected } = useAppKitAccount();
-  const { walletProvider } = useAppKitProvider('eip155');
-
-  const [isDepositMode, setIsDepositMode] = useState(true);
-  const [inputAmount, setInputAmount] = useState('');
-  const [usdtBalance, setUsdtBalance] = useState('0');
-  const [ufoBalance, setUfoBalance] = useState('0');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [msg, setMsg] = useState('');
-  
-  const [showRules, setShowRules] = useState(false);
-  
-  const [nav, setNav] = useState(0); 
-  const [isNavLoading, setIsNavLoading] = useState(true);
-  
-  const [aaveApy, setAaveApy] = useState('3.05'); 
-  const [isApyLoading, setIsApyLoading] = useState(true);
-
-  // 🔥 用于闪电重试的 Ref
-  const retryCountRef = useRef(0);
-
-  useEffect(() => {
-    const handleGlobalClick = () => { playClickSound(); };
-    window.addEventListener('click', handleGlobalClick);
-    return () => { window.removeEventListener('click', handleGlobalClick); };
-  }, []);
-
-  useEffect(() => {
-    if (isConnected) { close(); }
-  }, [isConnected, close]);
-
-  // 🔥 核心逻辑：NAV 快速加载 + 闪电重试
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
-      if (!isConnected) {
-        setUsdtBalance('0');
-        setUfoBalance('0');
-      }
-      
-      try {
-        const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-        const rate = await vaultContract.getExchangeRate();
-        
-        if (isMounted) {
-          const parsedNav = parseFloat(ethers.formatUnits(rate, 18));
-          setNav(parsedNav);
-          if (parsedNav > 0) {
-            setIsNavLoading(false);
-            retryCountRef.current = 0; // 成功后重置重试计数
-          }
-        }
-        
-        if (address) {
-          const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
-          const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
-          const usdtBal = await usdtContract.balanceOf(address);
-          const ufoBal = await ufoContract.balanceOf(address);
-          
-          if (isMounted) {
-            setUsdtBalance(ethers.formatUnits(usdtBal, 6));
-            setUfoBalance(ethers.formatUnits(ufoBal, 18));
-          }
-        }
-      } catch (e) {
-        if (isMounted) {
-          // 如果失败，触发闪电重试（最多快速重试 5 次，每次间隔 1 秒）
-          if (retryCountRef.current < 5) {
-            retryCountRef.current += 1;
-            setTimeout(() => { if(isMounted) fetchData(); }, 1000);
-          } else {
-            setIsNavLoading(false);
-          }
-        }
-      }
-    };
-
-    fetchData(); 
-    const interval = setInterval(fetchData, 30000); 
-
-    return () => { 
-      isMounted = false; 
-      clearInterval(interval); 
-    };
-  }, [address, isConnected, isDepositMode]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAaveApy = async () => {
-      try {
-        const response = await fetch("https://yields.llama.fi/pools");
-        if (!response.ok) throw new Error("Network error");
-        const data = await response.json();
-        const targetPool = data.data.find(pool => 
-          pool.project === 'aave-v3' && pool.chain === 'BSC' && pool.symbol === 'USDT'
-        );
-        if (targetPool && targetPool.apy && isMounted) {
-          setAaveApy(targetPool.apy.toFixed(2));
-        }
-      } catch (error) {
-      } finally {
-        if (isMounted) setIsApyLoading(false);
-      }
-    };
-
-    fetchAaveApy();
-    const interval = setInterval(fetchAaveApy, 90000); 
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    if (val < 0 || val.includes('-')) { setMsg("Negative amounts are not allowed."); return; }
-    setMsg(''); setInputAmount(val);
-  };
-
-  const handleAction = async () => {
-    // 🔥 如果用户点击时 NAV 还没好，立刻手动触发一次获取，并提示稍等
-    if (nav === 0) {
-      setMsg("Fetching latest NAV, please wait...");
-      return; 
-    }
-    
-    if (!isConnected) return open({ view: 'AllWallets' });
-    if (!inputAmount || inputAmount <= 0) return setMsg("Please enter a valid amount");
-    if (!walletProvider) return setMsg("Provider not ready");
-
-    let amount;
-    try {
-      amount = isDepositMode ? ethers.parseUnits(inputAmount, 6) : ethers.parseUnits(inputAmount, 18);
-    } catch (error) {
-      return setMsg(`Invalid precision. Max decimals: ${isDepositMode ? '6' : '18'}`);
-    }
-
-    try {
-      const currentBalance = isDepositMode ? usdtBalance : ufoBalance;
-      const balanceWei = isDepositMode ? ethers.parseUnits(currentBalance, 6) : ethers.parseUnits(currentBalance, 18);
-      
-      if (amount > balanceWei) {
-        return setMsg(`Insufficient ${isDepositMode ? 'USDT' : 'UFO'} balance.`);
-      }
-    } catch (error) {
-      return setMsg("Error calculating balance.");
-    }
-
-    try {
-      setIsProcessing(true); setMsg("");
-      const provider = new ethers.BrowserProvider(walletProvider);
-      const signer = await provider.getSigner();
-      const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
-      
-      const tokenAddress = isDepositMode ? USDT_ADDRESS : UFO_ADDRESS;
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-
-      const allowance = await tokenContract.allowance(address, VAULT_ADDRESS);
-      if (allowance < amount) {
-        setMsg(`Approving ${isDepositMode ? 'USDT' : 'UFO'}...`);
-        const txApprove = await tokenContract.approve(VAULT_ADDRESS, amount);
-        await txApprove.wait();
-      }
-
-      setMsg(isDepositMode ? "Depositing..." : "Redeeming...");
-      const tx = isDepositMode ? await vaultContract.deposit(amount) : await vaultContract.withdraw(amount);
-      await tx.wait();
-      setMsg("Transaction Successful!");
-      setInputAmount('');
-    } catch (err) {
-      console.log("Transaction error details:", err);
-      if (err.code === 'ACTION_REJECTED' || err.message?.toLowerCase().includes('rejected')) {
-        setMsg("Transaction Rejected by User.");
-      } else if (err.code === 'INSUFFICIENT_FUNDS' || err.message?.toLowerCase().includes('insufficient funds')) {
-        setMsg("Insufficient BNB for gas fees.");
-      } else {
-        setMsg("Transaction Failed. Please try again.");
-      }
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const currentToken = isDepositMode ? 'USDT' : 'UFO';
-  const currentIcon = isDepositMode ? USDT_LOGO : UFO_LOGO;
-  const currentBalance = isDepositMode ? usdtBalance : ufoBalance;
-
-  const receiveToken = isDepositMode ? 'UFO' : 'USDT';
-  const receiveIcon = isDepositMode ? UFO_LOGO : USDT_LOGO;
-  const receiveBalance = isDepositMode ? ufoBalance : usdtBalance;
-
-  let receiveAmount = '0';
-  let estimatedFee = '0';
-  let isCalculating = false;
-
-  if (inputAmount && !isNaN(inputAmount) && inputAmount > 0) {
-    if (nav > 0) {
-      if (isDepositMode) {
-        receiveAmount = formatAmount((parseFloat(inputAmount) / nav).toString());
-      } else {
-        const totalUsdt = parseFloat(inputAmount) * nav;
-        const fee = totalUsdt * 0.015;
-        estimatedFee = fee.toFixed(4);
-        receiveAmount = formatAmount((totalUsdt - fee).toString()); 
-      }
-    } else {
-      isCalculating = true; // 用户已输入，但 NAV 还在路上
-    }
-  }
-
-  const usdtValue = parseFloat(usdtBalance) * 1;
-  const ufoValue = parseFloat(ufoBalance) * nav;
 
   return (
-    <>
-      <style>{`
-        w3m-modal {
-          --w3m-modal-height: 100dvh !important;
-          --w3m-modal-max-height: 100dvh !important;
-          align-items: flex-end !important; 
-          height: 100dvh !important;
-          max-height: 100dvh !important;
-        }
-        w3m-modal > wui-flex, 
-        w3m-modal wui-flex.modal-container,
-        .w3m-modal-content {
-          height: 90dvh !important; 
-          max-height: 90dvh !important;
-          border-bottom-left-radius: 0 !important;
-          border-bottom-right-radius: 0 !important; 
-          margin-bottom: 0 !important;
-          padding-bottom: env(safe-area-inset-bottom) !important; 
-        }
-        w3m-router {
-          height: 100% !important;
-          max-height: 100% !important;
-        }
-        .modal-content {
-          display: flex;
-          flex-direction: column;
-          padding: 24px 24px 0 24px !important;
-          max-height: 85vh !important;
-        }
-        .modal-header {
-          flex-shrink: 0;
-          margin-bottom: 15px;
-          padding-bottom: 10px;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-        }
-        .modal-header h3 {
-          font-size: 1.3rem;
-        }
-        .btn-close {
-          font-size: 2.2rem !important; 
-          line-height: 1;
-          margin-top: -6px;
-        }
-        .rules-content {
-          flex-grow: 1;
-          overflow-y: auto;
-          padding-bottom: 24px;
-          margin-top: 0;
-        }
-        .rules-content::-webkit-scrollbar { display: none; }
-      `}</style>
-
-      <div className="bg-shape-square"></div>
-      <div className="bg-shape-triangle"></div>
-
-      <div className="app-container">
-        <header className="header">
-          <div className="logo-container">
-            <img src={UFO_LOGO} alt="UFO Logo" className="brand-logo" onError={(e) => e.target.style.display = 'none'} />
-            <div className="logo-text">UFO <span>Fund</span></div>
-          </div>
-          <button className="btn-connect" onClick={() => open({ view: 'AllWallets' })}>
-            {isConnected ? (
-              <><span>{address.slice(0,6)}...{address.slice(-4)}</span><SwitchIcon /></>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* 顶部标语 */}
+      <header className="border-b border-slate-800 px-6 py-8">
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-2xl font-bold tracking-tight">
+            企业级保密支付结算网络
+          </h1>
+          <p className="mt-2 text-slate-400 max-w-3xl">
+            用 UFO 完成跨境供应商付款和财库调拨：
+            <span className="text-slate-200">单笔金额和对手方对公众隐藏</span>，
+            <span className="text-slate-200">系统储备和总供应量公开可查</span>，
+            审计与监管在授权下可验证。
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            {account ? (
+              <span className="text-sm text-emerald-400">
+                已连接：{account.slice(0, 6)}...{account.slice(-4)}
+              </span>
             ) : (
-              <>Connect Wallet</>
+              <button
+                onClick={connect}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+              >
+                连接钱包
+              </button>
             )}
-          </button>
-        </header>
-
-        <div className="asset-dashboard">
-          <div className="balance-group">
-            <div className="balance-item">
-              <span className="asset-balance-label">USDT Balance</span>
-              <span className="asset-balance-value">${formatAmount(usdtValue)}</span>
-            </div>
-            <div className="balance-item">
-              <span className="asset-balance-label">UFO Balance</span>
-              <span className="asset-balance-value">${formatAmount(ufoValue)}</span>
-            </div>
+            <span className="text-xs text-slate-500">
+              兑换比例：1 UFO = {CONFIG.RATE} USDT
+            </span>
           </div>
-          
-          <div className="action-buttons-group">
-            <button className="btn-rules" onClick={() => setShowRules(true)}>
-              Rules
+        </div>
+      </header>
+
+      {/* 标签导航 */}
+      <nav className="border-b border-slate-800 px-6">
+        <div className="max-w-5xl mx-auto flex gap-1 overflow-x-auto">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
+                tab === t
+                  ? "border-emerald-500 text-emerald-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {t}
             </button>
-          </div>
+          ))}
         </div>
+      </nav>
 
-        <div className="card">
-          <div className="tabs">
-            <button className={`tab ${isDepositMode ? 'active' : ''}`} onClick={() => { setIsDepositMode(true); setInputAmount(''); setMsg(''); }}>Deposit</button>
-            <button className={`tab ${!isDepositMode ? 'active' : ''}`} onClick={() => { setIsDepositMode(false); setInputAmount(''); setMsg(''); }}>Redeem</button>
-          </div>
-
-          <div className="input-box">
-            <div className="input-label">
-              <span>{isDepositMode ? 'You Pay' : 'You Redeem'}</span>
-              <span className="balance" onClick={() => { if(isConnected) setInputAmount(currentBalance); }}>
-                <span className="balance-label">Balance: </span>
-                <span className="balance-value">{formatAmount(currentBalance)}</span>
-              </span>
-            </div>
-            <div className="input-row">
-              {/* 🔥 输入框永远可点 */}
-              <input 
-                type="number" 
-                className="input-field" 
-                value={inputAmount} 
-                onChange={handleInputChange} 
-                placeholder="0.0" 
-                min="0"
-              />
-              <div className="token-tag">
-                <img src={currentIcon} alt={currentToken} />
-                {currentToken}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'center', margin: '8px 0', color: 'var(--accent)' }}>↓</div>
-
-          <div className="input-box">
-            <div className="input-label">
-              <span>{isDepositMode ? 'You Receive' : 'You Receive (After Fee)'}</span>
-              <span className="balance" style={{ cursor: 'default' }}>
-                <span className="balance-label">Balance: </span>
-                <span className="balance-value">{formatAmount(receiveBalance)}</span>
-              </span>
-            </div>
-            <div className="input-row">
-              <input 
-                type="text" 
-                className="input-field" 
-                value={isCalculating ? '' : (receiveAmount === '0' ? '' : formatAmount(receiveAmount))} 
-                readOnly 
-                placeholder={isCalculating ? "Fetching..." : "0.0"} 
-              />
-              <div className="token-tag">
-                <img src={receiveIcon} alt={receiveToken} />
-                {receiveToken}
-              </div>
-            </div>
-          </div>
-
-          {!isDepositMode && inputAmount && parseFloat(inputAmount) > 0 && nav > 0 && (
-            <div style={{ 
-              fontSize: '0.85rem', 
-              color: '#ff3b30', 
-              textAlign: 'right', 
-              marginTop: '-5px', 
-              marginBottom: '10px',
-              fontWeight: '600'
-            }}>
-              Estimated Fee: ~{estimatedFee} USDT (1.5%)
-            </div>
-          )}
-
-          {/* 🔥 按钮在未连接时提示连接，在连接后如果有输入随时可点。点击时判断 NAV */}
-          <button 
-            className="action-btn" 
-            onClick={handleAction} 
-            disabled={isProcessing || !isConnected || (!inputAmount && isConnected)}
-          >
-            {isProcessing 
-              ? 'Processing...' 
-              : !isConnected 
-                ? 'Connect Wallet' 
-                : (!inputAmount ? 'Enter Amount' : (isDepositMode ? 'Deposit & Earn' : 'Redeem'))}
-          </button>
-          
-          {msg && <p className={`msg-text ${msg.includes('Success') ? 'success' : 'error'}`}>{msg}</p>}
-        </div>
-
-        <div className="info-section">
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">🏦</span> Net Asset Value</span>
-            <span className="info-value green">{nav > 0 ? nav.toFixed(4) : 'Fetching...'} USDT</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">💰</span> Yield Source</span>
-            <span className="info-value blue">Aave V3</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">📊</span> Aave V3 APY</span>
-            <span className="info-value blue">{isApyLoading ? '...' : `${aaveApy}%`}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">⛓️</span> Network</span>
-            <span className="info-value purple">BNB Chain</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">💸</span> Fund Type</span>
-            <span className="info-value purple">Flexible (Deposit & Withdraw Anytime)</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label"><span className="big-icon">🔻</span> Redemption Fee</span>
-            <span className="info-value red" style={{ color: '#ff3b30' }}>1.5%</span>
-          </div>
-        </div>
-
-        <a href="https://t.me/ufofund" target="_blank" rel="noopener noreferrer" className="social-link">
-          Contact Fund Manager
-        </a>
-        
-        <div className="footer-text">Secured by Aave V3 on BSC.<br/>Smart contracts are audited and fully on-chain.</div>
-
-        {showRules && (
-          <div className="modal-overlay" onClick={() => setShowRules(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>UFO Fund Rules</h3>
-                <button className="btn-close" onClick={() => setShowRules(false)}>×</button>
-              </div>
-              <div className="rules-content">
-                
-                <div className="rule-block" style={{ backgroundColor: 'rgba(0, 122, 255, 0.08)', borderColor: 'rgba(0, 122, 255, 0.2)' }}>
-                  <h4 style={{ color: 'var(--accent)' }}>1. Fund Overview & Mechanism</h4>
-                  <p>UFO Fund is a flexible, tokenized wealth management gateway on BNB Smart Chain (BSC). By depositing USDT, you receive $UFO tokens representing your fund shares. Your assets are securely deployed into Aave V3 to generate real, on-chain interest. There are no lockups; you can deposit and withdraw at any time.</p>
-                </div>
-
-                <div className="rule-block" style={{ backgroundColor: 'rgba(52, 199, 89, 0.08)', borderColor: 'rgba(52, 199, 89, 0.2)' }}>
-                  <h4 style={{ color: '#34c759' }}>2. Algorithmic Protection & Fairness</h4>
-                  <p>In UFO Fund, your principal and interest are <strong>algorithmically locked</strong>. The entry or exit of whales will <strong>never affect your Net Asset Value</strong>. Your assets are 1:1 backed by the underlying assets in Aave. The longer you hold, the more real interest Aave generates, and the higher your Net Asset Value will be. There is no market maker, no price dumping—only the gift of time compounding.</p>
-                </div>
-
-                <div className="rule-block"><h4>3. Redemption & Yield</h4><p>Since Aave yields continue to accrue every second, the Net Asset Value keeps rising continuously. You can redeem your principal and accumulated interest at any time. Early redemption by any user does not lower the Net Asset Value for others; it simply removes their proportional share of the assets.</p></div>
-                
-                <div className="rule-block">
-                  <h4>4. Unique Revenue Model: 1.5% Redemption Fee</h4>
-                  <p><strong>We do NOT harvest your interest!</strong> 100% of the Aave yield goes directly into increasing your Net Asset Value. Our platform's sole revenue model is a <strong>1.5% redemption fee</strong> deducted only when you withdraw. This fee is instantly transferred to the Fund Manager's wallet.</p>
-                  <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}><strong>Important Note on Break-even:</strong> Because of the 1.5% redemption fee, if you redeem too early, the fee may exceed your accumulated interest. Based on current Aave yields, <strong>you need to hold your UFO for at least 90 to 100 days</strong> to fully cover the 1.5% fee and start generating pure profit.</p>
-                </div>
-                
-                <div className="rule-block" style={{ borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.05)' }}>
-                  <h4 style={{ color: '#d9a000' }}>5. Dynamic Pricing & Visual Settlement</h4>
-                  <p>The "Net Asset Value" displayed is a <strong>real-time dynamic metric</strong>. When a large user redeems a significant portion of the vault, the protocol settles the accounting. This will cause the displayed Net Asset Value to <strong>adjust downwards instantaneously</strong>. However, this is strictly a visual accounting settlement and <strong>does not affect your principal or your actual earned interest</strong>. Your share's underlying value remains mathematically protected.</p>
-                </div>
-
-                <div className="rule-block" style={{ borderColor: 'var(--accent)' }}><h4>6. Security & Wallet Note</h4><p>Your money is fully secured by an unchangeable smart contract. No one, not even our team, can touch or run away with your funds. Please note that $UFO tokens may not display a dollar value in your Web3 wallet because it is a fund share tool, not a traditional cryptocurrency. This does not affect its actual underlying value.</p></div>
-                
-                <div className="rule-block" style={{ backgroundColor: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
-                  <h4 style={{ color: '#ff3b30' }}>7. Compliance & Disclaimer</h4>
-                  <p>UFO Fund is a decentralized protocol accessible globally. However, it is your <strong>sole responsibility</strong> to ensure that your use of this platform complies with the laws and regulations of your local jurisdiction. By interacting with our smart contracts, you represent and warrant that you are not located in, under the control of, or a national or resident of any restricted jurisdiction (including but not limited to the <strong>United States, Mainland China, Canada, Iran, North Korea, Syria, Cuba, the Crimea region, and Russia</strong>), and you are not on any government restricted parties list. You use this protocol entirely at your own risk.</p>
-                </div>
-
-              </div>
-            </div>
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+        {msg && (
+          <div className="rounded-lg border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+            {msg}
           </div>
         )}
-      </div>
-    </>
+
+        {tab === "存入" && <Deposit signer={signer} setMsg={setMsg} />}
+        {tab === "保密付款" && <PrivatePay signer={signer} setMsg={setMsg} />}
+        {tab === "赎回" && <Withdraw signer={signer} setMsg={setMsg} />}
+        {tab === "审计披露" && <Disclosure signer={signer} setMsg={setMsg} />}
+        {tab === "系统状态" && <SystemStatus provider={provider} />}
+
+        {/* 规则区——始终展示，不可折叠隐藏 */}
+        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <h2 className="text-lg font-semibold mb-4">产品规则</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {RULES.map((r) => (
+              <div key={r.title} className="rounded-lg bg-slate-950/60 p-4">
+                <h3 className="text-sm font-medium text-emerald-400">{r.title}</h3>
+                <p className="mt-1 text-sm text-slate-400 leading-relaxed">{r.body}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-slate-500">
+            本产品不是存款、不是投资品、不承诺收益。使用前请阅读完整用户协议与风险披露。
+          </p>
+        </section>
+      </main>
+    </div>
   );
 }
 
-export default App;
+/* ---------- 存入：approve + deposit ---------- */
+function Deposit({ signer, setMsg }) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handle() {
+    if (!signer) return setMsg("请先连接钱包");
+    try {
+      setBusy(true);
+      const usdt = new ethers.Contract(CONFIG.USDT, ERC20_ABI, signer);
+      const vault = new ethers.Contract(CONFIG.VAULT, VAULT_ABI, signer);
+      const raw = ethers.parseUnits(amount, CONFIG.USDT_DECIMALS);
+      const allowance = await usdt.allowance(await signer.getAddress(), CONFIG.VAULT);
+      if (allowance < raw) {
+        const tx = await usdt.approve(CONFIG.VAULT, raw);
+        await tx.wait();
+      }
+      const tx = await vault.deposit(raw);
+      await tx.wait();
+      setMsg(`成功存入 ${amount} USDT，已铸造 ${Number(amount) / CONFIG.RATE} UFO`);
+    } catch (e) {
+      setMsg(e?.shortMessage || e?.message || "交易失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section title="存入 USDT，铸造 UFO" desc="USDT 进入独立多签储备地址，UFO 铸造到你的钱包。储备地址公开可查。">
+      <input
+        className={inputCls}
+        placeholder="USDT 数量（须为 10 的整数倍）"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+      <p className="text-xs text-slate-500">预计获得：{amount ? Number(amount) / CONFIG.RATE : 0} UFO</p>
+      <button disabled={busy} onClick={handle} className={btnCls}>
+        {busy ? "处理中..." : "存入并铸造"}
+      </button>
+    </Section>
+  );
+}
+
+/* ---------- 保密付款：shield ---------- */
+function PrivatePay({ signer, setMsg }) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handle() {
+    if (!signer) return setMsg("请先连接钱包");
+    try {
+      setBusy(true);
+      const pool = new ethers.Contract(CONFIG.PRIVACY_POOL, PRIVACY_POOL_ABI, signer);
+      // 实际项目中 commitment 由链下用 secret+nullifier+amount+viewKey 计算
+      const commitment = ethers.hexlify(ethers.randomBytes(32));
+      const raw = ethers.parseUnits(amount, CONFIG.UFO_DECIMALS);
+      const tx = await pool.shield(raw, commitment);
+      await tx.wait();
+      setMsg(`已存入屏蔽池。请妥善保存 commitment：${commitment}`);
+    } catch (e) {
+      setMsg(e?.shortMessage || e?.message || "交易失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      title="保密付款（屏蔽池）"
+      desc="UFO 进入屏蔽池后，后续收款方、金额对公众不可见。你持有查看密钥，可向审计方选择性披露。"
+    >
+      <input
+        className={inputCls}
+        placeholder="UFO 数量"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+      <p className="text-xs text-slate-500">
+        注意：屏蔽的是单笔商业付款细节；UFO 总供应量和储备覆盖率仍然公开。
+      </p>
+      <button disabled={busy} onClick={handle} className={btnCls}>
+        {busy ? "处理中..." : "存入屏蔽池"}
+      </button>
+    </Section>
+  );
+}
+
+/* ---------- 赎回：withdraw ---------- */
+function Withdraw({ signer, setMsg }) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handle() {
+    if (!signer) return setMsg("请先连接钱包");
+    try {
+      setBusy(true);
+      const vault = new ethers.Contract(CONFIG.VAULT, VAULT_ABI, signer);
+      const raw = ethers.parseUnits(amount, CONFIG.UFO_DECIMALS);
+      const tx = await vault.withdraw(raw);
+      await tx.wait();
+      setMsg(`已销毁 ${amount} UFO，按规则赎回 ${Number(amount) * CONFIG.RATE} USDT`);
+    } catch (e) {
+      setMsg(e?.shortMessage || e?.message || "交易失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      title="赎回 USDT"
+      desc="销毁 UFO，从独立储备地址按 1 UFO = 10 USDT 转出。赎回可能受限额、手续费和依法暂停条件约束。"
+    >
+      <input
+        className={inputCls}
+        placeholder="UFO 数量"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+      <p className="text-xs text-slate-500">预计获得：{amount ? Number(amount) * CONFIG.RATE : 0} USDT</p>
+      <button disabled={busy} onClick={handle} className={btnCls}>
+        {busy ? "处理中..." : "销毁并赎回"}
+      </button>
+    </Section>
+  );
+}
+
+/* ---------- 审计披露 ---------- */
+function Disclosure({ signer, setMsg }) {
+  const [commitment, setCommitment] = useState("");
+  const [auditor, setAuditor] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handle() {
+    if (!signer) return setMsg("请先连接钱包");
+    try {
+      setBusy(true);
+      const dm = new ethers.Contract(CONFIG.DISCLOSURE, DISCLOSURE_ABI, signer);
+      // 实际项目中 proofOfViewKey 由链下生成
+      const proof = ethers.hexlify(ethers.randomBytes(64));
+      const tx = await dm.authorizeDisclosure(commitment, auditor, proof);
+      await tx.wait();
+      setMsg("已授权该审计方查看指定交易的明文。");
+    } catch (e) {
+      setMsg(e?.shortMessage || e?.message || "交易失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      title="选择性披露"
+      desc="由企业主动发起，向指定审计方、税务或监管方披露某一笔付款的明细。平台不能单方面查看你的付款记录。"
+    >
+      <input
+        className={inputCls}
+        placeholder="Commitment（交易凭证）"
+        value={commitment}
+        onChange={(e) => setCommitment(e.target.value)}
+      />
+      <input
+        className={inputCls}
+        placeholder="审计方地址"
+        value={auditor}
+        onChange={(e) => setAuditor(e.target.value)}
+      />
+      <button disabled={busy} onClick={handle} className={btnCls}>
+        {busy ? "处理中..." : "授权披露"}
+      </button>
+    </Section>
+  );
+}
+
+/* ---------- 系统状态 ---------- */
+function SystemStatus({ provider }) {
+  const [supply, setSupply] = useState("--");
+  const [reserveBal, setReserveBal] = useState("--");
+
+  async function refresh() {
+    if (!provider) return;
+    const ufo = new ethers.Contract(CONFIG.UFO, ERC20_ABI, provider);
+    const usdt = new ethers.Contract(CONFIG.USDT, ERC20_ABI, provider);
+    const total = await ufo.totalSupply?.().catch(() => null);
+    setSupply(total ? ethers.formatUnits(total, CONFIG.UFO_DECIMALS) : "--");
+    const bal = await usdt.balanceOf(CONFIG.RESERVE_ADDRESS);
+    setReserveBal(ethers.formatUnits(bal, CONFIG.USDT_DECIMALS));
+  }
+
+  const coverage =
+    supply !== "--" && reserveBal !== "--" && Number(supply) > 0
+      ? ((Number(reserveBal) / (Number(supply) * CONFIG.RATE)) * 100).toFixed(2) + "%"
+      : "--";
+
+  return (
+    <Section
+      title="系统状态（公开可查）"
+      desc="这些数据始终公开。保密只作用于单笔付款，不隐藏系统总量和储备。"
+    >
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="UFO 总供应量" value={supply} />
+        <Stat label="储备 USDT 余额" value={reserveBal} />
+        <Stat label="储备覆盖率" value={coverage} highlight />
+      </div>
+      <p className="text-xs text-slate-500 break-all">
+        储备地址（多签，公开可查）：{CONFIG.RESERVE_ADDRESS}
+      </p>
+      <button onClick={refresh} className={btnCls}>刷新数据</button>
+    </Section>
+  );
+}
+
+/* ---------- 通用组件 ---------- */
+function Section({ title, desc, children }) {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {desc && <p className="mt-1 text-sm text-slate-400">{desc}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Stat({ label, value, highlight }) {
+  return (
+    <div className="rounded-lg bg-slate-950/60 p-4">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className={`mt-1 text-lg font-semibold ${highlight ? "text-emerald-400" : ""}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-emerald-500";
+const btnCls =
+  "rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50";
