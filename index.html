@@ -7,7 +7,6 @@
     <style>
       body { margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     </style>
-    <!-- 修复 Web3 库在打包时容易遇到的全局变量报错 -->
     <script>
       window.global = window;
       window.process = { env: {} };
@@ -15,7 +14,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- 直接在这里挂载 React，省去了 main.jsx 文件 -->
     <script type="module">
       import React from 'react';
       import ReactDOM from 'react-dom/client';
@@ -28,4 +26,4 @@
       );
     </script>
   </body>
-</htm
+</html>
