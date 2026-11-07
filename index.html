@@ -14,7 +14,6 @@
             -webkit-tap-highlight-color: transparent; 
         }
         
-        /* 基础背景 */
         html, body { 
             width: 100vw; 
             height: 100dvh; 
@@ -22,7 +21,6 @@
             background-color: #f4f6fb; 
         }
 
-        /* ================= 默认手机端布局：全屏铺满 ================= */
         .app-container {
             width: 100vw;
             height: 100dvh;
@@ -33,12 +31,11 @@
             background-color: #f4f6fb;
         }
 
-        /* 浅色渐变背景 */
         .glow { position: absolute; border-radius: 50%; filter: blur(80px); z-index: 0; pointer-events: none; }
         .glow-1 { top: -50px; left: -50px; width: 300px; height: 300px; background: #93c5fd; opacity: 0.5; }
         .glow-2 { bottom: 100px; right: -50px; width: 300px; height: 300px; background: #d8b4fe; opacity: 0.5; }
 
-        /* 顶部 Header (固定) */
+        /* 顶部 Header */
         .header { 
             display: flex; justify-content: space-between; align-items: center; 
             padding: 24px; z-index: 10; background: transparent; flex-shrink: 0;
@@ -46,7 +43,7 @@
         .logo-row { display: flex; align-items: center; gap: 10px; }
         
         .logo-icon { 
-            width: 40px; height: 40px; background: #fff; border-radius: 50%; 
+            width: 44px; height: 44px; background: #fff; border-radius: 50%; 
             display: flex; justify-content: center; align-items: center; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 8px;
         }
@@ -69,14 +66,14 @@
         }
         .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981;}
 
-        /* 中间内容区 (滚动) */
+        /* 中间内容区 */
         .page-container {
             flex: 1; z-index: 10; overflow-y: auto; position: relative;
         }
         .page-view { display: none; padding: 10px 24px 30px 24px; height: 100%; }
         .page-view.active { display: flex; flex-direction: column; }
 
-        /* ================= 页面 1: 兑换 ================= */
+        /* 兑换面板 */
         .panel { background: #ffffff; border-radius: 32px; padding: 24px; box-shadow: 0 20px 50px -10px rgba(0,0,0,0.08); margin-top: 10px;}
         .panel-title { font-size: 20px; font-weight: 800; color: #1e293b; margin-bottom: 24px; text-align: center; }
 
@@ -93,21 +90,17 @@
             width: 64px; height: 64px; border-radius: 50%; 
             box-shadow: 0 8px 25px rgba(59,130,246,0.15); 
             color: #3b82f6; cursor: pointer; display: flex; justify-content: center; align-items: center; 
-            transition: 0.2s;
         }
-        .switch-btn:active { transform: scale(0.9); }
 
         .rate-display { text-align: center; font-size: 15px; color: #64748b; margin-top: 24px; font-weight: 600; background: #f8fafc; border-radius: 16px; padding: 14px; }
         .rate-display span { color: #3b82f6; font-weight: 800; font-size: 18px; }
         .fee-notice { font-size: 13px; color: #ef4444; text-align: center; margin-top: 10px; font-weight: 600;}
 
-        .action-btn { width: 100%; padding: 20px; border-radius: 24px; font-size: 20px; font-weight: 800; background: #3b82f6; color: #ffffff; border: none; cursor: pointer; margin-top: 24px; box-shadow: 0 12px 25px -5px rgba(59,130,246,0.4); transition: 0.2s;}
-        .action-btn:active { transform: scale(0.98); }
-        .action-btn:disabled { opacity: 0.7; }
+        .action-btn { width: 100%; padding: 20px; border-radius: 24px; font-size: 20px; font-weight: 800; background: #3b82f6; color: #ffffff; border: none; cursor: pointer; margin-top: 24px; box-shadow: 0 12px 25px -5px rgba(59,130,246,0.4); }
         
         .msg-text { margin-top: 18px; text-align: center; font-size: 15px; color: #ef4444; background: #fef2f2; padding: 10px; border-radius: 12px; display: none; font-weight: 600;}
 
-        /* ================= 页面 2: 资产 ================= */
+        /* 资产面板 */
         .balance-card { background: #ffffff; border-radius: 32px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 24px; margin-top: 10px;}
         .balance-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px;}
         .balance-item:last-child { border-bottom: none; padding-bottom: 0;}
@@ -116,28 +109,25 @@
         .balance-logo img, .balance-logo svg { width: 100%; height: 100%; object-fit: contain;}
         .balance-name { font-size: 16px; font-weight: 700; color: #1e293b;}
         .balance-right { text-align: right;}
-        .balance-val { font-size: 22px; font-weight: 800; color: #1e293b; }
-        .balance-unit { font-size: 13px; font-weight: normal; color: #94a3b8; }
+        .balance-val { font-size: 24px; font-weight: 800; color: #1e293b; }
 
-        /* ================= 页面 3: 规则 ================= */
+        /* 规则面板 */
         .rules-content { padding-top: 10px; color: #1e293b; padding-bottom: 40px;}
-        .rules-section { margin-bottom: 30px; background: #ffffff; padding: 24px; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);}
-        .rules-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;}
+        .rules-section { margin-bottom: 24px; background: #ffffff; padding: 24px; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);}
+        .rules-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; }
         .rules-text { font-size: 15px; color: #475569; line-height: 1.6; }
         .rules-list { padding-left: 20px; margin: 0; }
         .rules-list li { margin-bottom: 8px; }
 
-        /* ================= 底部导航栏 ================= */
+        /* 底部导航栏 */
         .tab-bar { display: flex; justify-content: space-around; align-items: center; background: #ffffff; border-top: 1px solid #f1f5f9; padding: 14px 0 24px 0; z-index: 20; flex-shrink: 0;}
         .tab-item { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #94a3b8; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s;}
         .tab-item.active { color: #3b82f6; }
         .tab-icon { font-size: 24px; }
 
-        /* ================= 电脑端模拟器模式 ================= */
+        /* 电脑端模拟器模式 */
         @media (min-width: 768px) {
-            body { 
-                background-color: #0f172a; display: flex; justify-content: center; align-items: center; 
-            }
+            body { background-color: #0f172a; display: flex; justify-content: center; align-items: center; }
             .app-container {
                 width: 390px; height: 844px; border-radius: 45px; 
                 box-shadow: 0 0 0 10px #1e293b, 0 20px 50px rgba(0,0,0,0.5); 
@@ -157,30 +147,16 @@
             <div class="logo-row">
                 <div class="logo-icon">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <linearGradient id="ufo-body" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stop-color="#60a5fa" />
-                                <stop offset="100%" stop-color="#3b82f6" />
-                            </linearGradient>
-                            <linearGradient id="ufo-glass" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stop-color="#e0f2fe" />
-                                <stop offset="100%" stop-color="#bae6fd" />
-                            </linearGradient>
-                        </defs>
-                        <path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="url(#ufo-glass)" />
-                        <ellipse cx="50" cy="55" rx="45" ry="16" fill="url(#ufo-body)" />
-                        <circle cx="35" cy="55" r="4" fill="#fff" />
-                        <circle cx="50" cy="57" r="4" fill="#fff" />
-                        <circle cx="65" cy="55" r="4" fill="#fff" />
+                        <path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" />
+                        <ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" />
+                        <circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" />
                     </svg>
                 </div>
                 <div class="title">UFO<span class="title-blue">生态</span></div>
             </div>
             <div id="walletInfo" class="wallet-info">
-                <span class="dot"></span>
-                <span id="walletAddress">0x...</span>
+                <span class="dot"></span><span id="walletAddress">0x...</span>
             </div>
-            <!-- 使用 Reown 原生唤起 -->
             <button id="connectBtn" class="connect-btn" onclick="openReown()">连接钱包</button>
         </div>
 
@@ -192,8 +168,9 @@
                 <div class="panel">
                     <div class="panel-title">闪兑</div>
                     <div class="input-box">
-                        <div class="input-row"><span id="labelPay">你支付</span></div>
+                        <div class="input-row"><span>你支付</span></div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                            <!-- 绑定了 oninput 事件 -->
                             <input type="number" id="inputAmount" class="input-field" placeholder="0.0" oninput="calculateOutput()">
                             <div id="pillPay" class="token-pill">
                                 <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon">
@@ -204,9 +181,7 @@
 
                     <div class="switch-container">
                         <button class="switch-btn" onclick="toggleMode()">
-                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M7 10l5-5 5 5"/><path d="M7 14l5 5 5-5"/>
-                            </svg>
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5-5 5 5"/><path d="M7 14l5 5 5-5"/></svg>
                         </button>
                     </div>
 
@@ -237,20 +212,14 @@
                             <div class="balance-logo"><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png"></div>
                             <div class="balance-name">USDT</div>
                         </div>
-                        <div class="balance-right">
-                            <div class="balance-val"><span id="usdtBalance">0.0</span></div>
-                        </div>
+                        <div class="balance-right"><div class="balance-val"><span id="usdtBalance">0.0</span></div></div>
                     </div>
                     <div class="balance-item">
                         <div class="balance-left">
-                            <div class="balance-logo">
-                                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg>
-                            </div>
+                            <div class="balance-logo"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg></div>
                             <div class="balance-name">UFO</div>
                         </div>
-                        <div class="balance-right">
-                            <div class="balance-val"><span id="ufoBalance">0.0</span></div>
-                        </div>
+                        <div class="balance-right"><div class="balance-val"><span id="ufoBalance">0.0</span></div></div>
                     </div>
                 </div>
             </div>
@@ -260,17 +229,15 @@
                 <div class="rules-content">
                     <div class="rules-section">
                         <div class="rules-title">🌐 UFO 应用场景</div>
-                        <div class="rules-text">
-                            UFO 是一种基于 BSC 链发行的去中心化稳定资产，专为高频跨境支付与商业结算设计。应用场景包括但不限于：企业间大额跨境贸易结算、供应链金融支付、加密资产避险保值，以及全球商户收款。
-                        </div>
+                        <div class="rules-text">UFO 是一种基于 BSC 链发行的去中心化稳定资产，专为高频跨境支付与商业结算设计。应用场景包括但不限于：企业间大额跨境贸易结算、供应链金融支付、加密资产避险保值，以及全球商户收款。</div>
                     </div>
                     <div class="rules-section">
                         <div class="rules-title">🛡️ 安全承诺</div>
                         <div class="rules-text">
                             <ul class="rules-list">
-                                <li><b>100% 资金储备：</b> 底层由高流动性资产提供全额背书，不搞部分准备金。</li>
-                                <li><b>透明金库：</b> 所有的资金流向与铸造、销毁记录均可在区块链上公开审计。</li>
-                                <li><b>合约安全：</b> 智能合约已通过严格测试与审计，无后门，不可篡改。</li>
+                                <li><b>100% 资金储备：</b> 底层由高流动性资产提供全额背书。</li>
+                                <li><b>透明金库：</b> 所有的资金流向与铸造、销毁记录均可在链上审计。</li>
+                                <li><b>合约安全：</b> 智能合约已通过严格测试与审计，不可篡改。</li>
                             </ul>
                         </div>
                     </div>
@@ -278,62 +245,115 @@
                         <div class="rules-title">⚠️ 使用须知</div>
                         <div class="rules-text">
                             <ul class="rules-list">
-                                <li><b>非理财产品：</b> UFO 是支付结算工具，不承诺任何固定年化收益，无升值预期。</li>
-                                <li><b>手续费：</b> 双向兑换操作均收取 0.5% 的手续费（已自动在到账金额中扣除）。</li>
+                                <li><b>非理财产品：</b> UFO 是支付结算工具，不承诺固定年化收益。</li>
+                                <li><b>手续费：</b> 双向兑换操作均收取 0.5% 的手续费。</li>
                                 <li><b>汇率机制：</b> 兑换比例动态参考金库 NAV 浮动。</li>
-                                <li><b>钱包安全：</b> 请务必自行保管好钱包私钥，本平台不托管用户资产。</li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
-
         </div>
 
-        <!-- 底部导航栏 -->
+        <!-- 底部导航 -->
         <div class="tab-bar">
             <div id="tab-swap" class="tab-item active" onclick="switchTab('swap')">
-                <div class="tab-icon">🔄</div>
-                <span>兑换</span>
+                <div class="tab-icon">🔄</div><span>兑换</span>
             </div>
             <div id="tab-assets" class="tab-item" onclick="switchTab('assets')">
-                <div class="tab-icon">📊</div>
-                <span>资产</span>
+                <div class="tab-icon">📊</div><span>资产</span>
             </div>
             <div id="tab-rules" class="tab-item" onclick="switchTab('rules')">
-                <div class="tab-icon">📄</div>
-                <span>规则</span>
+                <div class="tab-icon">📄</div><span>规则</span>
             </div>
         </div>
     </div>
 
-    <!-- 引入 Ethers -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+    <!-- ==================================================== -->
+    <!-- 第一部分：普通 JS，确保 UI 绝对能点，与网络无关 -->
+    <!-- ==================================================== -->
+    <script>
+        let isBuyingUFO = true;
+        let currentNav = 10;
+        const FEE_RATE = 0.005;
 
-    <!-- 引入 Reown AppKit (ESM) -->
+        // 1. 切换 Tab
+        window.switchTab = (tab) => {
+            document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${tab}`).classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+        };
+
+        // 2. 切换模式
+        window.toggleMode = () => {
+            isBuyingUFO = !isBuyingUFO;
+            if (isBuyingUFO) {
+                document.getElementById('pillPay').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
+                document.getElementById('pillReceive').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
+                if(window.currentAddress) document.getElementById('actionBtn').innerText = "立即兑换";
+            } else {
+                document.getElementById('pillPay').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
+                document.getElementById('pillReceive').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
+                if(window.currentAddress) document.getElementById('actionBtn').innerText = "立即赎回";
+            }
+            document.getElementById('inputAmount').value = '';
+            document.getElementById('outputAmount').innerText = '0.0';
+        };
+
+        // 3. 计算汇率 (输入框打字立刻能算)
+        window.calculateOutput = () => {
+            const input = parseFloat(document.getElementById('inputAmount').value);
+            if (isNaN(input) || input <= 0) {
+                document.getElementById('outputAmount').innerText = '0.0';
+                return;
+            }
+            let output = 0;
+            if (isBuyingUFO) {
+                output = (input * (1 - FEE_RATE)) / (currentNav || 1);
+            } else {
+                output = (input * (currentNav || 1)) * (1 - FEE_RATE);
+            }
+            document.getElementById('outputAmount').innerText = output.toFixed(4).replace(/\.?0+$/, '');
+        };
+
+        // 4. 全局消息展示
+        window.showMsg = (text) => {
+            const el = document.getElementById('msgBox');
+            if (!text) { el.style.display = 'none'; } 
+            else { el.innerText = text; el.style.display = 'block'; }
+        };
+
+        // 格式化
+        window.formatAmount = (val) => {
+            if (!val) return '0.0';
+            const num = parseFloat(val);
+            if (num === 0) return '0.0';
+            return num.toFixed(4).replace(/\.?0+$/, '');
+        };
+
+        // 防止 Module 崩溃导致按钮点不动，设置一个默认的 openReown 占位符
+        window.openReown = () => { alert("正在加载钱包组件，请稍后... 或检查网络是否屏蔽了 esm.sh"); };
+        window.handleAction = () => { alert("正在加载钱包组件，请稍后..."); };
+    </script>
+
+    <!-- ==================================================== -->
+    <!-- 第二部分：ES Module，负责链上交互和 Reown 弹窗 -->
+    <!-- ==================================================== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
     <script type="module">
         import { createAppKit } from 'https://esm.sh/@reown/appkit@1.6.5';
         import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.6.5';
         import { bsc } from 'https://esm.sh/@reown/appkit@1.6.5/networks';
 
-        // ================= 配置区 =================
         const VAULT_ADDRESS = '0x你的BSC金库地址'; 
         const UFO_ADDRESS = '0x你的BSC_UFO地址';
         const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
         const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
-        const ERC20_ABI = [
-            "function allowance(address, address) view returns (uint256)",
-            "function approve(address, uint256) returns (bool)",
-            "function balanceOf(address) view returns (uint256)"
-        ];
-        const VAULT_ABI = [
-            "function deposit(uint256)", 
-            "function withdraw(uint256)",
-            "function getExchangeRate() view returns (uint256)"
-        ];
+        const ERC20_ABI = ["function allowance(address, address) view returns (uint256)", "function approve(address, uint256) returns (bool)", "function balanceOf(address) view returns (uint256)"];
+        const VAULT_ABI = ["function deposit(uint256)", "function withdraw(uint256)", "function getExchangeRate() view returns (uint256)"];
 
-        // 初始化 Reown AppKit
         const PROJECT_ID = 'd6431212399f6c487b364387859983ea'; 
 
         const modal = createAppKit({
@@ -351,27 +371,23 @@
 
         let currentAddress = null;
         let currentSigner = null;
-        let isBuyingUFO = true; 
         let currentNav = 10;
-        let uBalanceStr = '0.0';
-        let ufoBalanceStr = '0.0';
-        
-        const FEE_RATE = 0.005;
 
-        // 挂载全局唤起方法
+        // 覆盖初始占位符，挂载真实的 Reown
         window.openReown = () => { modal.open(); };
 
-        // 监听 Reown 状态
         modal.subscribeAccount((account) => {
             if (account.isConnected) {
                 currentAddress = account.address;
+                window.currentAddress = account.address;
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('walletInfo').style.display = 'flex';
                 document.getElementById('walletAddress').innerText = `${currentAddress.slice(0,4)}...${currentAddress.slice(-4)}`;
-                document.getElementById('actionBtn').innerText = isBuyingUFO ? "立即兑换" : "立即赎回";
+                document.getElementById('actionBtn').innerText = "立即兑换";
                 fetchBalances();
             } else {
                 currentAddress = null;
+                window.currentAddress = null;
                 document.getElementById('connectBtn').style.display = 'block';
                 document.getElementById('walletInfo').style.display = 'none';
                 document.getElementById('actionBtn').innerText = "连接钱包";
@@ -387,63 +403,13 @@
             }
         });
 
-        // ================= Tab 切换逻辑 =================
-        window.switchTab = (tab) => {
-            // 隐藏所有页面
-            document.getElementById('view-swap').classList.remove('active');
-            document.getElementById('view-assets').classList.remove('active');
-            document.getElementById('view-rules').classList.remove('active');
-            
-            // 取消激活所有 Tab
-            document.getElementById('tab-swap').classList.remove('active');
-            document.getElementById('tab-assets').classList.remove('active');
-            document.getElementById('tab-rules').classList.remove('active');
-
-            // 激活当前页面
-            document.getElementById(`view-${tab}`).classList.add('active');
-            document.getElementById(`tab-${tab}`).classList.add('active');
-        };
-
-        // ================= 兑换逻辑 =================
-        window.toggleMode = () => {
-            isBuyingUFO = !isBuyingUFO;
-            if (isBuyingUFO) {
-                document.getElementById('labelPay').innerText = '你支付';
-                document.getElementById('pillPay').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
-                document.getElementById('pillReceive').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
-                if(currentAddress) document.getElementById('actionBtn').innerText = "立即兑换";
-            } else {
-                document.getElementById('labelPay').innerText = '你支付';
-                document.getElementById('pillPay').innerHTML = `<svg viewBox="0 0 100 100" class="token-icon" xmlns="http://www.w3.org/2000/svg"><path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="#bae6fd" /><ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" /><circle cx="35" cy="55" r="4" fill="#fff" /><circle cx="50" cy="57" r="4" fill="#fff" /><circle cx="65" cy="55" r="4" fill="#fff" /></svg><span>UFO</span>`;
-                document.getElementById('pillReceive').innerHTML = '<img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" class="token-icon"><span>USDT</span>';
-                if(currentAddress) document.getElementById('actionBtn').innerText = "立即赎回";
-            }
-            document.getElementById('inputAmount').value = '';
-            document.getElementById('outputAmount').innerText = '0.0';
-        };
-
-        window.calculateOutput = () => {
-            const input = parseFloat(document.getElementById('inputAmount').value);
-            if (isNaN(input) || input <= 0) {
-                document.getElementById('outputAmount').innerText = '0.0';
-                return;
-            }
-            let output = 0;
-            if (isBuyingUFO) {
-                output = (input * (1 - FEE_RATE)) / (currentNav || 1);
-            } else {
-                output = (input * (currentNav || 1)) * (1 - FEE_RATE);
-            }
-            document.getElementById('outputAmount').innerText = formatAmount(output);
-        };
-
-        // ================= 数据拉取 =================
         const fetchNav = async () => {
             try {
                 const vaultContract = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, rpcProvider);
                 const rate = await vaultContract.getExchangeRate();
                 currentNav = parseFloat(ethers.formatUnits(rate, 18));
-                document.getElementById('rateValue').innerText = formatAmount(currentNav);
+                // 更新普通JS里的汇率
+                document.getElementById('rateValue').innerText = window.formatAmount(currentNav);
             } catch (err) {
                 document.getElementById('rateValue').innerText = "10.0"; 
             }
@@ -456,77 +422,62 @@
                 const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
                 
                 const uBal = await usdtContract.balanceOf(currentAddress);
-                uBalanceStr = ethers.formatUnits(uBal, 6);
-                
                 const ufoBal = await ufoContract.balanceOf(currentAddress);
-                ufoBalanceStr = ethers.formatUnits(ufoBal, 18); 
 
-                document.getElementById('usdtBalance').innerText = formatAmount(uBalanceStr);
-                document.getElementById('ufoBalance').innerText = formatAmount(ufoBalanceStr);
+                document.getElementById('usdtBalance').innerText = window.formatAmount(ethers.formatUnits(uBal, 6));
+                document.getElementById('ufoBalance').innerText = window.formatAmount(ethers.formatUnits(ufoBal, 18));
             } catch (err) { console.error(err); }
         };
 
-        // ================= 交易执行 =================
         window.handleAction = async () => {
             if (!currentAddress || !currentSigner) {
                 window.openReown();
                 return;
             }
             const inputAmount = document.getElementById('inputAmount').value;
-            if (!inputAmount || Number(inputAmount) <= 0) return showMsg("请输入有效金额");
+            if (!inputAmount || Number(inputAmount) <= 0) return window.showMsg("请输入有效金额");
             
             const btn = document.getElementById('actionBtn');
             btn.disabled = true;
             btn.innerText = "处理中...";
-            showMsg('');
+            window.showMsg('');
 
             try {
                 const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, currentSigner);
-                if (isBuyingUFO) {
+                // 判断当前模式
+                const isBuy = document.getElementById('pillPay').innerHTML.includes('Tether');
+                
+                if (isBuy) {
                     const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, currentSigner);
                     const rawAmount = ethers.parseUnits(inputAmount, 6);
                     const allowance = await usdt.allowance(currentAddress, VAULT_ADDRESS);
                     if (allowance < rawAmount) {
-                        showMsg("正在授权 USDT...");
+                        window.showMsg("正在授权 USDT...");
                         const txApprove = await usdt.approve(VAULT_ADDRESS, ethers.MaxUint256);
                         await txApprove.wait();
                     }
-                    showMsg("正在兑换 UFO...");
+                    window.showMsg("正在兑换 UFO...");
                     const tx = await vault.deposit(rawAmount);
                     await tx.wait();
-                    showMsg("兑换成功！");
+                    window.showMsg("兑换成功！");
                 } else {
                     const rawAmount = ethers.parseUnits(inputAmount, 18);
-                    showMsg("正在赎回 USDT...");
+                    window.showMsg("正在赎回 USDT...");
                     const tx = await vault.withdraw(rawAmount);
                     await tx.wait();
-                    showMsg("赎回成功！");
+                    window.showMsg("赎回成功！");
                 }
                 document.getElementById('inputAmount').value = '';
                 document.getElementById('outputAmount').innerText = '0.0';
                 fetchBalances();
             } catch (err) {
-                showMsg(err.reason || err.shortMessage || err.message || "交易失败");
+                window.showMsg(err.reason || err.shortMessage || err.message || "交易失败");
             } finally {
                 btn.disabled = false;
-                btn.innerText = isBuyingUFO ? "立即兑换" : "立即赎回";
+                btn.innerText = "立即操作";
             }
         };
 
-        const showMsg = (text) => {
-            const el = document.getElementById('msgBox');
-            if (!text) { el.style.display = 'none'; } 
-            else { el.innerText = text; el.style.display = 'block'; }
-        };
-
-        const formatAmount = (val) => {
-            if (!val) return '0.0';
-            const num = parseFloat(val);
-            if (num === 0) return '0.0';
-            return num.toFixed(4).replace(/\.?0+$/, '');
-        };
-
-        // 初始化拉取
         window.addEventListener('load', fetchNav);
     </script>
 </body>
