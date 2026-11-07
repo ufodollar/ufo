@@ -10,9 +10,16 @@ try {
   createAppKit({
     adapters: [new EthersAdapter()],
     networks: [bsc],
-    metadata: { name: 'UFO Ecosystem', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
+    metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { analytics: true, allWallets: { showWallets: true } }
+    features: { 
+      analytics: true, 
+      allWallets: { showWallets: true } 
+    },
+    // 🌟 强制把 Phantom 钱包置顶 (这是 Phantom 的官方 WalletConnect ID)
+    featuredWalletIds: [
+      'a797aa35c0fadbfc1a53e7f675162e1526e96d1d', // Phantom
+    ]
   });
 } catch (e) { console.error(e); }
 
@@ -26,7 +33,7 @@ const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
 const VAULT_ABI = ["function getExchangeRate() view returns (uint256)"];
 const FEE_RATE = 0.005; // 0.5% Fee
 
-// Gradient UFO SVG Icon
+// 🌟 修复后的 UFO SVG：加上了深色描边，圆顶清晰可见
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -39,8 +46,11 @@ const UfoIcon = ({ size = 36 }) => (
         <stop offset="100%" stopColor="#bae6fd" />
       </linearGradient>
     </defs>
-    <path d="M 30 50 C 30 25, 70 25, 70 50 Z" fill="url(#ufo-glass)" />
+    {/* 玻璃罩：加大了尺寸，并加上了蓝色边框，确保在白底上清晰可见 */}
+    <path d="M 25 52 C 25 15, 75 15, 75 52 Z" fill="url(#ufo-glass)" stroke="#3b82f6" strokeWidth="3" />
+    {/* 飞碟底盘 */}
     <ellipse cx="50" cy="55" rx="45" ry="16" fill="url(#ufo-body)" />
+    {/* 飞碟底部的三盏灯 */}
     <circle cx="35" cy="55" r="4" fill="#fff" />
     <circle cx="50" cy="57" r="4" fill="#fff" />
     <circle cx="65" cy="55" r="4" fill="#fff" />
@@ -122,7 +132,8 @@ function App() {
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             <UfoIcon size={28} />
           </div>
-          <span style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>UFO<span style={{ color: '#3b82f6' }}>Ecosystem</span></span>
+          {/* 🌟 标题改为 UFO Dollar */}
+          <span style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
         {isConnected ? (
@@ -191,7 +202,7 @@ function App() {
               Real-time Rate: 1 UFO ≈ <span style={{ color: '#3b82f6', fontWeight: '800' }}>{currentNav}</span> USDT
             </div>
             <div style={{ textAlign: 'center', fontSize: '11px', color: '#ef4444', marginTop: '8px', fontWeight: '500' }}>
-              * A 0.5% fee applies to both buy and sell.
+              * A 0.5% fee applies to both directions.
             </div>
 
             <button onClick={handleAction} style={{ width: '100%', padding: '16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer', marginTop: '20px', boxShadow: '0 8px 20px -5px rgba(59,130,246,0.4)' }}>
@@ -240,7 +251,7 @@ function App() {
 
       </div>
 
-      {/* Bottom Navigation Bar - Fixed at bottom */}
+      {/* Bottom Navigation Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
