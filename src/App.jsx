@@ -387,11 +387,13 @@ function App() {
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
-            {/* 🌟 开篇介绍 */}
+            {/* 🌟 更新后的开篇介绍 */}
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>💡 What is UFO Dollar?</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                UFO is a stable digital dollar pegged to USDT at a fixed rate of 1:10 (1 UFO = 10 USDT). It enables fast, confidential, and low-cost global blockchain transactions.
+                UFO is a stable digital dollar pegged to USDT at a fixed rate of 1:10 (1 UFO = 10 USDT). It enables fast, confidential, and low-cost global blockchain transactions. 
+                <br/><br/>
+                UFO is a powerful digital dollar that is globally accepted, permanently circulating, and widely used in over 160 countries. Transfers on the BSC chain reach globally in an instant with a fee of only 0.5%.
               </p>
             </div>
 
