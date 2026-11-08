@@ -79,6 +79,48 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
+  // 🌟 辅助函数：自动检测并请求切换到 BSC
+  const ensureBscNetwork = async () => {
+    if (!walletProvider) return false;
+    try {
+      // 尝试请求切换到 BSC (Chain ID 56)
+      await walletProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
+      return true;
+    } catch (switchError) {
+      // 4902 表示用户钱包里还没有添加 BSC 网络
+      if (switchError.code === 4902) {
+        try {
+          await walletProvider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x38',
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com/']
+            }],
+          });
+          return true;
+        } catch (addError) {
+          alert("Please add BNB Smart Chain to your wallet to continue.");
+          return false;
+        }
+      }
+      // 用户拒绝切换网络
+      return false;
+    }
+  };
+
+  // 连接成功时，立刻自动尝试切换网络
+  useEffect(() => {
+    if (isConnected && walletProvider) {
+      ensureBscNetwork();
+    }
+  }, [isConnected, walletProvider]);
+
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -134,6 +176,10 @@ function App() {
     if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     
+    // 点击操作时，再次确保网络正确
+    const isNetworkOk = await ensureBscNetwork();
+    if (!isNetworkOk) return;
+
     const input = parseFloat(inputAmount);
     if (!inputAmount || input <= 0 || isNaN(input)) return alert("Please enter a valid amount");
 
@@ -346,11 +392,11 @@ function App() {
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
-            {/* 🌟 新增：网络限制说明 */}
+            {/* 🌟 文案优化：强调系统会自动提示切换 */}
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>⛓️ BNB Chain Exclusive</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                The UFO protocol operates <b>exclusively on the BNB Smart Chain (BSC)</b>. Both swapping and redeeming require BEP-20 USDT. Please ensure your wallet is connected to the BNB Chain network and you hold BEP-20 USDT before initiating any transactions. Cross-chain USDT (e.g., ERC-20 or TRC-20) is not supported and will result in failed transactions.
+                The UFO protocol operates exclusively on the <b>BNB Smart Chain (BSC)</b>. Both swapping and redeeming require BEP-20 USDT. <b>Our system will automatically prompt you to switch</b> to the BNB Chain network if you are connected to another network. Please note that cross-chain USDT (e.g., ERC-20 or TRC-20) is not supported.
               </p>
             </div>
 
@@ -389,7 +435,6 @@ function App() {
               </p>
             </div>
 
-            {/* 🌟 新增：联系我们 */}
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>📬 Contact Us</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '10px' }}>
