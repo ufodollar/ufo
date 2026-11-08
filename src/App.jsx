@@ -20,10 +20,14 @@ try {
   });
 } catch (e) { console.error(e); }
 
+
 // ================= 2. Config & ABI =================
-const VAULT_ADDRESS = '0x你的BSC金库地址'; 
-const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+// ⚠️ 填入你刚刚部署成功的合约地址
+const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; // 这是你的金库地址
+const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   // 这是你的代币地址
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT (不用动)
+
+ 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
