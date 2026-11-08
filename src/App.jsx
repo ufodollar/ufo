@@ -12,17 +12,16 @@ try {
     networks: [bsc],
     metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { 
-      analytics: true, 
-      allWallets: { showWallets: true } 
-    },
+    features: { analytics: true, allWallets: { showWallets: true } },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
+// ⚠️ 填入你刚部署成功的合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
+// BSC 主网 USDT
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
@@ -38,7 +37,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-const FEE_RATE = 0.005; // 0.5% 手续费
+const FEE_RATE = 0.005; // 合约里写死的是 50/10000，即 0.5%
 
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
@@ -67,16 +66,19 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
+  
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.0');
-  const [currentNav, setCurrentNav] = useState(10);
+  const [feeAmount, setFeeAmount] = useState('0.0'); // UI上展示扣除的具体手续费
   
+  const [currentNav, setCurrentNav] = useState(10);
   const [usdtBal, setUsdtBal] = useState('0.0');
   const [ufoBal, setUfoBal] = useState('0.0');
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
+  // 获取合约汇率
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -88,6 +90,7 @@ function App() {
     fetchNav();
   }, []);
 
+  // 获取余额
   const fetchBalances = async () => {
     if (!address) return;
     try {
@@ -96,11 +99,9 @@ function App() {
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
       
-      const exactUsdt = parseFloat(ethers.formatUnits(uBal, 18)).toString(); // BSC USDT 是 18 精度
-      const exactUfo = parseFloat(ethers.formatUnits(ufoBalData, 18)).toString();
-      
-      setUsdtBal(exactUsdt);
-      setUfoBal(exactUfo);
+      // BSC 上的 USDT 和 UFO 都是 18 位小数
+      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toString());
+      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toString());
     } catch (e) {}
   };
 
@@ -108,27 +109,41 @@ function App() {
     if (isConnected) fetchBalances();
   }, [isConnected, address, activeTab]);
 
-  // 🔥 修复：前端精准计算扣除 0.5% 手续费后的真实到账金额
+  // 🔥 核心：前端精准计算，与合约逻辑完全保持一致
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0) {
       setOutputAmount('0.0');
+      setFeeAmount('0.0');
       return;
     }
-    
-    let output = 0;
+
     if (isBuyingUFO) {
-      // 用 USDT 买 UFO：先扣 0.5% USDT，剩下的除以汇率
-      const netUsdt = input * (1 - FEE_RATE);
-      output = netUsdt / (currentNav || 1);
+      // 用户拿 USDT 买 UFO
+      // 手续费 = 输入的 USDT * 0.5%
+      const fee = input * FEE_RATE;
+      // 真正用来换 UFO 的净 USDT
+      const netUsdt = input - fee;
+      // 最终能换到的 UFO 数量
+      const outUfo = netUsdt / (currentNav || 1);
+
+      setFeeAmount(fee.toFixed(4));
+      setOutputAmount(outUfo.toFixed(4).replace(/\.?0+$/, ''));
     } else {
-      // 用 UFO 买 USDT：先乘汇率，再扣 0.5% USDT
+      // 用户拿 UFO 赎回 USDT
+      // 总应得的 USDT (乘汇率)
       const grossUsdt = input * (currentNav || 1);
-      output = grossUsdt * (1 - FEE_RATE);
+      // 手续费 = 总 USDT * 0.5%
+      const fee = grossUsdt * FEE_RATE;
+      // 最终打给用户的 USDT
+      const netUsdt = grossUsdt - fee;
+
+      setFeeAmount(fee.toFixed(4));
+      setOutputAmount(netUsdt.toFixed(4).replace(/\.?0+$/, ''));
     }
-    setOutputAmount(output.toFixed(4).replace(/\.?0+$/, ''));
   }, [inputAmount, isBuyingUFO, currentNav]);
 
+  // 触发链上交易
   const handleAction = async () => {
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     if (!inputAmount || Number(inputAmount) <= 0) return alert("Please enter a valid amount");
@@ -142,6 +157,7 @@ function App() {
       const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
 
       if (isBuyingUFO) {
+        // 用户授权并 Deposit。注意：传入合约的是完整的 inputAmount，合约会自己扣费
         const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, signer);
         const rawAmount = ethers.parseUnits(inputAmount, 18);
 
@@ -157,6 +173,7 @@ function App() {
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
+        // 用户赎回，传入合约的是完整 UFO 数量，合约会自己算汇率并扣费
         const rawAmount = ethers.parseUnits(inputAmount, 18);
         setTxMsg('Redeeming...');
         const tx = await vault.withdraw(rawAmount);
@@ -166,6 +183,7 @@ function App() {
 
       setInputAmount('');
       setOutputAmount('0.0');
+      setFeeAmount('0.0');
       fetchBalances();
     } catch (error) {
       console.error(error);
@@ -184,9 +202,11 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc' }}>
       
+      {/* 光晕背景 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
+      {/* 顶部 Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -207,12 +227,15 @@ function App() {
         )}
       </div>
 
+      {/* 页面内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
+        {/* 1. Swap 兑换页 */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '20px' }}>Swap</h3>
             
+            {/* 支付区域 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
@@ -230,20 +253,19 @@ function App() {
               </div>
             </div>
 
+            {/* 切换按钮 */}
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 20V4" />
-                  <path d="M3 8l4-4 4 4" />
-                  <path d="M17 4v16" />
-                  <path d="M21 16l-4 4-4-4" />
+                  <path d="M7 20V4" /><path d="M3 8l4-4 4 4" /><path d="M17 4v16" /><path d="M21 16l-4 4-4-4" />
                 </svg>
               </button>
             </div>
 
+            {/* 接收区域 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>You Receive</span>
+                <span>You Receive (Estimated)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '28px', fontWeight: '800', color: '#94a3b8' }}>{outputAmount}</div>
@@ -257,11 +279,21 @@ function App() {
               </div>
             </div>
 
-            <div style={{ textAlign: 'center', fontSize: '13px', color: '#64748b', marginTop: '20px', fontWeight: '600', background: '#f8fafc', borderRadius: '10px', padding: '10px' }}>
-              Real-time Rate: 1 UFO = <span style={{ color: '#3b82f6', fontWeight: '800' }}>{currentNav}</span> USDT
-            </div>
-            <div style={{ textAlign: 'center', fontSize: '11px', color: '#ef4444', marginTop: '8px', fontWeight: '500' }}>
-              * A 0.5% protocol fee applies during the contract execution.
+            {/* 🌟 交易明细卡片（增加透明度） */}
+            <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
+                <span>Rate</span>
+                <span>1 UFO = {currentNav} USDT</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
+                <span>Platform Fee (0.5%)</span>
+                <span>-{feeAmount} {isBuyingUFO ? 'USDT' : 'USDT'}</span>
+              </div>
+              <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#1e293b', fontWeight: 'bold' }}>
+                <span>Net Received</span>
+                <span>{outputAmount} {isBuyingUFO ? 'UFO' : 'USDT'}</span>
+              </div>
             </div>
 
             {txMsg && (
@@ -276,6 +308,7 @@ function App() {
           </div>
         )}
 
+        {/* 2. Wallet 资产页 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -310,52 +343,40 @@ function App() {
           </div>
         )}
 
+        {/* 3. Rules 规则页 */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>
-                🔒 Closed-Loop & Off-Market
-              </h4>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🔒 Closed-Loop & Off-Market</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
                 UFO is <b>NOT a public market asset</b>. It will never be listed on any centralized or decentralized exchange (CEX/DEX), and no public liquidity pools will ever be created. UFO operates exclusively as a closed-loop settlement asset designed strictly for B2B high-value cross-border payments and enterprise fund clearing.
               </p>
             </div>
-
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>
-                🕶️ ZK-Powered Privacy & Compliance
-              </h4>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🕶️ ZK-Powered Privacy & Compliance</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
                 Built with <b>ZK (Zero-Knowledge) technology</b>, UFO provides enterprise-grade payment confidentiality. Your transaction amounts and counterparties are hidden from the public eye to protect commercial secrets. However, through Selective Disclosure, you can generate cryptographic proofs to share specific transaction data with auditors or regulators when required.
               </p>
             </div>
-
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>
-                🛡️ 100% Reserve & KYB Isolation
-              </h4>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🛡️ 100% Reserve & KYB Isolation</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
                 Every UFO is backed 1:10 by USDT held in our secure vault. To prevent contamination from blacklisted funds (e.g., Tether freeze risks), our vault implements strict KYB (Know Your Business) whitelisting. Only verified institutional clients can mint or redeem UFO.
               </p>
             </div>
-
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>
-                ⚠️ Disclaimer & Jurisdiction
-              </h4>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>⚠️ Disclaimer & Jurisdiction</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                UFO is a payment and settlement tool, not an investment product. We do not promise any fixed annualized yield.
-                <br/><br/>
+                UFO is a payment and settlement tool, not an investment product. We do not promise any fixed annualized yield.<br/><br/>
                 <strong>User Jurisdiction Notice:</strong> Users are solely responsible for ensuring that their access to and use of the UFO protocol complies with the laws, regulations, and policies of their local jurisdiction. UFO is not available to persons located in jurisdictions where such use is prohibited or restricted.
               </p>
             </div>
-
           </div>
         )}
 
       </div>
 
+      {/* 底部导航栏 */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
