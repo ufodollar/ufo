@@ -79,18 +79,16 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
-  // 🌟 辅助函数：自动检测并请求切换到 BSC
+  // 自动检测并请求切换到 BSC
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
-      // 尝试请求切换到 BSC (Chain ID 56)
       await walletProvider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: '0x38' }],
       });
       return true;
     } catch (switchError) {
-      // 4902 表示用户钱包里还没有添加 BSC 网络
       if (switchError.code === 4902) {
         try {
           await walletProvider.request({
@@ -109,12 +107,10 @@ function App() {
           return false;
         }
       }
-      // 用户拒绝切换网络
       return false;
     }
   };
 
-  // 连接成功时，立刻自动尝试切换网络
   useEffect(() => {
     if (isConnected && walletProvider) {
       ensureBscNetwork();
@@ -176,7 +172,6 @@ function App() {
     if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     
-    // 点击操作时，再次确保网络正确
     const isNetworkOk = await ensureBscNetwork();
     if (!isNetworkOk) return;
 
@@ -392,7 +387,14 @@ function App() {
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
-            {/* 🌟 文案优化：强调系统会自动提示切换 */}
+            {/* 🌟 开篇介绍 */}
+            <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>💡 What is UFO Dollar?</h4>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
+                UFO is a stable digital dollar pegged to USDT at a fixed rate of 1:10 (1 UFO = 10 USDT). It enables fast, confidential, and low-cost global blockchain transactions.
+              </p>
+            </div>
+
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>⛓️ BNB Chain Exclusive</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
