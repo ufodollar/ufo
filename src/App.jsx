@@ -16,16 +16,14 @@ try {
       analytics: true, 
       allWallets: { showWallets: true } 
     },
-    // 强制置顶 Phantom 钱包
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
-// ⚠️ 请替换为你真实的 BSC 合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC Mainnet USDT
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -40,10 +38,8 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-// 注意：0.5% 手续费已在合约层扣除，前端展示毛汇率计算结果
-const RATE_MULTIPLIER = 10; 
+const FEE_RATE = 0.005; // 0.5% 手续费
 
-// UFO 精美渐变图标
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -81,7 +77,6 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
-  // 获取汇率
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -93,7 +88,6 @@ function App() {
     fetchNav();
   }, []);
 
-  // 精确获取余额
   const fetchBalances = async () => {
     if (!address) return;
     try {
@@ -102,7 +96,7 @@ function App() {
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
       
-      const exactUsdt = parseFloat(ethers.formatUnits(uBal, 18)).toString(); // BSC USDT 精度 18
+      const exactUsdt = parseFloat(ethers.formatUnits(uBal, 18)).toString(); // BSC USDT 是 18 精度
       const exactUfo = parseFloat(ethers.formatUnits(ufoBalData, 18)).toString();
       
       setUsdtBal(exactUsdt);
@@ -114,21 +108,27 @@ function App() {
     if (isConnected) fetchBalances();
   }, [isConnected, address, activeTab]);
 
-  // 计算兑换输出
+  // 🔥 修复：前端精准计算扣除 0.5% 手续费后的真实到账金额
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0) {
       setOutputAmount('0.0');
       return;
     }
-    // 前端展示完全不扣费的预览（用户在钱包签名时能看到合约扣除 0.5% 后的真实到账）
-    let output = isBuyingUFO 
-      ? (input / (currentNav || 1))
-      : (input * (currentNav || 1));
+    
+    let output = 0;
+    if (isBuyingUFO) {
+      // 用 USDT 买 UFO：先扣 0.5% USDT，剩下的除以汇率
+      const netUsdt = input * (1 - FEE_RATE);
+      output = netUsdt / (currentNav || 1);
+    } else {
+      // 用 UFO 买 USDT：先乘汇率，再扣 0.5% USDT
+      const grossUsdt = input * (currentNav || 1);
+      output = grossUsdt * (1 - FEE_RATE);
+    }
     setOutputAmount(output.toFixed(4).replace(/\.?0+$/, ''));
   }, [inputAmount, isBuyingUFO, currentNav]);
 
-  // 执行链上交易
   const handleAction = async () => {
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     if (!inputAmount || Number(inputAmount) <= 0) return alert("Please enter a valid amount");
@@ -143,7 +143,7 @@ function App() {
 
       if (isBuyingUFO) {
         const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, signer);
-        const rawAmount = ethers.parseUnits(inputAmount, 18); // BSC USDT 是 18 位
+        const rawAmount = ethers.parseUnits(inputAmount, 18);
 
         const allowance = await usdt.allowance(address, VAULT_ADDRESS);
         if (allowance < rawAmount) {
@@ -175,7 +175,6 @@ function App() {
     }
   };
 
-  // 格式化法币
   const formatUsd = (val) => {
     const num = Number(val);
     if (isNaN(num)) return '0.00';
@@ -185,11 +184,9 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc' }}>
       
-      {/* 浅色背景光晕 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
-      {/* 顶部 Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -210,10 +207,8 @@ function App() {
         )}
       </div>
 
-      {/* 主内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
-        {/* 1. Swap 页面 */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '20px' }}>Swap</h3>
@@ -248,7 +243,7 @@ function App() {
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>You Receive (Before 0.5% Fee)</span>
+                <span>You Receive</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '28px', fontWeight: '800', color: '#94a3b8' }}>{outputAmount}</div>
@@ -281,7 +276,6 @@ function App() {
           </div>
         )}
 
-        {/* 2. Wallet 页面 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -316,7 +310,6 @@ function App() {
           </div>
         )}
 
-        {/* 3. Rules 页面（更新后的最新定位） */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
@@ -363,7 +356,6 @@ function App() {
 
       </div>
 
-      {/* 底部导航 */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
