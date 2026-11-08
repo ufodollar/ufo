@@ -69,17 +69,16 @@ function App() {
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
   
   const [inputAmount, setInputAmount] = useState('');
-  const [outputAmount, setOutputAmount] = useState('0.0');
-  const [feeAmount, setFeeAmount] = useState('0.0');
+  const [outputAmount, setOutputAmount] = useState('0.000000');
+  const [feeAmount, setFeeAmount] = useState('0.000000');
   
-  const [currentNav, setCurrentNav] = useState(10);
-  const [usdtBal, setUsdtBal] = useState('0.0');
-  const [ufoBal, setUfoBal] = useState('0.0');
+  const [currentNav, setCurrentNav] = useState(1);
+  const [usdtBal, setUsdtBal] = useState('0.000000');
+  const [ufoBal, setUfoBal] = useState('0.000000');
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
-  // 自动检测并请求切换到 BSC
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
@@ -136,8 +135,9 @@ function App() {
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
       
-      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toString());
-      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toString());
+      // 账本 18 位，前端展示截断到 6 位小数
+      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toFixed(6));
+      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(6));
     } catch (e) {}
   };
 
@@ -148,23 +148,23 @@ function App() {
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
-      setOutputAmount('0.0');
-      setFeeAmount('0.0');
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
       return;
     }
 
+    // 🌟 1:1 的极简计算逻辑，严格保留 6 位小数展示
     if (isBuyingUFO) {
       const fee = input * FEE_RATE;
       const netUsdt = input - fee;
-      const outUfo = netUsdt / (currentNav || 1);
-      setFeeAmount(fee.toFixed(4));
-      setOutputAmount(outUfo.toFixed(4).replace(/\.?0+$/, ''));
+      setFeeAmount(fee.toFixed(6));
+      setOutputAmount(netUsdt.toFixed(6));
     } else {
-      const grossUsdt = input * (currentNav || 1);
+      const grossUsdt = input;
       const fee = grossUsdt * FEE_RATE;
       const netUsdt = grossUsdt - fee;
-      setFeeAmount(fee.toFixed(4));
-      setOutputAmount(netUsdt.toFixed(4).replace(/\.?0+$/, ''));
+      setFeeAmount(fee.toFixed(6));
+      setOutputAmount(netUsdt.toFixed(6));
     }
   }, [inputAmount, isBuyingUFO, currentNav]);
 
@@ -216,8 +216,8 @@ function App() {
       }
 
       setInputAmount('');
-      setOutputAmount('0.0');
-      setFeeAmount('0.0');
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
       fetchBalances();
     } catch (error) {
       console.error(error);
@@ -281,10 +281,10 @@ function App() {
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
-                <span>Balance: {isConnected ? (isBuyingUFO ? usdtBal : ufoBal) : '0.0'}</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? usdtBal : ufoBal) : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.0" style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '800', color: '#1e293b', width: '100%' }} />
+                <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '800', color: '#1e293b', width: '100%' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: 'bold' }}>
                   {isBuyingUFO ? (
                     <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
@@ -361,7 +361,7 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? usdtBal : '0.0'}</span>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? usdtBal : '0.000000'}</span>
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600' }}>≈ ${formatUsd(usdtBal)}</span>
               </div>
             </div>
@@ -377,7 +377,7 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? ufoBal : '0.0'}</span>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>{isConnected ? ufoBal : '0.000000'}</span>
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600' }}>≈ ${formatUsd(Number(ufoBal) * currentNav)}</span>
               </div>
             </div>
@@ -392,7 +392,7 @@ function App() {
                 <span style={{ fontSize: '20px' }}>💵</span> The Trusted Digital Dollar Stablecoin
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                UFO is a highly secure and trusted digital dollar stablecoin designed for the global digital economy. Pegged to USDT at a strict ratio of 1:10 (1 UFO = 10 USDT), it serves as a premier medium for seamless global settlement. Widely adopted across 160+ countries, UFO empowers users with instant cross-border transfers on the BNB Smart Chain, incurring a minimal protocol fee of just 0.5%.
+                UFO is a highly secure and trusted digital dollar stablecoin designed for the global digital economy. Pegged to USDT at a strict 1:1 ratio, it serves as a premier medium for seamless global settlement. Widely adopted across 160+ countries, UFO empowers users with instant cross-border transfers on the BNB Smart Chain, incurring a minimal protocol fee of just 0.5%.
               </p>
             </div>
 
@@ -410,7 +410,7 @@ function App() {
                 <span style={{ fontSize: '20px' }}>🪙</span> 100% Reserve & No Arbitrary Minting
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                <b>Strict Minting & Burning Mechanism:</b> Anyone can mint UFO solely by depositing USDT into the smart contract. When UFO is returned to the vault for redemption, it is instantly burned. The issuer (StoneX) cannot arbitrarily mint UFO out of thin air. Every UFO in circulation is backed 1:10 by actual USDT locked in the secure vault, eliminating fractional reserves and ensuring absolute transparency verified on-chain.
+                <b>Strict 1:1 Minting & Burning Mechanism:</b> Anyone can mint UFO solely by depositing USDT into the smart contract. When UFO is returned to the vault for redemption, it is instantly burned. The issuer (StoneX) cannot arbitrarily mint UFO out of thin air. Every UFO in circulation is backed 1:1 by actual USDT locked in the secure vault, eliminating fractional reserves and ensuring absolute transparency verified on-chain.
               </p>
             </div>
 
