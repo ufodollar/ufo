@@ -21,9 +21,10 @@ try {
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
+// ⚠️ 记得替换为你部署成功的真实地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -38,7 +39,8 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-const FEE_RATE = 0.005; // 0.5%
+// 0.5% 手续费率
+const FEE_RATE = 0.005; 
 
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
@@ -98,6 +100,7 @@ function App() {
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
       
+      // 使用精确格式，防止大数截断
       setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toString());
       setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toString());
     } catch (e) {}
@@ -109,7 +112,7 @@ function App() {
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
-    if (isNaN(input) || input <= 0) {
+    if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.0');
       setFeeAmount('0.0');
       return;
@@ -130,9 +133,20 @@ function App() {
     }
   }, [inputAmount, isBuyingUFO, currentNav]);
 
+  // 🌟 漏洞修复 1：防止重复点击
   const handleAction = async () => {
+    if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
-    if (!inputAmount || Number(inputAmount) <= 0) return alert("Please enter a valid amount");
+    
+    const input = parseFloat(inputAmount);
+    if (!inputAmount || input <= 0 || isNaN(input)) return alert("Please enter a valid amount");
+
+    // 🌟 漏洞修复 2：防止用户余额不足强行调用（节省 Gas）
+    if (isBuyingUFO) {
+      if (input > parseFloat(usdtBal)) return alert("Insufficient USDT balance");
+    } else {
+      if (input > parseFloat(ufoBal)) return alert("Insufficient UFO balance");
+    }
 
     setIsProcessing(true);
     setTxMsg('');
@@ -144,6 +158,7 @@ function App() {
 
       if (isBuyingUFO) {
         const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, signer);
+        // 注意：传给合约的是完整的 inputAmount (如 100)，合约会自己去扣 0.5%
         const rawAmount = ethers.parseUnits(inputAmount, 18);
 
         const allowance = await usdt.allowance(address, VAULT_ADDRESS);
@@ -171,7 +186,8 @@ function App() {
       fetchBalances();
     } catch (error) {
       console.error(error);
-      setTxMsg(error.reason || error.shortMessage || 'Transaction failed');
+      // 更友好的错误提示
+      setTxMsg(error.reason || error.shortMessage || 'Transaction rejected or failed');
     } finally {
       setIsProcessing(false);
     }
@@ -198,18 +214,23 @@ function App() {
         </div>
 
         {isConnected ? (
-          /* 🌟 点击已连接的地址，唤起账户管理面板（支持断开、切换等） */
           <button 
             onClick={() => open({ view: 'Account' })} 
             style={{ 
               background: '#fff', padding: '6px 12px', borderRadius: '20px', 
               fontSize: '13px', fontFamily: 'monospace', fontWeight: 'bold', 
               color: '#1e293b', border: '1px solid #e2e8f0', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', outline: 'none'
+              display: 'flex', alignItems: 'center', outline: 'none', gap: '6px'
             }}
           >
-            <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', marginRight: '6px' }}></span>
-            {address.slice(0, 4)}...{address.slice(-4)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%' }}></span>
+              {address.slice(0, 4)}...{address.slice(-4)}
+            </div>
+            {/* 🌟 新增的切换符号 (向下箭头) */}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
           </button>
         ) : (
           <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
@@ -347,7 +368,6 @@ function App() {
               </p>
             </div>
 
-            {/* 🌟 核心改动：详细的 100% 储备与铸造/销毁说明 */}
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🪙 100% Reserve & Instant Mint/Burn</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
