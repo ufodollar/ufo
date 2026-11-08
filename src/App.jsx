@@ -23,7 +23,7 @@ try {
 // ================= 2. Config & ABI =================
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -79,6 +79,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
+  // 自动检测并请求切换到 BSC
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
@@ -388,28 +389,37 @@ function App() {
             
             <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>💵</span> The Trusted Digital Dollar
+                <span style={{ fontSize: '20px' }}>💵</span> The Trusted Digital Dollar Stablecoin
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                UFO is a highly secure and trusted digital dollar designed for the global digital economy. Pegged to USDT at a strict ratio of 1:10 (1 UFO = 10 USDT), it serves as a premier medium for seamless global settlement. Widely adopted across 160+ countries, UFO empowers users with instant cross-border transfers on the BNB Smart Chain, incurring a minimal protocol fee of just 0.5%.
+                UFO is a highly secure and trusted digital dollar stablecoin designed for the global digital economy. Pegged to USDT at a strict ratio of 1:10 (1 UFO = 10 USDT), it serves as a premier medium for seamless global settlement. Widely adopted across 160+ countries, UFO empowers users with instant cross-border transfers on the BNB Smart Chain, incurring a minimal protocol fee of just 0.5%.
               </p>
             </div>
 
             <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🏛️</span> Institutionally Issued
+                <span style={{ fontSize: '20px' }}>🏛️</span> Institutionally Issued by StoneX
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                <b>Minted and Issued by UFODollar:</b> The UFO token is exclusively minted and issued by the UFODollar institution. This centralized issuance ensures strict regulatory compliance, reserve backing integrity, and professional asset management, providing users with a level of trust comparable to institutional fiat gateways.
+                <b>Minted and Issued by StoneX:</b> The UFO token is exclusively minted and issued by the StoneX institution. This centralized issuance ensures strict regulatory compliance, reserve backing integrity, and professional asset management, providing users with a level of trust comparable to institutional fiat gateways.
               </p>
             </div>
 
             <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🛡️</span> Secure & Tamper-Proof
+                <span style={{ fontSize: '20px' }}>🪙</span> 100% Reserve & No Arbitrary Minting
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                <b>A Highly Secure Stablecoin:</b> Built on blockchain technology, UFO leverages advanced cryptography to provide tamper-proof transactions. Similar to the rigorous security standards of USDC, every transaction is cryptographically signed and immutable, ensuring the highest level of asset safety against fraud or unauthorized alteration.
+                <b>Strict Minting & Burning Mechanism:</b> Anyone can mint UFO solely by depositing USDT into the smart contract. When UFO is returned to the vault for redemption, it is instantly burned. The issuer (StoneX) cannot arbitrarily mint UFO out of thin air. Every UFO in circulation is backed 1:10 by actual USDT locked in the secure vault, eliminating fractional reserves and ensuring absolute transparency verified on-chain.
+              </p>
+            </div>
+
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '20px' }}>🛡️</span> Cryptographically Secure
+              </h4>
+              <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
+                <b>Tamper-Proof Transactions:</b> Built on blockchain technology, UFO leverages advanced cryptography to provide secure, tamper-proof transactions. Similar to the rigorous standards of USDC, every transaction is cryptographically signed and immutable, ensuring the highest level of asset safety against fraud or unauthorized alteration.
               </p>
             </div>
 
@@ -442,17 +452,6 @@ function App() {
 
             <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🪙</span> 100% Reserve & Dynamic Supply
-              </h4>
-              <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
-                <b>Absolute Transparency:</b> Every UFO is backed 1:10 by actual USDT locked in our secure vault. The protocol operates on a dynamic supply mechanism: Depositing USDT triggers instant minting of UFO, while redeeming UFO instantly burns the tokens, releasing the USDT reserves.
-                <br/><br/>
-                This on-chain mechanism ensures the circulating supply of UFO always perfectly matches the vault's actual reserves, making fractional reserves impossible. All states are fully verifiable on BscScan.
-              </p>
-            </div>
-
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '20px' }}>⚖️</span> Jurisdiction & Disclaimer
               </h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>
@@ -475,7 +474,6 @@ function App() {
                 For institutional onboarding, enterprise integration, technical support, or general inquiries, please connect with our team through the channels below.
               </p>
 
-              {/* Telegram */}
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>Telegram</div>
                 <a 
@@ -493,7 +491,6 @@ function App() {
                 </a>
               </div>
 
-              {/* Email */}
               <div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>Email</div>
                 <a 
@@ -514,7 +511,6 @@ function App() {
 
       </div>
 
-      {/* 底部导航栏 (调整字体大小以适应 4 个 Tab) */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '600', cursor: 'pointer', flex: 1 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
