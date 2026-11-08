@@ -21,9 +21,10 @@ try {
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
+// ⚠️ 请替换为你部署成功的真实合约地址
 const VAULT_ADDRESS = '0x你的BSC金库地址'; 
 const UFO_ADDRESS = '0x你的BSC_UFO地址';
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -40,7 +41,7 @@ const VAULT_ABI = [
 
 const FEE_RATE = 0.005; 
 
-// 🌟 全局文艺字体设置 (古典衬线体 + 现代无衬线数字)
+// 🌟 全局文艺字体设置 (古典衬线体)
 const FONT_STYLE = {
   fontFamily: '"Lora", "Noto Serif SC", "Songti SC", Georgia, "Times New Roman", serif'
 };
@@ -84,6 +85,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
+  // 自动检测并请求切换到 BSC
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
@@ -242,6 +244,7 @@ function App() {
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
+      {/* 顶部 Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -275,8 +278,10 @@ function App() {
         )}
       </div>
 
+      {/* 内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
+        {/* 1. Swap 页面 */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
@@ -353,6 +358,7 @@ function App() {
           </div>
         )}
 
+        {/* 2. Wallet 页面 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -387,77 +393,82 @@ function App() {
           </div>
         )}
 
+        {/* 3. Rules 页面 (重构版) */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>💵</span> The Trusted Digital Dollar Stablecoin
-              </h4>
+            <div style={{ background: '#fff', padding: '28px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '10px' }}>
+                The Trusted Digital Dollar Stablecoin
+              </div>
+              <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#1e293b', lineHeight: 1.4, marginBottom: '12px' }}>
+                A digital dollar built for global settlement.
+              </h3>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                UFO is a highly secure and trusted digital dollar stablecoin designed for the global digital economy. Pegged to USDT at a strict 1:1 ratio, it serves as a premier medium for seamless global settlement. Built with advanced cryptography, it leverages blockchain technology to guarantee tamper-proof, immutable transactions. Every transaction is cryptographically signed and verified on-chain, ensuring the highest level of asset safety against fraud or unauthorized alteration.
+                UFO is a fully reserved digital dollar stablecoin issued by StoneX, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a 1:1 USDT peg and a 0.5% protocol fee. Circulating in 160+ countries, with transactions protected by cryptographic encryption.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🕶️</span> ZK-Powered Privacy & Compliance
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Cryptographically tamper-proof.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                <b>Confidentiality Meets Auditability:</b> Built upon Zero-Knowledge (ZK) technology, UFO guarantees enterprise-grade confidentiality. Transaction amounts and counterparties remain hidden from the public ledger to safeguard your commercial secrets. When required, authorized entities can utilize Selective Disclosure to generate cryptographic proofs, sharing specific data with auditors without exposing the entire network's history.
+                Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party—including the issuer. Asset integrity is enforced by mathematics, not institutional trust alone.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🏛️</span> Institutionally Issued by StoneX
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Circulating across 160+ countries. Commercial details shielded.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                <b>Minted and Issued by StoneX:</b> The UFO token is exclusively minted and issued by the StoneX institution. This centralized issuance ensures strict regulatory compliance, reserve backing integrity, and professional asset management, providing users with a level of trust comparable to institutional fiat gateways.
+                UFO is actively used for cross-border settlement in over 160 countries. Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🪙</span> 100% Reserve & No Arbitrary Minting
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Privacy & Compliance</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Confidential by default. Auditable by design.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                <b>Strict 1:1 Minting & Burning Mechanism:</b> Anyone can mint UFO solely by depositing USDT into the smart contract. When UFO is returned to the vault for redemption, it is instantly burned. The issuer (StoneX) cannot arbitrarily mint UFO out of thin air. Every UFO in circulation is backed 1:1 by actual USDT locked in the secure vault, eliminating fractional reserves and ensuring absolute transparency verified on-chain.
+                Built on Zero-Knowledge technology, UFO keeps transaction amounts and counterparties off the public ledger. When regulators or auditors require verification, the holder can generate cryptographic proofs through Selective Disclosure—proving specific facts without exposing the entire transaction history.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>⚡</span> Lightning-Fast Global Transfers
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Issued by StoneX. Fully reserved 1:1. No arbitrary minting.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                <b>Send Money Like a Text Message:</b> Sending money across borders shouldn't take days. With UFO, transferring funds to anyone, anywhere in the world is as instant and easy as sending a text message. Once you hit send, the money arrives in their wallet within seconds—no banks, no waiting, no multi-day delays.
+                UFO is exclusively minted by StoneX and backed 1:1 by USDT held in a transparent vault. Minting occurs only when a verified party deposits USDT; redemption triggers immediate token burning. The issuer cannot create UFO without corresponding reserves. All vault balances are verifiable on-chain via BscScan.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🔒</span> Closed-Loop Architecture
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Settlement Speed</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Send money the way you send a message.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                <b>Institutional-Grade Design:</b> Unlike speculative assets, UFO operates exclusively as a closed-loop settlement network. It is not listed on any public exchanges (CEX/DEX), and no public liquidity pools are formed. This isolates the network from market manipulation, ensuring it remains a pure vehicle for B2B high-value cross-border payments and enterprise fund clearing.
+                Cross-border payments shouldn't take days. With UFO, funds arrive in the recipient's wallet within seconds—no banking hours, no intermediary delays, no multi-day waiting. Settlement operates 24/7, every day of the year.
               </p>
             </div>
 
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '20px' }}>⚖️</span> Jurisdiction & Disclaimer
-              </h4>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Architecture</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Closed-loop by design. Isolated from market speculation.</h4>
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
-                UFO is a payment and settlement instrument, not an investment product. We offer no fixed annualized yields or returns.
-                <br/><br/>
-                <b>User Jurisdiction Notice:</b> Users bear sole responsibility for ensuring their access to and use of the UFO protocol aligns with the laws and regulations of their local jurisdiction. UFO is not offered to individuals in territories where such usage is legally prohibited.
+                UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissioned settlement network, removing exposure to market manipulation and ensuring the asset remains a pure medium for enterprise fund clearing.
+              </p>
+            </div>
+
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '8px' }}>Disclaimer</div>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>A payment instrument, not an investment product.</h4>
+              <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
+                UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered in territories where such usage is prohibited.
               </p>
             </div>
 
           </div>
         )}
 
+        {/* 4. Contact 页面 */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
@@ -505,6 +516,7 @@ function App() {
 
       </div>
 
+      {/* 底部导航栏 */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
