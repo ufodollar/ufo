@@ -313,7 +313,6 @@ function App() {
                 <span>You Receive (Estimated)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {/* 🌟 修改：颜色改为蓝色 */}
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
                   {isBuyingUFO ? (
@@ -399,7 +398,7 @@ function App() {
                 A digital dollar built for global settlement.
               </h3>
               <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is a fully reserved digital dollar stablecoin issued by StoneX, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a 1:1 USDT peg and a 0.5% protocol fee. Circulating in 160+ countries. Crucially, UFO leverages advanced cryptography to prevent on-chain payment information leakage, ensuring your commercial data remains completely private.
+                UFO is a fully reserved digital dollar stablecoin issued by StoneX, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a 1:1 USDT peg and a 0.5% protocol fee. Circulating in 160+ countries. Crucially, UFO leverages advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your commercial data remains completely private.
               </p>
             </div>
 
@@ -462,7 +461,7 @@ function App() {
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Disclaimer</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions, including but not limited to the <b>United States, Mainland China, North Korea, Iran, Syria, and the Crimea region</b>.
+                UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions. The following list is not exhaustive and includes, but is not limited to: <b>United States, Mainland China, North Korea, Iran, Syria, Cuba, Venezuela, Russia, Belarus, Myanmar, Sudan, South Sudan, Afghanistan, and the Crimea, Donetsk, and Luhansk regions</b>.
               </p>
             </div>
 
@@ -520,7 +519,7 @@ function App() {
                     borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', lineHeight: '1.5'
                   }}
                 >
-                  Trinity Chambers, PO Box 4301,<br/>Road Town, Tortola,<br/>British Virgin Islands
+                  Ritter House, Wickhams Cay 2,<br/>P.O. Box 3170, Road Town,<br/>Tortola, VG1110,<br/>British Virgin Islands
                 </div>
               </div>
             </div>
