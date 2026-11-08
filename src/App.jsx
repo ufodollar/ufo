@@ -38,7 +38,7 @@ const VAULT_ABI = [
   "function getExchangeRate() view returns (uint256)"
 ];
 
-const FEE_RATE = 0.005; // 0.5% 手续费
+const FEE_RATE = 0.005; // 0.5%
 
 const UfoIcon = ({ size = 36 }) => (
   <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
@@ -119,14 +119,12 @@ function App() {
       const fee = input * FEE_RATE;
       const netUsdt = input - fee;
       const outUfo = netUsdt / (currentNav || 1);
-
       setFeeAmount(fee.toFixed(4));
       setOutputAmount(outUfo.toFixed(4).replace(/\.?0+$/, ''));
     } else {
       const grossUsdt = input * (currentNav || 1);
       const fee = grossUsdt * FEE_RATE;
       const netUsdt = grossUsdt - fee;
-
       setFeeAmount(fee.toFixed(4));
       setOutputAmount(netUsdt.toFixed(4).replace(/\.?0+$/, ''));
     }
@@ -200,7 +198,7 @@ function App() {
         </div>
 
         {isConnected ? (
-          /* 🌟 修改这里：变成可点击的按钮，调起账户面板 */
+          /* 🌟 点击已连接的地址，唤起账户管理面板（支持断开、切换等） */
           <button 
             onClick={() => open({ view: 'Account' })} 
             style={{ 
@@ -334,24 +332,35 @@ function App() {
 
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
+            
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🔒 Closed-Loop & Off-Market</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
                 UFO is <b>NOT a public market asset</b>. It will never be listed on any centralized or decentralized exchange (CEX/DEX), and no public liquidity pools will ever be created. UFO operates exclusively as a closed-loop settlement asset designed strictly for B2B high-value cross-border payments and enterprise fund clearing.
               </p>
             </div>
+
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🕶️ ZK-Powered Privacy & Compliance</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
                 Built with <b>ZK (Zero-Knowledge) technology</b>, UFO provides enterprise-grade payment confidentiality. Your transaction amounts and counterparties are hidden from the public eye to protect commercial secrets. However, through Selective Disclosure, you can generate cryptographic proofs to share specific transaction data with auditors or regulators when required.
               </p>
             </div>
+
+            {/* 🌟 核心改动：详细的 100% 储备与铸造/销毁说明 */}
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🛡️ 100% Reserve & KYB Isolation</h4>
+              <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>🪙 100% Reserve & Instant Mint/Burn</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                Every UFO is backed 1:10 by USDT held in our secure vault. To prevent contamination from blacklisted funds (e.g., Tether freeze risks), our vault implements strict KYB (Know Your Business) whitelisting. Only verified institutional clients can mint or redeem UFO.
+                The UFO protocol strictly enforces a <b>1:10 USDT backing mechanism</b>. The system operates on an on-demand minting and burning basis, ensuring absolute transparency and liquidity:
+                <br/><br/>
+                <b>1. Instant Minting:</b> When you deposit USDT into the vault, the smart contract automatically calculates the equivalent UFO and mints it directly to your wallet.
+                <br/><br/>
+                <b>2. Instant Burning:</b> When you redeem, the UFO tokens are instantly burned from your wallet, and the corresponding USDT reserves are released to you from the vault.
+                <br/><br/>
+                This on-chain dynamic ensures that the total circulating supply of UFO always perfectly matches the actual reserve balance in the vault, eliminating any risk of unbacked issuance or fractional reserves. All vault balances and transaction states are fully auditable on BscScan.
               </p>
             </div>
+
             <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
               <h4 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '10px', color: '#1e293b' }}>⚠️ Disclaimer & Jurisdiction</h4>
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
