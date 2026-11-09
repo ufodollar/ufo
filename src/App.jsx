@@ -26,7 +26,6 @@ const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE';
 
-// 只保留生态内支持的 2 种 ERC20 代币
 const TOKENS = [
   { symbol: 'USDT', name: 'Tether USD', address: USDT_ADDRESS, decimals: 18, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
   { symbol: 'UFO', name: 'UFO Dollar', address: UFO_ADDRESS, decimals: 18, icon: 'UFO' }
@@ -502,28 +501,67 @@ function App() {
         )}
 
         {activeTab === 'contact' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '24px' }}>📬</span> Contact Us
-              </h4>
-              <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8, marginBottom: '24px' }}>
-                For institutional onboarding, enterprise integration, technical support, or general inquiries, please connect with our team through the channels below.
-              </p>
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Telegram</div>
-                <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#eff6ff', color: '#3b82f6', fontWeight: '700', fontSize: '15px', textDecoration: 'none', borderRadius: '12px', border: '1px solid #bfdbfe', transition: '0.2s' }}>t.me/ufodollar</a>
-              </div>
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Email</div>
-                <a href="mailto:ufodollar6@gmail.com" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', color: '#1e293b', fontWeight: '700', fontSize: '15px', textDecoration: 'none', borderRadius: '12px', border: '1px solid #e2e8f0', transition: '0.2s' }}>ufodollar6@gmail.com</a>
-              </div>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Office Address</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', color: '#1e293b', fontWeight: '700', fontSize: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', lineHeight: '1.5' }}>
-                  Ritter House, Wickhams Cay 2,<br/>P.O. Box 3170, Road Town,<br/>Tortola, VG1110,<br/>British Virgin Islands
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
+            
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px', textAlign: 'center' }}>Connect with Us</h2>
+            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>
+              Follow our official channels for the latest updates, support, and institutional onboarding.
+            </p>
+
+            {/* 社交矩阵 (大号图标) */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '40px' }}>
+              {/* Telegram */}
+              <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#229ED9"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.562 8.161c-.18.717-.996 4.302-1.488 6.427-.198.856-.501 1.146-.797 1.168-.608.045-1.075-.311-1.678-.706-1.006-.658-1.521-1.055-2.474-1.69-1.09-.715-1.613-1.092-1.613-1.73 0-.88 1.096-1.408 1.482-1.63 2.157-1.253 4.144-2.018 4.312-2.018.096 0 .225.026.302.075.106.07.155.184.135.308z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>Telegram</span>
+              </a>
+
+              {/* X (Twitter) */}
+              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>X</span>
+              </a>
+
+              {/* YouTube */}
+              <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>YouTube</span>
+              </a>
+            </div>
+
+            {/* 邮件与地址卡片 */}
+            <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <a href="mailto:ufodollar6@gmail.com" style={{ textDecoration: 'none' }}>
+                <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Email Support</div>
+                    <div style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>ufodollar6@gmail.com</div>
+                  </div>
+                </div>
+              </a>
+
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Headquarters</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', lineHeight: '1.4' }}>
+                    Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
         )}
