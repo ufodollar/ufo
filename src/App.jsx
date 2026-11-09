@@ -12,14 +12,17 @@ try {
     networks: [bsc],
     metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { analytics: true, allWallets: { showWallets: true } },
+    features: { 
+      analytics: true, 
+      allWallets: { showWallets: true } 
+    },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
-const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   
+const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
@@ -76,6 +79,7 @@ function App() {
   const [currentNav, setCurrentNav] = useState(1);
   const [usdtBal, setUsdtBal] = useState('0.000000');
   const [ufoBal, setUfoBal] = useState('0.000000');
+  const [bnbBal, setBnbBal] = useState('0.0000'); // 🌟 新增 BNB 余额状态
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
@@ -83,14 +87,23 @@ function App() {
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
-      await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+      await walletProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
       return true;
     } catch (switchError) {
       if (switchError.code === 4902) {
         try {
           await walletProvider.request({
             method: 'wallet_addEthereumChain',
-            params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com/'] }],
+            params: [{
+              chainId: '0x38',
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com/']
+            }],
           });
           return true;
         } catch (addError) {
@@ -124,11 +137,15 @@ function App() {
     try {
       const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
       const ufo = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
+      
       const uBal = await usdt.balanceOf(address);
       const ufoBalData = await ufo.balanceOf(address);
+      // 🌟 获取原生 BNB 余额
+      const bnbBalData = await rpcProvider.getBalance(address);
       
       setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toFixed(6));
       setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(6));
+      setBnbBal(parseFloat(ethers.formatEther(bnbBalData)).toFixed(4));
     } catch (e) {}
   };
 
@@ -179,17 +196,6 @@ function App() {
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
-      
-      // 🔥 核心新增：检查用户钱包里有没有足够的 BNB 支付 Gas 费
-      const bnbBalance = await provider.getBalance(address);
-      const bnbBalanceFormatted = parseFloat(ethers.formatEther(bnbBalance));
-      
-      // 在 BSC 上，即使网络拥堵，0.0005 BNB 也足够完成一次授权+兑换。
-      if (bnbBalanceFormatted < 0.0005) {
-        setIsProcessing(false);
-        return alert(`⚠️ Gas Fee Insufficient!\n\nYour BNB balance is ${bnbBalanceFormatted.toFixed(4)} BNB.\nYou need at least 0.0005 BNB to pay for the network gas fee on BNB Smart Chain.\n\nPlease deposit a small amount of BNB to your wallet and try again.`);
-      }
-
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
 
@@ -351,8 +357,25 @@ function App() {
           </div>
         )}
 
+        {/* 🌟 资产页面更新 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+            
+            {/* BNB 余额卡片 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{width: 40, height: 40}} alt="BNB"/>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>Gas Fee Token</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.0000'}</span>
+                <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '600', fontFamily: 'monospace' }}>Required for Gas</span>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 40, height: 40}} alt="USDT"/>
@@ -385,6 +408,7 @@ function App() {
           </div>
         )}
 
+        {/* 3. Rules 页面 */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
