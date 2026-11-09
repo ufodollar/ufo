@@ -12,21 +12,19 @@ try {
     networks: [bsc],
     metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { 
-      analytics: true, 
-      allWallets: { showWallets: true } 
-    },
+    features: { analytics: true, allWallets: { showWallets: true } },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
 // ================= 2. Config & ABI =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
-const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   
+const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
-const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE'; // Chainlink BNB/USD
+const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE';
 
-const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+// 使用 BNB Chain 官方推荐的稳定节点
+const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.bnbchain.org");
 
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)", 
@@ -108,7 +106,7 @@ function App() {
               chainId: '0x38',
               chainName: 'BNB Smart Chain',
               nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              rpcUrls: ['https://bsc-dataseed.bnbchain.org'],
               blockExplorerUrls: ['https://bscscan.com/']
             }],
           });
@@ -139,43 +137,44 @@ function App() {
     fetchNav();
   }, []);
 
+  // 🔥 彻底重构的余额拉取逻辑
   const fetchBalances = async () => {
-    if (!address) return;
+    if (!address || !walletProvider) return;
     
-    // 使用 allSettled 确保任何一个网络波动不会导致全部余额归零
-    const results = await Promise.allSettled([
-      rpcProvider.getBalance(address),
-      new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(address),
-      new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(address),
-      new ethers.Contract(BNB_ORACLE, ORACLE_ABI, rpcProvider).latestRoundData()
-    ]);
+    try {
+      // 1. BNB 余额：强制通过钱包插件获取，绝对精准
+      const browserProvider = new ethers.BrowserProvider(walletProvider);
+      const bnbBalanceWei = await browserProvider.getBalance(address);
+      setBnbBal(parseFloat(ethers.formatEther(bnbBalanceWei)).toFixed(6));
 
-    // 处理 BNB
-    if (results[0].status === 'fulfilled') {
-      setBnbBal(parseFloat(ethers.formatEther(results[0].value)).toFixed(6));
-    }
-    // 处理 USDT
-    if (results[1].status === 'fulfilled') {
-      setUsdtBal(parseFloat(ethers.formatUnits(results[1].value, 18)).toFixed(6));
-    }
-    // 处理 UFO
-    if (results[2].status === 'fulfilled') {
-      setUfoBal(parseFloat(ethers.formatUnits(results[2].value, 18)).toFixed(6));
-    }
-    // 处理 BNB 价格
-    if (results[3].status === 'fulfilled') {
-      setBnbPrice(parseFloat(ethers.formatUnits(results[3].value.answer, 8)));
+      // 2. USDT / UFO 余额：通过稳定 RPC 节点获取
+      const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
+      const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
+      
+      const uBal = await usdtContract.balanceOf(address);
+      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toFixed(6));
+      
+      const ufoBalData = await ufoContract.balanceOf(address);
+      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(6));
+
+      // 3. 获取 BNB 实时价格
+      const oracleContract = new ethers.Contract(BNB_ORACLE, ORACLE_ABI, rpcProvider);
+      const priceData = await oracleContract.latestRoundData();
+      setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
+      
+    } catch (error) {
+      console.error("获取余额失败:", error);
     }
   };
 
-  // 自动轮询刷新余额（每 10 秒一次）
+  // 自动轮询刷新余额（每 5 秒一次，确保网络波动时能自动恢复）
   useEffect(() => {
-    if (isConnected) {
-      fetchBalances();
-      const interval = setInterval(fetchBalances, 10000);
+    if (isConnected && address) {
+      fetchBalances(); // 立即执行一次
+      const interval = setInterval(fetchBalances, 5000);
       return () => clearInterval(interval);
     }
-  }, [isConnected, address, activeTab]);
+  }, [isConnected, address, activeTab, walletProvider]);
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
@@ -393,7 +392,6 @@ function App() {
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             
-            {/* BNB 余额卡片 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{width: 40, height: 40}} alt="BNB"/>
@@ -404,7 +402,6 @@ function App() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                {/* 🌟 绿色字体的美元估值 */}
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
