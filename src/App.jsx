@@ -22,8 +22,10 @@ try {
 
 // ================= 2. Config & ABI =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
-const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
+const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';   
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE'; // Chainlink BNB/USD
+
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
 const ERC20_ABI = [
@@ -36,6 +38,10 @@ const VAULT_ABI = [
   "function deposit(uint256 usdtAmount)", 
   "function withdraw(uint256 ufoAmount)", 
   "function getExchangeRate() view returns (uint256)"
+];
+
+const ORACLE_ABI = [
+  "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)"
 ];
 
 const FEE_RATE = 0.005; 
@@ -79,7 +85,8 @@ function App() {
   const [currentNav, setCurrentNav] = useState(1);
   const [usdtBal, setUsdtBal] = useState('0.000000');
   const [ufoBal, setUfoBal] = useState('0.000000');
-  const [bnbBal, setBnbBal] = useState('0.0000'); // 🌟 新增 BNB 余额状态
+  const [bnbBal, setBnbBal] = useState('0.000000');
+  const [bnbPrice, setBnbPrice] = useState(600); // 默认兜底价格
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
@@ -134,23 +141,40 @@ function App() {
 
   const fetchBalances = async () => {
     if (!address) return;
-    try {
-      const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
-      const ufo = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
-      
-      const uBal = await usdt.balanceOf(address);
-      const ufoBalData = await ufo.balanceOf(address);
-      // 🌟 获取原生 BNB 余额
-      const bnbBalData = await rpcProvider.getBalance(address);
-      
-      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toFixed(6));
-      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(6));
-      setBnbBal(parseFloat(ethers.formatEther(bnbBalData)).toFixed(4));
-    } catch (e) {}
+    
+    // 使用 allSettled 确保任何一个网络波动不会导致全部余额归零
+    const results = await Promise.allSettled([
+      rpcProvider.getBalance(address),
+      new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(address),
+      new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider).balanceOf(address),
+      new ethers.Contract(BNB_ORACLE, ORACLE_ABI, rpcProvider).latestRoundData()
+    ]);
+
+    // 处理 BNB
+    if (results[0].status === 'fulfilled') {
+      setBnbBal(parseFloat(ethers.formatEther(results[0].value)).toFixed(6));
+    }
+    // 处理 USDT
+    if (results[1].status === 'fulfilled') {
+      setUsdtBal(parseFloat(ethers.formatUnits(results[1].value, 18)).toFixed(6));
+    }
+    // 处理 UFO
+    if (results[2].status === 'fulfilled') {
+      setUfoBal(parseFloat(ethers.formatUnits(results[2].value, 18)).toFixed(6));
+    }
+    // 处理 BNB 价格
+    if (results[3].status === 'fulfilled') {
+      setBnbPrice(parseFloat(ethers.formatUnits(results[3].value.answer, 8)));
+    }
   };
 
+  // 自动轮询刷新余额（每 10 秒一次）
   useEffect(() => {
-    if (isConnected) fetchBalances();
+    if (isConnected) {
+      fetchBalances();
+      const interval = setInterval(fetchBalances, 10000);
+      return () => clearInterval(interval);
+    }
   }, [isConnected, address, activeTab]);
 
   useEffect(() => {
@@ -196,6 +220,15 @@ function App() {
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
+      
+      // Gas 预检
+      const bnbBalance = await provider.getBalance(address);
+      const bnbBalanceFormatted = parseFloat(ethers.formatEther(bnbBalance));
+      if (bnbBalanceFormatted < 0.0005) {
+        setIsProcessing(false);
+        return alert(`⚠️ Gas Fee Insufficient!\n\nYour BNB balance is ${bnbBalanceFormatted.toFixed(6)} BNB.\nYou need at least 0.0005 BNB to pay for the network gas fee on BNB Smart Chain.`);
+      }
+
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, signer);
 
@@ -357,7 +390,6 @@ function App() {
           </div>
         )}
 
-        {/* 🌟 资产页面更新 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             
@@ -371,8 +403,9 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.0000'}</span>
-                <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '600', fontFamily: 'monospace' }}>Required for Gas</span>
+                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
+                {/* 🌟 绿色字体的美元估值 */}
+                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
 
@@ -408,7 +441,6 @@ function App() {
           </div>
         )}
 
-        {/* 3. Rules 页面 */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             
