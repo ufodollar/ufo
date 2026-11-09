@@ -113,9 +113,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (isConnected && walletProvider) { 
-      ensureBscNetwork(); 
-    }
+    if (isConnected && walletProvider) { ensureBscNetwork(); }
   }, [isConnected, walletProvider]);
 
   useEffect(() => {
