@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { createRoot } from 'react-dom/client';
-import { useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect, createAppKit } from '@reown/appkit/react';
+import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
@@ -20,15 +20,7 @@ try {
   });
 } catch (e) { console.error(e); }
 
-// ================= 2. 白名单配置 =================
-// 🔥 在这里添加经过 KYB 审核的企业钱包地址（注意：全小写）
-const WHITELISTED_ADDRESSES = [
-  '0x5246769739a1534ee66589fae2bdb6c3b0cf4eea' 
-  // 后续在这里继续添加，逗号隔开即可，例如：
-  // '0x1234567890abcdef1234567890abcdef12345678'
-];
-
-// ================= 3. 核心资产配置 =================
+// ================= 2. Config & 核心资产白名单 =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
 const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
@@ -85,10 +77,7 @@ function App() {
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider('eip155');
-  const { disconnect } = useDisconnect();
 
-  const [isAuthorized, setIsAuthorized] = useState(false); // 🔥 新增授权状态
-  
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
   
@@ -103,22 +92,6 @@ function App() {
   const [tokenBalances, setTokenBalances] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
-
-  // 🔥 核心验证逻辑：监听钱包连接状态，拦截非白名单用户
-  useEffect(() => {
-    if (isConnected && address) {
-      const lowerAddress = address.toLowerCase();
-      if (WHITELISTED_ADDRESSES.includes(lowerAddress)) {
-        setIsAuthorized(true);
-      } else {
-        setIsAuthorized(false);
-        alert("⛔ Access Denied!\n\nYour wallet address is not in the KYB whitelist.\nPlease contact the UFO team to verify your business identity.");
-        disconnect(); // 强制断开连接
-      }
-    } else {
-      setIsAuthorized(false);
-    }
-  }, [isConnected, address, disconnect]);
 
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
@@ -140,10 +113,10 @@ function App() {
   };
 
   useEffect(() => {
-    if (isConnected && walletProvider && isAuthorized) { 
+    if (isConnected && walletProvider) { 
       ensureBscNetwork(); 
     }
-  }, [isConnected, walletProvider, isAuthorized]);
+  }, [isConnected, walletProvider]);
 
   useEffect(() => {
     const fetchNav = async () => {
@@ -157,8 +130,7 @@ function App() {
   }, []);
 
   const fetchBalances = async () => {
-    // 🔥 拦截非授权用户的余额查询
-    if (!address || !walletProvider || !isAuthorized) return;
+    if (!address || !walletProvider) return;
     
     try {
       const browserProvider = new ethers.BrowserProvider(walletProvider);
@@ -193,12 +165,12 @@ function App() {
   };
 
   useEffect(() => {
-    if (isConnected && address && isAuthorized) {
+    if (isConnected && address) {
       fetchBalances();
       const interval = setInterval(fetchBalances, 5000);
       return () => clearInterval(interval);
     }
-  }, [isConnected, address, activeTab, walletProvider, isAuthorized]);
+  }, [isConnected, address, activeTab, walletProvider]);
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
@@ -226,11 +198,6 @@ function App() {
     if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     
-    // 🔥 拦截非授权用户的操作
-    if (!isAuthorized) {
-      return alert("⛔ Access Denied: Unauthorized wallet address.");
-    }
-
     const isNetworkOk = await ensureBscNetwork();
     if (!isNetworkOk) return;
 
@@ -317,7 +284,7 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
-        {isConnected && isAuthorized ? (
+        {isConnected ? (
           <button 
             onClick={() => open({ view: 'Account' })} 
             style={{ 
@@ -349,7 +316,7 @@ function App() {
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
-                <span>Balance: {isAuthorized ? (isBuyingUFO ? tokenBalances['USDT'] || '0.0' : tokenBalances['UFO'] || '0.0') : '0.000000'}</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances['USDT'] || '0.0' : tokenBalances['UFO'] || '0.0') : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
@@ -410,7 +377,7 @@ function App() {
             )}
 
             <button onClick={handleAction} disabled={isProcessing} style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isProcessing ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isProcessing ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isProcessing ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}>
-              {isProcessing ? 'Processing...' : (isConnected && isAuthorized ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet')}
+              {isProcessing ? 'Processing...' : (isConnected ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet')}
             </button>
           </div>
         )}
@@ -427,7 +394,7 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected && isAuthorized ? bnbBal : '0.000000'}</span>
+                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
@@ -453,7 +420,7 @@ function App() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected && isAuthorized ? bal : '0.000000'}</span>
+                    <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bal : '0.000000'}</span>
                     <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(usdValue)}</span>
                   </div>
                 </div>
