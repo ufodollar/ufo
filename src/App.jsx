@@ -12,18 +12,26 @@ try {
     networks: [bsc],
     metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { analytics: true, allWallets: { showWallets: true } },
+    features: { 
+      analytics: true, 
+      allWallets: { showWallets: true } 
+    },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
   });
 } catch (e) { console.error(e); }
 
-// ================= 2. Config & ABI =================
+// ================= 2. Config & 核心资产白名单 =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
 const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE';
 
-// 使用 BNB Chain 官方推荐的稳定节点
+// 只保留生态内支持的 2 种 ERC20 代币
+const TOKENS = [
+  { symbol: 'USDT', name: 'Tether USD', address: USDT_ADDRESS, decimals: 18, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
+  { symbol: 'UFO', name: 'UFO Dollar', address: UFO_ADDRESS, decimals: 18, icon: 'UFO' }
+];
+
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.bnbchain.org");
 
 const ERC20_ABI = [
@@ -31,13 +39,11 @@ const ERC20_ABI = [
   "function allowance(address owner, address spender) view returns (uint256)", 
   "function approve(address spender, uint256 amount) returns (bool)"
 ];
-
 const VAULT_ABI = [
   "function deposit(uint256 usdtAmount)", 
   "function withdraw(uint256 ufoAmount)", 
   "function getExchangeRate() view returns (uint256)"
 ];
-
 const ORACLE_ABI = [
   "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)"
 ];
@@ -81,49 +87,34 @@ function App() {
   const [feeAmount, setFeeAmount] = useState('0.000000');
   
   const [currentNav, setCurrentNav] = useState(1);
-  const [usdtBal, setUsdtBal] = useState('0.000000');
-  const [ufoBal, setUfoBal] = useState('0.000000');
-  const [bnbBal, setBnbBal] = useState('0.000000');
-  const [bnbPrice, setBnbPrice] = useState(600); // 默认兜底价格
+  const [bnbPrice, setBnbPrice] = useState(600);
   
+  const [bnbBal, setBnbBal] = useState('0.000000');
+  const [tokenBalances, setTokenBalances] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
 
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
     try {
-      await walletProvider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
-      });
+      await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
       return true;
     } catch (switchError) {
       if (switchError.code === 4902) {
         try {
           await walletProvider.request({
             method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x38',
-              chainName: 'BNB Smart Chain',
-              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-              rpcUrls: ['https://bsc-dataseed.bnbchain.org'],
-              blockExplorerUrls: ['https://bscscan.com/']
-            }],
+            params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.bnbchain.org'], blockExplorerUrls: ['https://bscscan.com/'] }],
           });
           return true;
-        } catch (addError) {
-          alert("Please add BNB Smart Chain to your wallet to continue.");
-          return false;
-        }
+        } catch (addError) { return false; }
       }
       return false;
     }
   };
 
   useEffect(() => {
-    if (isConnected && walletProvider) {
-      ensureBscNetwork();
-    }
+    if (isConnected && walletProvider) { ensureBscNetwork(); }
   }, [isConnected, walletProvider]);
 
   useEffect(() => {
@@ -137,40 +128,44 @@ function App() {
     fetchNav();
   }, []);
 
-  // 🔥 彻底重构的余额拉取逻辑
   const fetchBalances = async () => {
     if (!address || !walletProvider) return;
     
     try {
-      // 1. BNB 余额：强制通过钱包插件获取，绝对精准
       const browserProvider = new ethers.BrowserProvider(walletProvider);
       const bnbBalanceWei = await browserProvider.getBalance(address);
       setBnbBal(parseFloat(ethers.formatEther(bnbBalanceWei)).toFixed(6));
 
-      // 2. USDT / UFO 余额：通过稳定 RPC 节点获取
-      const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, rpcProvider);
-      const ufoContract = new ethers.Contract(UFO_ADDRESS, ERC20_ABI, rpcProvider);
-      
-      const uBal = await usdtContract.balanceOf(address);
-      setUsdtBal(parseFloat(ethers.formatUnits(uBal, 18)).toFixed(6));
-      
-      const ufoBalData = await ufoContract.balanceOf(address);
-      setUfoBal(parseFloat(ethers.formatUnits(ufoBalData, 18)).toFixed(6));
-
-      // 3. 获取 BNB 实时价格
       const oracleContract = new ethers.Contract(BNB_ORACLE, ORACLE_ABI, rpcProvider);
       const priceData = await oracleContract.latestRoundData();
       setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
+
+      const promises = TOKENS.map(token => {
+        const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
+        return contract.balanceOf(address);
+      });
       
+      const results = await Promise.allSettled(promises);
+      
+      const newBalances = {};
+      results.forEach((res, index) => {
+        const token = TOKENS[index];
+        if (res.status === 'fulfilled') {
+          newBalances[token.symbol] = parseFloat(ethers.formatUnits(res.value, token.decimals)).toFixed(6);
+        } else {
+          newBalances[token.symbol] = '0.000000';
+        }
+      });
+      
+      setTokenBalances(newBalances);
     } catch (error) {
-      console.error("获取余额失败:", error);
+      console.error("获取资产失败:", error);
     }
   };
 
-  // 自动轮询刷新余额（每 5 秒一次，确保网络波动时能自动恢复）
   useEffect(() => {
     if (isConnected && address) {
-      fetchBalances(); // 立即执行一次
+      fetchBalances();
       const interval = setInterval(fetchBalances, 5000);
       return () => clearInterval(interval);
     }
@@ -208,10 +203,13 @@ function App() {
     const input = parseFloat(inputAmount);
     if (!inputAmount || input <= 0 || isNaN(input)) return alert("Please enter a valid amount");
 
+    const usdtBal = parseFloat(tokenBalances['USDT'] || '0');
+    const ufoBal = parseFloat(tokenBalances['UFO'] || '0');
+
     if (isBuyingUFO) {
-      if (input > parseFloat(usdtBal)) return alert("Insufficient USDT balance");
+      if (input > usdtBal) return alert("Insufficient USDT balance");
     } else {
-      if (input > parseFloat(ufoBal)) return alert("Insufficient UFO balance");
+      if (input > ufoBal) return alert("Insufficient UFO balance");
     }
 
     setIsProcessing(true);
@@ -220,7 +218,6 @@ function App() {
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
       
-      // Gas 预检
       const bnbBalance = await provider.getBalance(address);
       const bnbBalanceFormatted = parseFloat(ethers.formatEther(bnbBalance));
       if (bnbBalanceFormatted < 0.0005) {
@@ -300,9 +297,7 @@ function App() {
               <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%' }}></span>
               {address.slice(0, 4)}...{address.slice(-4)}
             </div>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6"/>
-            </svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
         ) : (
           <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
@@ -320,7 +315,7 @@ function App() {
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
-                <span>Balance: {isConnected ? (isBuyingUFO ? usdtBal : ufoBal) : '0.000000'}</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances['USDT'] || '0.0' : tokenBalances['UFO'] || '0.0') : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
@@ -337,10 +332,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 20V4" />
-                  <path d="M3 8l4-4 4 4" />
-                  <path d="M17 4v16" />
-                  <path d="M21 16l-4 4-4-4" />
+                  <path d="M7 20V4" /><path d="M3 8l4-4 4 4" /><path d="M17 4v16" /><path d="M21 16l-4 4-4-4" />
                 </svg>
               </button>
             </div>
@@ -406,41 +398,39 @@ function App() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 40, height: 40}} alt="USDT"/>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '16px', fontWeight: '700' }}>USDT</span>
-                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>Tether USD (BEP-20)</span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? usdtBal : '0.000000'}</span>
-                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(usdtBal)}</span>
-              </div>
-            </div>
+            {TOKENS.map((token, index) => {
+              const bal = tokenBalances[token.symbol] || '0.000000';
+              const price = 1; 
+              const usdValue = Number(bal) * price;
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-                  <UfoIcon size={28}/>
+              return (
+                <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== TOKENS.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== TOKENS.length - 1 ? '20px' : '0', marginBottom: index !== TOKENS.length - 1 ? '20px' : '0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {token.icon === 'UFO' ? (
+                      <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                        <UfoIcon size={28}/>
+                      </div>
+                    ) : (
+                      <img src={token.icon} style={{width: 40, height: 40}} alt={token.symbol}/>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span>
+                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>{token.name}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bal : '0.000000'}</span>
+                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(usdValue)}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '16px', fontWeight: '700' }}>UFO</span>
-                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>UFO Dollar</span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? ufoBal : '0.000000'}</span>
-                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(ufoBal) * currentNav)}</span>
-              </div>
-            </div>
+              );
+            })}
+
           </div>
         )}
 
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', marginBottom: '10px' }}>
                 The Trusted Digital Dollar Stablecoin
@@ -508,7 +498,6 @@ function App() {
                 UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions. The following list is not exhaustive and includes, but is not limited to: <b>United States, Mainland China, North Korea, Iran, Syria, Cuba, Venezuela, Russia, Belarus, Myanmar, Sudan, South Sudan, Afghanistan, and the Crimea, Donetsk, and Luhansk regions</b>.
               </p>
             </div>
-
           </div>
         )}
 
@@ -521,48 +510,17 @@ function App() {
               <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.8, marginBottom: '24px' }}>
                 For institutional onboarding, enterprise integration, technical support, or general inquiries, please connect with our team through the channels below.
               </p>
-
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Telegram</div>
-                <a 
-                  href="https://t.me/ufodollar" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style={{ 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#eff6ff', 
-                    color: '#3b82f6', fontWeight: '700', fontSize: '15px', 
-                    textDecoration: 'none', borderRadius: '12px', border: '1px solid #bfdbfe',
-                    transition: '0.2s'
-                  }}
-                >
-                  t.me/ufodollar
-                </a>
+                <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#eff6ff', color: '#3b82f6', fontWeight: '700', fontSize: '15px', textDecoration: 'none', borderRadius: '12px', border: '1px solid #bfdbfe', transition: '0.2s' }}>t.me/ufodollar</a>
               </div>
-
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Email</div>
-                <a 
-                  href="mailto:ufodollar6@gmail.com" 
-                  style={{ 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', 
-                    color: '#1e293b', fontWeight: '700', fontSize: '15px', 
-                    textDecoration: 'none', borderRadius: '12px', border: '1px solid #e2e8f0',
-                    transition: '0.2s'
-                  }}
-                >
-                  ufodollar6@gmail.com
-                </a>
+                <a href="mailto:ufodollar6@gmail.com" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', color: '#1e293b', fontWeight: '700', fontSize: '15px', textDecoration: 'none', borderRadius: '12px', border: '1px solid #e2e8f0', transition: '0.2s' }}>ufodollar6@gmail.com</a>
               </div>
-
               <div>
                 <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Office Address</div>
-                <div 
-                  style={{ 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', 
-                    color: '#1e293b', fontWeight: '700', fontSize: '15px', 
-                    borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', lineHeight: '1.5'
-                  }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: '#f8fafc', color: '#1e293b', fontWeight: '700', fontSize: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', lineHeight: '1.5' }}>
                   Ritter House, Wickhams Cay 2,<br/>P.O. Box 3170, Road Town,<br/>Tortola, VG1110,<br/>British Virgin Islands
                 </div>
               </div>
@@ -579,11 +537,7 @@ function App() {
         </div>
         
         <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
-          </svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
           <span>Wallet</span>
         </div>
 
@@ -593,9 +547,7 @@ function App() {
         </div>
 
         <div onClick={() => setActiveTab('contact')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'contact' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           <span>Contact</span>
         </div>
       </div>
