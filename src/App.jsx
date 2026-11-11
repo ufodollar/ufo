@@ -15,22 +15,14 @@ try {
       description: 'Universal Crypto Settlement Stablecoin', 
       url: window.location.origin,
       icons: ['https://ufo-eea.pages.dev/favicon.ico'],
-      // 🔥 核心升级：配置 redirect 对象，引导钱包操作后返回 DApp
       redirect: {
-        // 你的 DApp 自定义 URI Scheme（用于原生深度链接返回）
-        // 注意：网页 DApp 通常使用 universal link 即可，native 可留空或使用通用 scheme
         native: 'https://ufo-eea.pages.dev', 
-        // 你的 DApp 的 Universal Link（强烈推荐，iOS 体验更平滑）
         universal: 'https://ufo-eea.pages.dev',
-        // 🔥 开启 Link Mode，降低延迟，配合 Universal Link 实现更接近原生的返回体验
         linkMode: true,
       },
     },
     projectId: 'd6431212399f6c487b364387859983ea',
-    features: { 
-      analytics: true, 
-      allWallets: { showWallets: true } 
-    },
+    features: { analytics: true, allWallets: { showWallets: true } },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393'],
     enableWalletConnect: true, 
     enableInjected: true,
@@ -109,6 +101,7 @@ function App() {
   const [tokenBalances, setTokenBalances] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const ensureBscNetwork = async () => {
     if (!walletProvider) return false;
@@ -194,6 +187,7 @@ function App() {
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
+      setErrorMsg('');
       return;
     }
 
@@ -202,14 +196,28 @@ function App() {
       const netUsdt = input - fee;
       setFeeAmount(fee.toFixed(6));
       setOutputAmount(netUsdt.toFixed(6));
+      
+      const usdtBal = parseFloat(tokenBalances['USDT'] || '0');
+      if (isConnected && input > usdtBal) {
+        setErrorMsg('Insufficient USDT balance');
+      } else {
+        setErrorMsg('');
+      }
     } else {
       const grossUsdt = input;
       const fee = grossUsdt * FEE_RATE;
       const netUsdt = grossUsdt - fee;
       setFeeAmount(fee.toFixed(6));
       setOutputAmount(netUsdt.toFixed(6));
+      
+      const ufoBal = parseFloat(tokenBalances['UFO'] || '0');
+      if (isConnected && input > ufoBal) {
+        setErrorMsg('Insufficient UFO balance');
+      } else {
+        setErrorMsg('');
+      }
     }
-  }, [inputAmount, isBuyingUFO, currentNav]);
+  }, [inputAmount, isBuyingUFO, currentNav, tokenBalances, isConnected]);
 
   const handleAction = async () => {
     if (isProcessing) return;
@@ -222,19 +230,13 @@ function App() {
     if (!isNetworkOk) return;
 
     const input = parseFloat(inputAmount);
-    if (!inputAmount || input <= 0 || isNaN(input)) return alert("Please enter a valid amount");
+    if (!inputAmount || input <= 0 || isNaN(input)) return;
 
-    const usdtBal = parseFloat(tokenBalances['USDT'] || '0');
-    const ufoBal = parseFloat(tokenBalances['UFO'] || '0');
-
-    if (isBuyingUFO) {
-      if (input > usdtBal) return alert("Insufficient USDT balance");
-    } else {
-      if (input > ufoBal) return alert("Insufficient UFO balance");
-    }
+    if (errorMsg) return;
 
     setIsProcessing(true);
     setTxMsg('');
+    setErrorMsg('');
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
@@ -243,7 +245,7 @@ function App() {
       const bnbBalanceFormatted = parseFloat(ethers.formatEther(bnbBalance));
       if (bnbBalanceFormatted < 0.0005) {
         setIsProcessing(false);
-        return alert(`⚠️ Gas Fee Insufficient!\n\nYour BNB balance is ${bnbBalanceFormatted.toFixed(6)} BNB.\nYou need at least 0.0005 BNB to pay for the network gas fee on BNB Smart Chain.`);
+        return setErrorMsg(`Insufficient BNB for gas. You need at least 0.0005 BNB.`);
       }
 
       const signer = await provider.getSigner();
@@ -278,7 +280,7 @@ function App() {
       fetchBalances();
     } catch (error) {
       console.error(error);
-      setTxMsg(error.reason || error.shortMessage || 'Transaction rejected or failed');
+      setErrorMsg(error.reason || error.shortMessage || 'Transaction rejected or failed');
     } finally {
       setIsProcessing(false);
     }
@@ -289,6 +291,8 @@ function App() {
     if (isNaN(num)) return '0.00';
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
+  const isButtonDisabled = isProcessing || (isConnected && (errorMsg !== '' || !inputAmount || parseFloat(inputAmount) <= 0));
 
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
@@ -310,16 +314,7 @@ function App() {
           <button 
             onClick={() => open({ view: 'AllWallets' })} 
             style={{ 
-              background: '#3b82f6', 
-              color: '#fff', 
-              border: 'none', 
-              padding: '8px 16px', 
-              borderRadius: '20px', 
-              fontWeight: '700', 
-              fontSize: '13px', 
-              cursor: 'pointer', 
-              boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
-              transition: 'all 0.2s ease'
+              background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)', transition: 'all 0.2s ease'
             }}
             onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
             onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
@@ -350,10 +345,15 @@ function App() {
                   )}
                 </div>
               </div>
+              {errorMsg && (
+                <div style={{ color: '#ef4444', fontSize: '12px', fontWeight: '600', marginTop: '8px' }}>
+                  {errorMsg}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
-              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
+              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); setErrorMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 20V4" /><path d="M3 8l4-4 4 4" /><path d="M17 4v16" /><path d="M21 16l-4 4-4-4" />
                 </svg>
@@ -398,7 +398,24 @@ function App() {
               </div>
             )}
 
-            <button onClick={handleAction} disabled={isProcessing} style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isProcessing ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isProcessing ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isProcessing ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}>
+            <button 
+              onClick={handleAction} 
+              disabled={isButtonDisabled} 
+              style={{ 
+                ...FONT_STYLE, 
+                width: '100%', 
+                padding: '16px', 
+                background: isButtonDisabled ? '#94a3b8' : '#3b82f6', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: '16px', 
+                fontSize: '16px', 
+                fontWeight: '700', 
+                cursor: isButtonDisabled ? 'not-allowed' : 'pointer', 
+                marginTop: '20px', 
+                boxShadow: isButtonDisabled ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' 
+              }}
+            >
               {isProcessing ? 'Processing...' : (isConnected ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet')}
             </button>
           </div>
@@ -454,6 +471,7 @@ function App() {
 
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
+            {/* 1. 主卡片 */}
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', marginBottom: '10px' }}>
                 Universal Crypto Settlement Stablecoin
@@ -462,34 +480,11 @@ function App() {
                 A stablecoin built for global settlement.
               </h3>
               <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is a fully reserved digital dollar stablecoin, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a strict 1:1 USDT peg and a transparent 0.5% settlement fee. Crucially, UFO leverages advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your commercial data remains completely private.
+                UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private.
               </p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)', color: '#fff' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
-              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party. Asset integrity is enforced by smart contracts, not institutional trust alone.
-              </p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)', color: '#fff' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
-              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.
-              </p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)', color: '#fff' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Privacy & Compliance</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
-              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                Built on Zero-Knowledge technology, UFO keeps transaction amounts and counterparties off the public ledger. When regulators or auditors require verification, the holder can generate cryptographic proofs through Selective Disclosure—proving specific facts without exposing the entire transaction history.
-              </p>
-            </div>
-
+            {/* 2. 发行与储备 (已上移) */}
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting. No arbitrary issuance.</h4>
@@ -498,6 +493,34 @@ function App() {
               </p>
             </div>
 
+            {/* 3. 安全性 (已下移) */}
+            <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)', color: '#fff' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
+              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
+                Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party. Asset integrity is enforced by smart contracts, not institutional trust alone.
+              </p>
+            </div>
+
+            {/* 4. 全球覆盖与保密性 */}
+            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)', color: '#fff' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
+              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
+                Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.
+              </p>
+            </div>
+
+            {/* 5. 隐私与合规 */}
+            <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)', color: '#fff' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Privacy & Compliance</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
+              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
+                Built on Zero-Knowledge technology, UFO keeps transaction amounts and counterparties off the public ledger. When regulators or auditors require verification, the holder can generate cryptographic proofs through Selective Disclosure—proving specific facts without exposing the entire transaction history.
+              </p>
+            </div>
+
+            {/* 6. 结算速度 */}
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Settlement Speed</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Send money the way you send a message.</h4>
@@ -506,6 +529,7 @@ function App() {
               </p>
             </div>
 
+            {/* 7. 架构 */}
             <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Architecture</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
@@ -514,6 +538,7 @@ function App() {
               </p>
             </div>
 
+            {/* 8. 免责声明 */}
             <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Disclaimer</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
@@ -532,10 +557,11 @@ function App() {
               Follow our official channels for the latest updates, support, and institutional onboarding.
             </p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '24px' }}>
+              {/* 标准 Telegram 图标 */}
               <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
-                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#229ED9"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.562 8.161c-.18.717-.996 4.302-1.488 6.427-.198.856-.501 1.146-.797 1.168-.608.045-1.075-.311-1.678-.706-1.006-.658-1.521-1.055-2.474-1.69-1.09-.715-1.613-1.092-1.613-1.73 0-.88 1.096-1.408 1.482-1.63 2.157-1.253 4.144-2.018 4.312-2.018.096 0 .225.026.302.075.106.07.155.184.135.308z"/></svg>
+                <div style={{ width: '64px', height: '64px', background: '#229ED9', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(34,158,217,0.2)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
                 </div>
                 <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>Telegram</span>
               </a>
@@ -553,6 +579,11 @@ function App() {
                 </div>
                 <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>YouTube</span>
               </a>
+            </div>
+
+            {/* 新增：Built by StoneX */}
+            <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              Built by StoneX
             </div>
 
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
