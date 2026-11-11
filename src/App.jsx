@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { createRoot } from 'react-dom/client';
-import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit } from '@reown/appkit/react';
+// 引入 AppKitButton 和 useAppKitState 以实现最原生的状态同步
+import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
@@ -10,17 +11,24 @@ try {
   createAppKit({
     adapters: [new EthersAdapter()],
     networks: [bsc],
-    metadata: { name: 'UFO Dollar', description: 'Stablecoin Swap', url: window.location.origin, icons: [] },
+    metadata: { 
+      name: 'UFO Dollar', 
+      description: 'Universal Crypto Settlement Stablecoin', 
+      url: window.location.origin, 
+      icons: ['https://ufo-eea.pages.dev/favicon.ico'] // 建议补充一个真实的图标URL
+    },
     projectId: 'd6431212399f6c487b364387859983ea',
     features: { 
       analytics: true, 
       allWallets: { showWallets: true } 
     },
-    featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393']
+    featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393'],
+    enableWalletConnect: true, // 强制启用，优化移动端跳转体验
+    enableInjected: true,      // 优先使用浏览器内置钱包（桌面端无感连接）
   });
 } catch (e) { console.error(e); }
 
-// ================= 2. Config & 核心资产白名单 =================
+// ================= 2. Config & 核心资产 =================
 const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE'; 
 const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
@@ -113,7 +121,9 @@ function App() {
   };
 
   useEffect(() => {
-    if (isConnected && walletProvider) { ensureBscNetwork(); }
+    if (isConnected && walletProvider) { 
+      ensureBscNetwork(); 
+    }
   }, [isConnected, walletProvider]);
 
   useEffect(() => {
@@ -194,6 +204,7 @@ function App() {
 
   const handleAction = async () => {
     if (isProcessing) return;
+    // 如果未连接，拉起 AppKit 的通用连接弹窗
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
     
     const isNetworkOk = await ensureBscNetwork();
@@ -282,27 +293,22 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
-        {isConnected ? (
-          <button 
-            onClick={() => open({ view: 'Account' })} 
-            style={{ 
-              background: '#fff', padding: '6px 12px', borderRadius: '20px', 
-              fontSize: '13px', fontFamily: 'monospace', fontWeight: 'bold', 
-              color: '#1e293b', border: '1px solid #e2e8f0', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', outline: 'none', gap: '6px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%' }}></span>
-              {address.slice(0, 4)}...{address.slice(-4)}
-            </div>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-        ) : (
-          <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            Connect Wallet
-          </button>
-        )}
+        {/* 🔥 核心技术1升级：全面使用 AppKitButton，原生接管状态与跳转优化 */}
+        <AppKitButton 
+          balance="hide" 
+          label="Connect Wallet"
+          style={{
+            backgroundColor: '#3b82f6',
+            color: '#fff',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontWeight: '700',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
+          }}
+        />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
@@ -432,13 +438,13 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', marginBottom: '10px' }}>
-                The Trusted Digital Dollar Stablecoin
+                Universal Crypto Settlement Stablecoin
               </div>
               <h3 style={{ fontSize: '26px', fontWeight: '800', lineHeight: 1.3, marginBottom: '16px' }}>
-                A digital dollar built for global settlement.
+                A stablecoin built for global settlement.
               </h3>
               <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is a fully reserved digital dollar stablecoin issued by StoneX, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a 1:1 USDT peg and a 0.5% protocol fee. Circulating in 160+ countries. Crucially, UFO leverages advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your commercial data remains completely private.
+                UFO is a fully reserved digital dollar stablecoin, designed for B2B cross-border payments and enterprise settlement. Operating on the BNB Smart Chain with a strict 1:1 USDT peg and a transparent 0.5% settlement fee. Crucially, UFO leverages advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your commercial data remains completely private.
               </p>
             </div>
 
@@ -446,15 +452,15 @@ function App() {
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party—including the issuer. Asset integrity is enforced by mathematics, not institutional trust alone.
+                Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party. Asset integrity is enforced by smart contracts, not institutional trust alone.
               </p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Circulating across 160+ countries. Commercial details shielded.</h4>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is actively used for cross-border settlement in over 160 countries. Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.
+                Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.
               </p>
             </div>
 
@@ -468,9 +474,9 @@ function App() {
 
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Issued by StoneX. Fully reserved 1:1. No arbitrary minting.</h4>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting. No arbitrary issuance.</h4>
               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is exclusively minted by StoneX and backed 1:1 by USDT held in a transparent vault. Minting occurs only when a verified party deposits USDT; redemption triggers immediate token burning. The issuer cannot create UFO without corresponding reserves. All vault balances are verifiable on-chain via BscScan.
+                UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. The protocol strictly enforces that UFO cannot be created without corresponding reserves. All vault balances and minting activities are fully verifiable on-chain via BscScan.
               </p>
             </div>
 
@@ -486,7 +492,7 @@ function App() {
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Architecture</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissioned settlement network, removing exposure to market manipulation and ensuring the asset remains a pure medium for enterprise fund clearing.
+                UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissionless settlement network, removing exposure to market manipulation and ensuring the asset remains a pure medium for enterprise fund clearing.
               </p>
             </div>
 
@@ -508,9 +514,7 @@ function App() {
               Follow our official channels for the latest updates, support, and institutional onboarding.
             </p>
 
-            {/* 社交矩阵 (大号图标) */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '40px' }}>
-              {/* Telegram */}
               <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
                 <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="#229ED9"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.562 8.161c-.18.717-.996 4.302-1.488 6.427-.198.856-.501 1.146-.797 1.168-.608.045-1.075-.311-1.678-.706-1.006-.658-1.521-1.055-2.474-1.69-1.09-.715-1.613-1.092-1.613-1.73 0-.88 1.096-1.408 1.482-1.63 2.157-1.253 4.144-2.018 4.312-2.018.096 0 .225.026.302.075.106.07.155.184.135.308z"/></svg>
@@ -518,7 +522,6 @@ function App() {
                 <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>Telegram</span>
               </a>
 
-              {/* X (Twitter) */}
               <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
                 <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
@@ -526,7 +529,6 @@ function App() {
                 <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>X</span>
               </a>
 
-              {/* YouTube */}
               <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
                 <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
@@ -535,7 +537,6 @@ function App() {
               </a>
             </div>
 
-            {/* 邮件与地址卡片 */}
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               <a href="mailto:ufodollar6@gmail.com" style={{ textDecoration: 'none' }}>
