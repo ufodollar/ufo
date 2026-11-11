@@ -480,11 +480,11 @@ function App() {
                 A stablecoin built for global settlement.
               </h3>
               <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
-                UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private.
+                UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private. Currently, UFO is circulating in over 160 countries and is widely used in enterprise trade settlement, payroll, and personal payments.
               </p>
             </div>
 
-            {/* 2. 发行与储备 (已上移) */}
+            {/* 2. 发行与储备 */}
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting. No arbitrary issuance.</h4>
@@ -493,7 +493,7 @@ function App() {
               </p>
             </div>
 
-            {/* 3. 安全性 (已下移) */}
+            {/* 3. 安全性 */}
             <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
@@ -581,9 +581,9 @@ function App() {
               </a>
             </div>
 
-            {/* 新增：Built by StoneX */}
+            {/* UFO built by StoneX */}
             <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
-              Built by StoneX
+              UFO built by StoneX
             </div>
 
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
