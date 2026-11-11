@@ -13,8 +13,18 @@ try {
     metadata: { 
       name: 'UFO Dollar', 
       description: 'Universal Crypto Settlement Stablecoin', 
-      url: window.location.origin, // 关键：确保钱包授权后能准确跳回此域名
-      icons: ['https://ufo-eea.pages.dev/favicon.ico'] 
+      url: window.location.origin,
+      icons: ['https://ufo-eea.pages.dev/favicon.ico'],
+      // 🔥 核心升级：配置 redirect 对象，引导钱包操作后返回 DApp
+      redirect: {
+        // 你的 DApp 自定义 URI Scheme（用于原生深度链接返回）
+        // 注意：网页 DApp 通常使用 universal link 即可，native 可留空或使用通用 scheme
+        native: 'https://ufo-eea.pages.dev', 
+        // 你的 DApp 的 Universal Link（强烈推荐，iOS 体验更平滑）
+        universal: 'https://ufo-eea.pages.dev',
+        // 🔥 开启 Link Mode，降低延迟，配合 Universal Link 实现更接近原生的返回体验
+        linkMode: true,
+      },
     },
     projectId: 'd6431212399f6c487b364387859983ea',
     features: { 
@@ -204,7 +214,6 @@ function App() {
   const handleAction = async () => {
     if (isProcessing) return;
     
-    // 如果未连接，直接拉起 All Wallets 窗口
     if (!isConnected || !walletProvider) {
       return open({ view: 'AllWallets' });
     }
@@ -295,7 +304,6 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
-        {/* 🔥 UI 切换核心逻辑：未连接显示自定义，已连接无缝切换官方原生按钮 */}
         {isConnected ? (
           <AppKitButton balance="hide" />
         ) : (
