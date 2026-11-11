@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { createRoot } from 'react-dom/client';
-// 引入 AppKitButton 和 useAppKitState 以实现最原生的状态同步
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
@@ -14,8 +13,8 @@ try {
     metadata: { 
       name: 'UFO Dollar', 
       description: 'Universal Crypto Settlement Stablecoin', 
-      url: window.location.origin, 
-      icons: ['https://ufo-eea.pages.dev/favicon.ico'] // 建议补充一个真实的图标URL
+      url: window.location.origin, // 关键：确保钱包授权后能准确跳回此域名
+      icons: ['https://ufo-eea.pages.dev/favicon.ico'] 
     },
     projectId: 'd6431212399f6c487b364387859983ea',
     features: { 
@@ -23,8 +22,8 @@ try {
       allWallets: { showWallets: true } 
     },
     featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393'],
-    enableWalletConnect: true, // 强制启用，优化移动端跳转体验
-    enableInjected: true,      // 优先使用浏览器内置钱包（桌面端无感连接）
+    enableWalletConnect: true, 
+    enableInjected: true,
   });
 } catch (e) { console.error(e); }
 
@@ -204,8 +203,11 @@ function App() {
 
   const handleAction = async () => {
     if (isProcessing) return;
-    // 如果未连接，拉起 AppKit 的通用连接弹窗
-    if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
+    
+    // 如果未连接，直接拉起 All Wallets 窗口
+    if (!isConnected || !walletProvider) {
+      return open({ view: 'AllWallets' });
+    }
     
     const isNetworkOk = await ensureBscNetwork();
     if (!isNetworkOk) return;
@@ -293,22 +295,30 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
-        {/* 🔥 核心技术1升级：全面使用 AppKitButton，原生接管状态与跳转优化 */}
-        <AppKitButton 
-          balance="hide" 
-          label="Connect Wallet"
-          style={{
-            backgroundColor: '#3b82f6',
-            color: '#fff',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            fontWeight: '700',
-            fontSize: '13px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
-          }}
-        />
+        {/* 🔥 UI 切换核心逻辑：未连接显示自定义，已连接无缝切换官方原生按钮 */}
+        {isConnected ? (
+          <AppKitButton balance="hide" />
+        ) : (
+          <button 
+            onClick={() => open({ view: 'AllWallets' })} 
+            style={{ 
+              background: '#3b82f6', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '8px 16px', 
+              borderRadius: '20px', 
+              fontWeight: '700', 
+              fontSize: '13px', 
+              cursor: 'pointer', 
+              boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            Connect Wallet
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
