@@ -12,7 +12,6 @@ const CONFIG = {
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-  // 刚才部署到 BSC 主网的真实 Verifier 合约
   VERIFIER_ADDRESS: '0x924d7E7b18087CF76Bd7bc0b173B688ff97410c3', 
   FEE_RATE: 0.005,
 };
@@ -112,6 +111,7 @@ function App() {
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // --- 网络检查与切换 ---
   const ensureBscNetwork = useCallback(async () => {
     if (!walletProvider) return false;
     try {
@@ -135,6 +135,7 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
+  // --- 链上数据获取 ---
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -185,6 +186,7 @@ function App() {
     }
   }, [isConnected, address, activeTab, fetchBalances]);
 
+  // --- 双向 0.5% 手续费计算逻辑 ---
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
@@ -226,33 +228,25 @@ function App() {
       const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
 
-      // 🔥 第一步：无感生成并验证 ZK 证明
-      setTxMsg('Generating privacy proof...');
+      // 🔥 ZK 静默验证
+      setTxMsg('Verifying privacy proof...');
       try {
-        // 1. 生成证明
         const zkInput = { a: 3, b: 11 };
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
           zkInput,
           "/multiplier.wasm",
           "/multiplier_final.zkey"
         );
-        
-        // 2. 链上静默验证
-        setTxMsg('Verifying proof on BSC...');
         const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
         const argv = JSON.parse("[" + calldata + "]");
         const verifierContract = new ethers.Contract(CONFIG.VERIFIER_ADDRESS, VERIFIER_ABI, signer);
-        
-        // 因为是 view 函数，这里不会唤起钱包，瞬间完成
         const isValid = await verifierContract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
         if (!isValid) throw new Error("ZK Proof rejected by contract.");
-        
       } catch (zkErr) {
-        // 容错：如果本地没找到 wasm 文件或者验证失败，控制台报错，但不阻断 Swap（当前合约不强依赖 ZK）
         console.warn("ZK Validation skipped or failed:", zkErr);
       }
 
-      // 🔥 第二步：正常的 Swap 流程
+      // 正常的 Swap 流程
       const bnbBalance = await provider.getBalance(address);
       if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) {
         throw new Error(`Insufficient BNB for gas. You need at least 0.0005 BNB.`);
@@ -421,18 +415,63 @@ function App() {
           </div>
         )}
 
-        {/* ====== Rules 页面 ====== */}
+        {/* ====== Rules 页面 (完整 8 张卡片) ====== */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', color: '#fff' }}>
-              <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>Universal Crypto Settlement Stablecoin</div>
+            {/* 1. 主卡片 */}
+            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
+              <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', color: 'rgba(255,255,255,0.8)' }}>Universal Crypto Settlement Stablecoin</div>
               <h3 style={{ fontSize: '26px', fontWeight: '800', marginBottom: '16px' }}>A stablecoin built for global settlement.</h3>
-              <p style={{ fontSize: '15px', lineHeight: 1.7 }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private. Currently, UFO is circulating in over 160 countries and is widely used in enterprise trade settlement, payroll, and personal payments.</p>
+              <p style={{ fontSize: '15px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private. Currently, UFO is circulating in over 160 countries and is widely used in enterprise trade settlement, payroll, and personal payments.</p>
             </div>
-            <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
+
+            {/* 2. 发行与储备 */}
+            <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Issuance & Reserves</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7 }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain via BscScan.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain via BscScan.</p>
+            </div>
+
+            {/* 3. 安全性 */}
+            <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Security</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party. Asset integrity is enforced by smart contracts, not institutional trust alone.</p>
+            </div>
+
+            {/* 4. 全球覆盖与保密性 */}
+            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Global Reach & Confidentiality</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.</p>
+            </div>
+
+            {/* 5. 隐私与合规 */}
+            <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Privacy & Compliance</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Built on Zero-Knowledge technology, UFO keeps transaction amounts and counterparties off the public ledger. When regulators or auditors require verification, the holder can generate cryptographic proofs through Selective Disclosure—proving specific facts without exposing the entire transaction history.</p>
+            </div>
+
+            {/* 6. 结算速度 */}
+            <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Settlement Speed</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Send money the way you send a message.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Cross-border payments shouldn't take days. With UFO, funds arrive in the recipient's wallet within seconds—no banking hours, no intermediary delays, no multi-day waiting. Settlement operates 24/7, every day of the year.</p>
+            </div>
+
+            {/* 7. 架构 */}
+            <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Architecture</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissionless settlement network, removing exposure to market manipulation and ensuring the asset remains a pure medium for enterprise fund clearing.</p>
+            </div>
+
+            {/* 8. 免责声明 */}
+            <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Disclaimer</div>
+              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions. The following list is not exhaustive and includes, but is not limited to: <b>United States, Mainland China, North Korea, Iran, Syria, Cuba, Venezuela, Russia, Belarus, Myanmar, Sudan, South Sudan, Afghanistan, and the Crimea, Donetsk, and Luhansk regions</b>.</p>
             </div>
           </div>
         )}
