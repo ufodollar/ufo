@@ -89,6 +89,29 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
+// 极简风格图标组件
+const RuleIcon = ({ type }) => {
+  const icons = {
+    globe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+    safe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>,
+    shield: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+    eye: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+    layers: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+    zap: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+    lock: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+    alert: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  };
+  return icons[type] || null;
+};
+
+// 自定义卡片头部
+const CardHeader = ({ title, iconType }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+    <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginTop: '6px' }}>{title}</div>
+    <div style={{ color: 'rgba(255,255,255,0.8)' }}><RuleIcon type={iconType} /></div>
+  </div>
+);
+
 // ================= 4. 主应用组件 =================
 function App() {
   const { open } = useAppKit();
@@ -224,29 +247,22 @@ function App() {
       const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
 
-      // 🔥 ZK 静默验证
+      // ZK 静默验证
       setTxMsg('Verifying privacy proof...');
       try {
         const zkInput = { a: 3, b: 11 };
-        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-          zkInput,
-          "/multiplier.wasm",
-          "/multiplier_final.zkey"
-        );
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(zkInput, "/multiplier.wasm", "/multiplier_final.zkey");
         const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
         const argv = JSON.parse("[" + calldata + "]");
         const verifierContract = new ethers.Contract(CONFIG.VERIFIER_ADDRESS, VERIFIER_ABI, signer);
         const isValid = await verifierContract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
-        if (!isValid) throw new Error("ZK Proof rejected by contract.");
+        if (!isValid) throw new Error("ZK Proof rejected.");
       } catch (zkErr) {
-        console.warn("ZK Validation skipped or failed:", zkErr);
+        console.warn("ZK Validation skipped:", zkErr);
       }
 
-      // 正常的 Swap 流程
       const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) {
-        throw new Error(`Insufficient BNB for gas. You need at least 0.0005 BNB.`);
-      }
+      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas.`);
 
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
       const rawAmount = ethers.parseUnits(inputAmount, 18);
@@ -254,13 +270,11 @@ function App() {
       if (isBuyingUFO) {
         const usdt = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, signer);
         const allowance = await usdt.allowance(address, CONFIG.VAULT_ADDRESS);
-        
         if (allowance < rawAmount) {
           setTxMsg('Approving USDT...');
           const txApprove = await usdt.approve(CONFIG.VAULT_ADDRESS, ethers.MaxUint256);
           await txApprove.wait();
         }
-
         setTxMsg('Swapping...');
         const tx = await vault.deposit(rawAmount);
         await tx.wait();
@@ -272,12 +286,8 @@ function App() {
         setTxMsg('Redeem Successful!');
       }
 
-      setInputAmount('');
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      fetchBalances();
+      setInputAmount(''); setOutputAmount('0.000000'); setFeeAmount('0.000000'); fetchBalances();
     } catch (error) {
-      console.error(error);
       setErrorMsg(error.reason || error.shortMessage || error.message || 'Transaction failed');
     } finally {
       setIsProcessing(false);
@@ -290,9 +300,11 @@ function App() {
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
       
+      {/* 背景光晕 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -300,18 +312,17 @@ function App() {
           </div>
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
-
-        {isConnected ? (
-          <AppKitButton balance="hide" />
-        ) : (
+        {isConnected ? <AppKitButton balance="hide" /> : (
           <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
             Connect Wallet
           </button>
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
+      {/* 主内容区，底部留出悬浮导航的空间 */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px 20px', zIndex: 10 }}>
         
+        {/* Swap */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
@@ -382,6 +393,7 @@ function App() {
           </div>
         )}
 
+        {/* Assets */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -409,92 +421,84 @@ function App() {
           </div>
         )}
 
+        {/* Rules (全新图标版) */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
-              <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', color: 'rgba(255,255,255,0.8)' }}>Universal Crypto Settlement Stablecoin</div>
-              <h3 style={{ fontSize: '26px', fontWeight: '800', marginBottom: '16px' }}>A stablecoin built for global settlement.</h3>
-              <p style={{ fontSize: '15px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>, ensuring your transaction data is completely private. Currently, UFO is circulating in over 160 countries and is widely used in enterprise trade settlement, payroll, and personal payments.</p>
+            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
+              <CardHeader title="Universal Crypto Settlement" iconType="globe" />
+              <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>A stablecoin built for global settlement.</h3>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>. Currently circulating in over 160 countries for enterprise trade, payroll, and personal payments.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Issuance & Reserves</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain via BscScan.</p>
+              <CardHeader title="Issuance & Reserves" iconType="safe" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Security</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered, forged, or reversed by any party. Asset integrity is enforced by smart contracts, not institutional trust alone.</p>
+              <CardHeader title="Security" iconType="shield" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered or reversed by any party. Asset integrity is enforced by smart contracts.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Global Reach & Confidentiality</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts and counterparties to anyone with a block explorer, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.</p>
+              <CardHeader title="Global Reach" iconType="layers" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts to anyone, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Privacy & Compliance</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Built on Zero-Knowledge technology, UFO keeps transaction amounts and counterparties off the public ledger. When regulators or auditors require verification, the holder can generate cryptographic proofs through Selective Disclosure—proving specific facts without exposing the entire transaction history.</p>
+              <CardHeader title="Privacy & Compliance" iconType="eye" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Built on Zero-Knowledge technology, UFO keeps transaction amounts off the public ledger. When regulators or auditors require verification, holders can generate cryptographic proofs through Selective Disclosure.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Settlement Speed</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Send money the way you send a message.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>Cross-border payments shouldn't take days. With UFO, funds arrive in the recipient's wallet within seconds—no banking hours, no intermediary delays, no multi-day waiting. Settlement operates 24/7, every day of the year.</p>
+              <CardHeader title="Settlement Speed" iconType="zap" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Send money like a message.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Cross-border payments shouldn't take days. With UFO, funds arrive in the recipient's wallet within seconds. Settlement operates 24/7, every day of the year.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Architecture</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissionless settlement network, removing exposure to market manipulation and ensuring the asset remains a pure medium for enterprise fund clearing.</p>
+              <CardHeader title="Architecture" iconType="lock" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissionless settlement network, ensuring the asset remains a pure medium for enterprise fund clearing.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>Disclaimer</div>
-              <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.7, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields or returns. Users are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions. The following list is not exhaustive and includes, but is not limited to: <b>United States, Mainland China, North Korea, Iran, Syria, Cuba, Venezuela, Russia, Belarus, Myanmar, Sudan, South Sudan, Afghanistan, and the Crimea, Donetsk, and Luhansk regions</b>.</p>
+              <CardHeader title="Disclaimer" iconType="alert" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Not an investment product.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields. Users are solely responsible for ensuring their use of the protocol complies with their local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.</p>
             </div>
           </div>
         )}
 
+        {/* Contact */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
-            
-            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px', textAlign: 'center' }}>Connect with Us</h2>
-            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>
-              Follow our official channels for the latest updates, support, and institutional onboarding.
-            </p>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
+            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '24px' }}>
-              <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
-                <div style={{ width: '64px', height: '64px', background: '#229ED9', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(34,158,217,0.2)', transition: 'transform 0.2s' }} className="social-btn">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '32px' }}>
+              <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '56px', height: '56px', background: '#229ED9', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(34,158,217,0.3)', transition: 'transform 0.2s' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>Telegram</span>
               </a>
-
-              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
-                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
+              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '56px', height: '56px', background: '#000', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>X</span>
               </a>
-
-              <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
-                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '56px', height: '56px', background: '#FF0000', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(255,0,0,0.3)', transition: 'transform 0.2s' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>YouTube</span>
               </a>
             </div>
 
-            <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
-              UFO built by StoneX
-            </div>
+            <div style={{ marginBottom: '32px', fontSize: '12px', color: '#94a3b8', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
 
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <a href="mailto:ufodollar6@gmail.com" style={{ textDecoration: 'none' }}>
@@ -502,52 +506,51 @@ function App() {
                   <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                   </div>
-                  <div>
-                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Email Support</div>
-                    <div style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>ufodollar6@gmail.com</div>
-                  </div>
+                  <div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Email Support</div><div style={{ fontSize: '15px', fontWeight: '700' }}>ufodollar6@gmail.com</div></div>
                 </div>
               </a>
-
               <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
                 <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Headquarters</div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', lineHeight: '1.4' }}>
-                    Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI
-                  </div>
-                </div>
+                <div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Headquarters</div><div style={{ fontSize: '14px', fontWeight: '700' }}>Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI</div></div>
               </div>
             </div>
-
           </div>
         )}
-
       </div>
 
-      {/* 🔥 底部导航栏 (恢复图标版本) */}
-      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
-        <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg>
-          <span>Swap</span>
-        </div>
-        
-        <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
-          <span>Wallet</span>
-        </div>
-
-        <div onClick={() => setActiveTab('rules')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'rules' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          <span>Rules</span>
-        </div>
-
-        <div onClick={() => setActiveTab('contact')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'contact' ? '#3b82f6' : '#94a3b8', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-          <span>Contact</span>
-        </div>
+      {/* 🔥 悬浮胶囊底栏 */}
+      <div style={{ 
+        position: 'absolute', bottom: '24px', left: '20px', right: '20px', 
+        display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
+        background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px)', 
+        border: '1px solid rgba(255,255,255,0.5)', borderRadius: '32px', 
+        padding: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', zIndex: 20 
+      }}>
+        {[
+          { id: 'swap', label: 'Swap', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg> },
+          { id: 'assets', label: 'Wallet', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
+          { id: 'rules', label: 'Rules', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> },
+          { id: 'contact', label: 'Contact', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> }
+        ].map((tab) => (
+          <div 
+            key={tab.id} 
+            onClick={() => setActiveTab(tab.id)} 
+            style={{ 
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', 
+              color: activeTab === tab.id ? '#3b82f6' : '#94a3b8', 
+              flex: 1, cursor: 'pointer', padding: '8px 0', 
+              background: activeTab === tab.id ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+              borderRadius: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          >
+            <div style={{ transform: activeTab === tab.id ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s' }}>
+              {tab.icon}
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: '700' }}>{tab.label}</span>
+          </div>
+        ))}
       </div>
 
     </div>
