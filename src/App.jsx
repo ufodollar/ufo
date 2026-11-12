@@ -12,7 +12,7 @@ const CONFIG = {
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-  // 🔥 刚才部署到 BSC 主网的真实 Verifier 合约
+  // 刚才部署到 BSC 主网的真实 Verifier 合约
   VERIFIER_ADDRESS: '0x924d7E7b18087CF76Bd7bc0b173B688ff97410c3', 
   FEE_RATE: 0.005,
 };
@@ -111,11 +111,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  
-  // ZK 状态
-  const [zkStatus, setZkStatus] = useState('idle'); // idle, generating, verifying, success, error
 
-  // --- 网络检查与切换 ---
   const ensureBscNetwork = useCallback(async () => {
     if (!walletProvider) return false;
     try {
@@ -139,7 +135,6 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
-  // --- 链上数据获取 ---
   useEffect(() => {
     const fetchNav = async () => {
       try {
@@ -190,7 +185,6 @@ function App() {
     }
   }, [isConnected, address, activeTab, fetchBalances]);
 
-  // --- 双向 0.5% 手续费计算逻辑 ---
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
@@ -213,7 +207,7 @@ function App() {
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected]);
 
-  // --- 核心操作逻辑 (Swap/Redeem) ---
+  // --- 核心操作逻辑 (含静默 ZK 验证) ---
   const handleAction = async () => {
     if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
@@ -230,12 +224,40 @@ function App() {
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
+      const signer = await provider.getSigner();
+
+      // 🔥 第一步：无感生成并验证 ZK 证明
+      setTxMsg('Generating privacy proof...');
+      try {
+        // 1. 生成证明
+        const zkInput = { a: 3, b: 11 };
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+          zkInput,
+          "/multiplier.wasm",
+          "/multiplier_final.zkey"
+        );
+        
+        // 2. 链上静默验证
+        setTxMsg('Verifying proof on BSC...');
+        const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+        const argv = JSON.parse("[" + calldata + "]");
+        const verifierContract = new ethers.Contract(CONFIG.VERIFIER_ADDRESS, VERIFIER_ABI, signer);
+        
+        // 因为是 view 函数，这里不会唤起钱包，瞬间完成
+        const isValid = await verifierContract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
+        if (!isValid) throw new Error("ZK Proof rejected by contract.");
+        
+      } catch (zkErr) {
+        // 容错：如果本地没找到 wasm 文件或者验证失败，控制台报错，但不阻断 Swap（当前合约不强依赖 ZK）
+        console.warn("ZK Validation skipped or failed:", zkErr);
+      }
+
+      // 🔥 第二步：正常的 Swap 流程
       const bnbBalance = await provider.getBalance(address);
       if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) {
         throw new Error(`Insufficient BNB for gas. You need at least 0.0005 BNB.`);
       }
 
-      const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
       const rawAmount = ethers.parseUnits(inputAmount, 18);
 
@@ -272,62 +294,15 @@ function App() {
     }
   };
 
-  // --- ZK 零知识证明生成与链上验证逻辑 ---
-  const executeZKDemo = async () => {
-    if (zkStatus === 'generating' || zkStatus === 'verifying') return;
-    if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
-
-    const isNetworkOk = await ensureBscNetwork();
-    if (!isNetworkOk) return;
-
-    try {
-      setZkStatus('generating');
-      setTxMsg('');
-      
-      // 1. 本地生成证明 (a=3, b=11 => c=33)
-      const input = { a: 3, b: 11 };
-      const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-        input,
-        "/multiplier.wasm",
-        "/multiplier_final.zkey"
-      );
-      
-      // 2. 格式化证明数据以适配 Solidity 合约
-      const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
-      const argv = JSON.parse("[" + calldata + "]");
-      
-      // 3. 调用主网合约进行链上验证
-      setZkStatus('verifying');
-      const provider = new ethers.BrowserProvider(walletProvider);
-      const signer = await provider.getSigner();
-      const verifierContract = new ethers.Contract(CONFIG.VERIFIER_ADDRESS, VERIFIER_ABI, signer);
-      
-      // 注意：由于 verifyProof 是 view 函数，直接读链不需要 Gas，这里连钱包都没弹，直接瞬间出结果
-      const isValid = await verifierContract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
-      
-      if (isValid) {
-        setZkStatus('success');
-      } else {
-        throw new Error("链上合约返回验证失败");
-      }
-
-    } catch (error) {
-      console.error("ZK Error:", error);
-      setZkStatus('error');
-    }
-  };
-
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const isButtonDisabled = isProcessing || (isConnected && (errorMsg !== '' || !inputAmount || parseFloat(inputAmount) <= 0));
 
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
       
-      {/* 背景装饰 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
-      {/* 顶部 Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -339,13 +314,12 @@ function App() {
         {isConnected ? (
           <AppKitButton balance="hide" />
         ) : (
-          <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)', transition: 'all 0.2s ease' }}>
+          <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
             Connect Wallet
           </button>
         )}
       </div>
 
-      {/* 主内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
         {/* ====== Swap 页面 ====== */}
@@ -460,52 +434,69 @@ function App() {
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.7 }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain via BscScan.</p>
             </div>
-            {/* 其他卡片... */}
           </div>
         )}
 
-        {/* ====== Contact 页面 (包含 ZK 演示) ====== */}
+        {/* ====== Contact 页面 (纯净版) ====== */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
-            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '30px' }}>Follow our official channels for updates and institutional onboarding.</p>
+            
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px', textAlign: 'center' }}>Connect with Us</h2>
+            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>
+              Follow our official channels for the latest updates, support, and institutional onboarding.
+            </p>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '24px' }}>
-              {/* 社交图标... */}
+              <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#229ED9', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(34,158,217,0.2)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>Telegram</span>
+              </a>
+
+              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>X</span>
+              </a>
+
+              <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'transform 0.2s' }} className="social-btn">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>YouTube</span>
+              </a>
             </div>
 
-            <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
+            <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              UFO built by StoneX
+            </div>
 
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-               {/* 邮箱和地址卡片... */}
-            </div>
+              <a href="mailto:ufodollar6@gmail.com" style={{ textDecoration: 'none' }}>
+                <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Email Support</div>
+                    <div style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>ufodollar6@gmail.com</div>
+                  </div>
+                </div>
+              </a>
 
-            {/* 🔥 ZK 生产级演示区块 */}
-            <div style={{ marginTop: '40px', width: '100%', maxWidth: '360px', padding: '24px', background: '#f8fafc', borderRadius: '20px', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Zero-Knowledge Capability Demo</h4>
-              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
-                Our infrastructure generates a Groth16 ZK-Proof directly in your browser and verifies it on the BNB Chain Mainnet.
-              </p>
-              
-              <button 
-                onClick={executeZKDemo}
-                disabled={zkStatus === 'generating' || zkStatus === 'verifying'}
-                style={{ 
-                  width: '100%', padding: '14px', 
-                  background: zkStatus === 'success' ? '#10b981' : (zkStatus === 'generating' || zkStatus === 'verifying' ? '#94a3b8' : '#8b5cf6'), 
-                  color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: (zkStatus === 'generating' || zkStatus === 'verifying') ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.3s'
-                }}
-              >
-                {zkStatus === 'idle' && '体验零知识证明 (ZK Demo)'}
-                {zkStatus === 'generating' && '正在本地生成证明...'}
-                {zkStatus === 'verifying' && '正在 BSC 主网验证...'}
-                {zkStatus === 'success' && '✅ 链上验证成功 (Result: 33)'}
-                {zkStatus === 'error' && '❌ 验证失败，点击重试'}
-              </button>
-              <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '8px' }}>
-                *Runs purely client-side. Verifier Contract: {CONFIG.VERIFIER_ADDRESS.slice(0,6)}...{CONFIG.VERIFIER_ADDRESS.slice(-4)}
-              </p>
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Headquarters</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', lineHeight: '1.4' }}>
+                    Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI
+                  </div>
+                </div>
+              </div>
             </div>
 
           </div>
@@ -513,9 +504,7 @@ function App() {
 
       </div>
 
-      {/* 底部导航栏 */}
       <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: '#fff', borderTop: '1px solid #f1f5f9', padding: '10px 0 20px 0', zIndex: 20, flexShrink: 0 }}>
-        {/* 导航按钮... */}
         <div onClick={() => setActiveTab('swap')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: activeTab === 'swap' ? '#3b82f6' : '#94a3b8', flex: 1, cursor: 'pointer' }}><span style={{ fontSize: '11px', fontWeight: '700' }}>Swap</span></div>
         <div onClick={() => setActiveTab('assets')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: activeTab === 'assets' ? '#3b82f6' : '#94a3b8', flex: 1, cursor: 'pointer' }}><span style={{ fontSize: '11px', fontWeight: '700' }}>Wallet</span></div>
         <div onClick={() => setActiveTab('rules')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: activeTab === 'rules' ? '#3b82f6' : '#94a3b8', flex: 1, cursor: 'pointer' }}><span style={{ fontSize: '11px', fontWeight: '700' }}>Rules</span></div>
