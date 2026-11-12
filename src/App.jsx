@@ -37,7 +37,7 @@ const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE';
 
 // 🔥 如果你在 Remix 部署了 Verifier.sol，把地址填在这里
-const VERIFIER_ADDRESS = ''; 
+const VERIFIER_ADDRESS = '0x924d7E7b18087CF76Bd7bc0b173B688ff97410c3'; 
 const VERIFIER_ABI = [
   "function verifyProof(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[1] memory input) public view returns (bool)"
 ];
