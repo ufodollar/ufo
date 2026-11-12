@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
+import * as snarkjs from 'snarkjs'; // 🔥 引入 ZK 证明库
 
 // ================= 1. Init Reown AppKit =================
 try {
@@ -34,6 +35,12 @@ const VAULT_ADDRESS = '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE';
 const UFO_ADDRESS = '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB';
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 const BNB_ORACLE = '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE';
+
+// 🔥 如果你在 Remix 部署了 Verifier.sol，把地址填在这里
+const VERIFIER_ADDRESS = ''; 
+const VERIFIER_ABI = [
+  "function verifyProof(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[1] memory input) public view returns (bool)"
+];
 
 const TOKENS = [
   { symbol: 'USDT', name: 'Tether USD', address: USDT_ADDRESS, decimals: 18, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
@@ -182,6 +189,7 @@ function App() {
     }
   }, [isConnected, address, activeTab, walletProvider]);
 
+  // 🔥 双向收费 0.5% 逻辑计算
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
@@ -283,6 +291,52 @@ function App() {
       setErrorMsg(error.reason || error.shortMessage || 'Transaction rejected or failed');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // 🔥 真正的 ZK 零知识证明生成与验证函数
+  const testZKProof = async () => {
+    try {
+      alert("正在调动浏览器本地算力生成零知识证明，请稍候...");
+      
+      // 证明秘密：a=3, b=11，乘积 c=33
+      const input = { a: 3, b: 11 };
+      
+      // 从 public 文件夹获取 wasm 和 zkey 文件（路径必须带 /）
+      const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+        input,
+        "/multiplier.wasm",
+        "/multiplier_final.zkey"
+      );
+      
+      console.log("Proof:", proof);
+      console.log("Public Signals (乘积):", publicSignals[0]);
+
+      const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+      
+      // 如果你在 Remix 部署了合约，这里会直接调用链上验证
+      if (VERIFIER_ADDRESS && walletProvider) {
+        alert("证明生成成功，正在提交到 BSC 链上验证...");
+        const provider = new ethers.BrowserProvider(walletProvider);
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(VERIFIER_ADDRESS, VERIFIER_ABI, signer);
+        
+        const argv = JSON.parse("[" + calldata + "]");
+        // 调用链上 verifyProof 函数
+        const isValid = await contract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
+        
+        if (isValid) {
+          alert(`🔥 完美！\n\n前端证明生成成功，且已通过 BSC 链上合约的密码学验证！\n公开结果(乘积): ${publicSignals[0]}`);
+        } else {
+          alert("❌ 链上验证失败。");
+        }
+      } else {
+        alert(`🎉 前端 ZK 证明生成成功！\n\n公开结果(乘积): ${publicSignals[0]}\n\n(提示: 如果你在代码里填入了部署好的 Verifier 合约地址，这里还会自动发起链上验证)`);
+      }
+      
+    } catch (error) {
+      console.error("ZK Proof Error:", error);
+      alert("生成证明失败，请确保 public 文件夹里有 multiplier.wasm 和 multiplier_final.zkey，并按 F12 查看控制台。");
     }
   };
 
@@ -471,7 +525,6 @@ function App() {
 
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            {/* 1. 主卡片 */}
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', marginBottom: '10px' }}>
                 Universal Crypto Settlement Stablecoin
@@ -484,7 +537,6 @@ function App() {
               </p>
             </div>
 
-            {/* 2. 发行与储备 */}
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Issuance & Reserves</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting. No arbitrary issuance.</h4>
@@ -493,7 +545,6 @@ function App() {
               </p>
             </div>
 
-            {/* 3. 安全性 */}
             <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Security</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
@@ -502,7 +553,6 @@ function App() {
               </p>
             </div>
 
-            {/* 4. 全球覆盖与保密性 */}
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Reach & Confidentiality</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement. Commercial details shielded.</h4>
@@ -511,7 +561,6 @@ function App() {
               </p>
             </div>
 
-            {/* 5. 隐私与合规 */}
             <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Privacy & Compliance</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default. Auditable by design.</h4>
@@ -520,7 +569,6 @@ function App() {
               </p>
             </div>
 
-            {/* 6. 结算速度 */}
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Settlement Speed</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Send money the way you send a message.</h4>
@@ -529,7 +577,6 @@ function App() {
               </p>
             </div>
 
-            {/* 7. 架构 */}
             <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Architecture</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design. Isolated from market speculation.</h4>
@@ -538,7 +585,6 @@ function App() {
               </p>
             </div>
 
-            {/* 8. 免责声明 */}
             <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)', color: '#fff' }}>
               <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>Disclaimer</div>
               <h4 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment product.</h4>
@@ -558,7 +604,6 @@ function App() {
             </p>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '24px' }}>
-              {/* 标准 Telegram 图标 */}
               <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', gap: '8px' }}>
                 <div style={{ width: '64px', height: '64px', background: '#229ED9', borderRadius: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(34,158,217,0.2)', transition: 'transform 0.2s' }} className="social-btn">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
@@ -581,7 +626,6 @@ function App() {
               </a>
             </div>
 
-            {/* UFO built by StoneX */}
             <div style={{ marginBottom: '32px', fontSize: '13px', color: '#94a3b8', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
               UFO built by StoneX
             </div>
@@ -613,6 +657,17 @@ function App() {
               </div>
 
             </div>
+
+            {/* 🔥 零知识证明测试按钮 */}
+            <button 
+              onClick={testZKProof}
+              style={{ marginTop: '30px', padding: '12px 24px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)' }}
+            >
+              测试 ZK 零知识证明生成与验证
+            </button>
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
+              *This is a live Zero-Knowledge proof generation test on your browser.
+            </p>
           </div>
         )}
 
