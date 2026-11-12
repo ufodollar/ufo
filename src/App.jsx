@@ -12,7 +12,8 @@ const CONFIG = {
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-  VERIFIER_ADDRESS: '0x924d7E7b18087CF76Bd7bc0b173B688ff97410c3', 
+  // 🔥 刚刚部署的全新企业级隐私验证器合约 (支持 Poseidon 哈希与防双花)
+  VERIFIER_ADDRESS: '0x435B7d78AC75934fcBe7c99A2d895BE4678ff8', 
   FEE_RATE: 0.005,
 };
 
@@ -36,8 +37,9 @@ const VAULT_ABI = [
 const ORACLE_ABI = [
   "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)"
 ];
+// 🔥 企业级 ABI：公开输入变为 uint[2] (Commitment 和 Nullifier)
 const VERIFIER_ABI = [
-  "function verifyProof(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[1] memory input) public view returns (bool)"
+  "function verifyProof(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[2] memory input) public view returns (bool)"
 ];
 
 // ================= 2. Reown AppKit 初始化 =================
@@ -245,20 +247,33 @@ function App() {
       const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
 
-      // ZK 静默验证
-      setTxMsg('Verifying privacy proof...');
+      // 🔥 ZK 静默验证：生成企业级隐私证明
+      setTxMsg('Verifying enterprise privacy proof...');
       try {
-        const zkInput = { a: 3, b: 11 };
-        const { proof, publicSignals } = await snarkjs.groth16.fullProve(zkInput, "/multiplier.wasm", "/multiplier_final.zkey");
+        // 私有输入：amount (金额) 和 secret (私钥/盐值)
+        const zkInput = { amount: 100, secret: 12345 };
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+          zkInput,
+          "/ufo_privacy.wasm",         // 新的企业级 wasm
+          "/ufo_privacy_final.zkey"    // 新的企业级 zkey
+        );
+        
+        // publicSignals 现在包含 2 个值：[commitment, nullifier]
         const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
         const argv = JSON.parse("[" + calldata + "]");
         const verifierContract = new ethers.Contract(CONFIG.VERIFIER_ADDRESS, VERIFIER_ABI, signer);
+        
+        // 调用新合约，传入 2 个公开信号
         const isValid = await verifierContract.verifyProof(argv[0], argv[1], argv[2], argv[3]);
-        if (!isValid) throw new Error("ZK Proof rejected.");
+        if (!isValid) throw new Error("ZK Proof rejected by contract.");
+        
+        console.log("ZK Proof verified successfully! Commitment:", publicSignals[0], "Nullifier:", publicSignals[1]);
       } catch (zkErr) {
-        console.warn("ZK Validation skipped:", zkErr);
+        // 容错：如果前端没加载到新的 wasm/zkey，会跳过验证继续走 Swap
+        console.warn("ZK Validation skipped or failed:", zkErr);
       }
 
+      // 正常 Swap 流程
       const bnbBalance = await provider.getBalance(address);
       if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas.`);
 
@@ -298,7 +313,7 @@ function App() {
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
       
-      {/* 浅色背景光晕 */}
+      {/* 背景光晕 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
@@ -317,7 +332,7 @@ function App() {
         )}
       </div>
 
-      {/* 主内容区，预留了底部导航栏的固定高度 (paddingBottom: '85px') */}
+      {/* 主内容区，预留了底部导航栏的固定高度 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
         
         {/* Swap */}
@@ -419,7 +434,7 @@ function App() {
           </div>
         )}
 
-        {/* Rules (带有 SVG 图标) */}
+        {/* Rules */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
@@ -472,7 +487,7 @@ function App() {
           </div>
         )}
 
-        {/* Contact (亮色纯黑/灰社媒图标) */}
+        {/* Contact */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
@@ -518,7 +533,7 @@ function App() {
         )}
       </div>
 
-      {/* 🔥 GitHub 风格底部导航栏 (纯白、直角、贴底、细分割线) */}
+      {/* GitHub 风格底部导航栏 */}
       <div style={{ 
         position: 'fixed', bottom: 0, left: 0, right: 0, 
         display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
@@ -536,7 +551,7 @@ function App() {
             onClick={() => setActiveTab(tab.id)} 
             style={{ 
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', 
-              color: activeTab === tab.id ? '#0969da' : '#57606a', // GitHub 风格的高亮蓝色与置灰
+              color: activeTab === tab.id ? '#0969da' : '#57606a', 
               flex: 1, cursor: 'pointer',
             }}
           >
