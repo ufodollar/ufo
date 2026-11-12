@@ -298,43 +298,43 @@ function App() {
   const isButtonDisabled = isProcessing || (isConnected && (errorMsg !== '' || !inputAmount || parseFloat(inputAmount) <= 0));
 
   return (
-    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
+    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#09090b', color: '#ffffff' }}>
       
-      {/* 背景光晕 */}
-      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
-      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
+      {/* 背景暗色光晕 */}
+      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#1e3a8a', borderRadius: '50%', filter: 'blur(100px)', opacity: 0.3, zIndex: 0 }}></div>
+      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#4c1d95', borderRadius: '50%', filter: 'blur(100px)', opacity: 0.2, zIndex: 0 }}></div>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: '40px', height: '40px', background: '#18181b', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #27272a' }}>
             <UfoIcon size={28} />
           </div>
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
         {isConnected ? <AppKitButton balance="hide" /> : (
-          <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+          <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.2)' }}>
             Connect Wallet
           </button>
         )}
       </div>
 
-      {/* 主内容区，底部留出悬浮导航的空间 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px 20px', zIndex: 10 }}>
+      {/* 主内容区，底部留出导航栏空间 */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px 20px', zIndex: 10 }}>
         
         {/* Swap */}
         {activeTab === 'swap' && (
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+          <div style={{ background: '#18181b', borderRadius: '24px', padding: '20px', border: '1px solid #27272a', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
             
-            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
+            <div style={{ background: '#09090b', borderRadius: '16px', padding: '16px', border: '1px solid #27272a', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#a1a1aa', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
                 <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances['USDT'] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#ffffff', width: '100%' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#18181b', padding: '6px 12px', borderRadius: '20px', border: '1px solid #27272a', fontWeight: '700' }}>
                   {isBuyingUFO ? (
                     <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
                   ) : (
@@ -346,18 +346,18 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
-              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); setErrorMsg(''); }} disabled={isProcessing} style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}>
+              <button onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); setErrorMsg(''); }} disabled={isProcessing} style={{ background: '#18181b', border: '4px solid #09090b', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20V4" /><path d="M3 8l4-4 4 4" /><path d="M17 4v16" /><path d="M21 16l-4 4-4-4" /></svg>
               </button>
             </div>
 
-            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
+            <div style={{ background: '#09090b', borderRadius: '16px', padding: '16px', border: '1px solid #27272a', marginTop: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#a1a1aa', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#18181b', padding: '6px 12px', borderRadius: '20px', border: '1px solid #27272a', fontWeight: '700' }}>
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
@@ -367,16 +367,16 @@ function App() {
               </div>
             </div>
 
-            <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
+            <div style={{ marginTop: '20px', background: '#09090b', borderRadius: '12px', padding: '12px', border: '1px solid #27272a' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#a1a1aa', marginBottom: '6px' }}>
                 <span>Rate</span>
-                <span>1 UFO = {currentNav} USDT</span>
+                <span style={{ color: '#fff' }}>1 UFO = {currentNav} USDT</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
                 <span>-{feeAmount} USDT</span>
               </div>
-              <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
+              <div style={{ height: '1px', background: '#27272a', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>Net Received</span>
                 <span>{outputAmount} {isBuyingUFO ? 'UFO' : 'USDT'}</span>
@@ -384,10 +384,10 @@ function App() {
             </div>
 
             {txMsg && (
-              <div style={{ marginTop: '15px', padding: '10px', textAlign: 'center', background: txMsg.includes('Successful') ? '#ecfdf5' : '#eff6ff', color: txMsg.includes('Successful') ? '#10b981' : '#3b82f6', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold' }}>{txMsg}</div>
+              <div style={{ marginTop: '15px', padding: '10px', textAlign: 'center', background: txMsg.includes('Successful') ? '#064e3b' : '#1e3a8a', color: txMsg.includes('Successful') ? '#34d399' : '#93c5fd', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold' }}>{txMsg}</div>
             )}
 
-            <button onClick={handleAction} disabled={isButtonDisabled} style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isButtonDisabled ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isButtonDisabled ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isButtonDisabled ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}>
+            <button onClick={handleAction} disabled={isButtonDisabled} style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isButtonDisabled ? '#3f3f46' : '#3b82f6', color: isButtonDisabled ? '#a1a1aa' : '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isButtonDisabled ? 'not-allowed' : 'pointer', marginTop: '20px' }}>
               {isProcessing ? 'Processing...' : (isConnected ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet')}
             </button>
           </div>
@@ -395,11 +395,11 @@ function App() {
 
         {/* Assets */}
         {activeTab === 'assets' && (
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
+          <div style={{ background: '#18181b', borderRadius: '24px', padding: '20px', border: '1px solid #27272a', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272a', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{width: 40, height: 40}} alt="BNB"/>
-                <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span><span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span><span style={{ fontSize: '12px', color: '#a1a1aa' }}>Gas Fee Token</span></div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
@@ -407,10 +407,10 @@ function App() {
               </div>
             </div>
             {TOKENS.map((token, index) => (
-              <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== TOKENS.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== TOKENS.length - 1 ? '20px' : '0', marginBottom: index !== TOKENS.length - 1 ? '20px' : '0' }}>
+              <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== TOKENS.length - 1 ? '1px solid #27272a' : 'none', paddingBottom: index !== TOKENS.length - 1 ? '20px' : '0', marginBottom: index !== TOKENS.length - 1 ? '20px' : '0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {token.icon === 'UFO' ? <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}><UfoIcon size={28}/></div> : <img src={token.icon} style={{width: 40, height: 40}} alt={token.symbol}/>}
-                  <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span><span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span></div>
+                  {token.icon === 'UFO' ? <div style={{width: 40, height: 40, background: '#09090b', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #27272a'}}><UfoIcon size={28}/></div> : <img src={token.icon} style={{width: 40, height: 40}} alt={token.symbol}/>}
+                  <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span><span style={{ fontSize: '12px', color: '#a1a1aa' }}>{token.name}</span></div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                   <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
@@ -421,7 +421,7 @@ function App() {
           </div>
         )}
 
-        {/* Rules (全新图标版) */}
+        {/* Rules (深色模式适配) */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
@@ -430,43 +430,43 @@ function App() {
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>. Currently circulating in over 160 countries for enterprise trade, payroll, and personal payments.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #18181b, #27272a)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.5)' }}>
               <CardHeader title="Issuance & Reserves" iconType="safe" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #064e3b, #0f766e)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.5)' }}>
               <CardHeader title="Security" iconType="shield" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Every UFO transaction is secured by blockchain-level cryptography. Once recorded, data cannot be altered or reversed by any party. Asset integrity is enforced by smart contracts.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #6d28d9)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
               <CardHeader title="Global Reach" iconType="layers" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts to anyone, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #4338ca)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
               <CardHeader title="Privacy & Compliance" iconType="eye" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Built on Zero-Knowledge technology, UFO keeps transaction amounts off the public ledger. When regulators or auditors require verification, holders can generate cryptographic proofs through Selective Disclosure.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #78350f, #b45309)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
               <CardHeader title="Settlement Speed" iconType="zap" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Send money like a message.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Cross-border payments shouldn't take days. With UFO, funds arrive in the recipient's wallet within seconds. Settlement operates 24/7, every day of the year.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #064e3b, #10b981)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
               <CardHeader title="Architecture" iconType="lock" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Closed-loop by design.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is not listed on any public exchange and has no public liquidity pools. It operates as a permissionless settlement network, ensuring the asset remains a pure medium for enterprise fund clearing.</p>
             </div>
 
-            <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
               <CardHeader title="Disclaimer" iconType="alert" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Not an investment product.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields. Users are solely responsible for ensuring their use of the protocol complies with their local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.</p>
@@ -474,81 +474,79 @@ function App() {
           </div>
         )}
 
-        {/* Contact */}
+        {/* Contact (暗黑社媒图标) */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
-            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', marginBottom: '8px' }}>Connect with Us</h2>
+            <p style={{ fontSize: '14px', color: '#a1a1aa', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '32px' }}>
-              <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '56px', height: '56px', background: '#229ED9', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(34,158,217,0.3)', transition: 'transform 0.2s' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+            {/* 截图中要求的社媒样式 */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '40px' }}>
+              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '72px', height: '72px', background: '#18181b', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'background 0.2s' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#ffffff"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
                 </div>
               </a>
-              <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '56px', height: '56px', background: '#000', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
+              <a href="https://instagram.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '72px', height: '72px', background: '#18181b', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'background 0.2s' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
                 </div>
               </a>
               <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '56px', height: '56px', background: '#FF0000', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(255,0,0,0.3)', transition: 'transform 0.2s' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                <div style={{ width: '72px', height: '72px', background: '#18181b', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'background 0.2s' }}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="#ffffff"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                 </div>
               </a>
             </div>
 
-            <div style={{ marginBottom: '32px', fontSize: '12px', color: '#94a3b8', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
+            <div style={{ marginBottom: '32px', fontSize: '12px', color: '#a1a1aa', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
 
             <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <a href="mailto:ufodollar6@gmail.com" style={{ textDecoration: 'none' }}>
-                <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                  <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ background: '#18181b', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #27272a' }}>
+                  <div style={{ width: '40px', height: '40px', background: '#09090b', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                   </div>
-                  <div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Email Support</div><div style={{ fontSize: '15px', fontWeight: '700' }}>ufodollar6@gmail.com</div></div>
+                  <div><div style={{ fontSize: '12px', color: '#a1a1aa', fontWeight: '600' }}>Email Support</div><div style={{ fontSize: '15px', fontWeight: '700', color: '#fff' }}>ufodollar6@gmail.com</div></div>
                 </div>
               </a>
-              <div style={{ background: '#fff', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <div style={{ width: '40px', height: '40px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <div style={{ background: '#18181b', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #27272a' }}>
+                <div style={{ width: '40px', height: '40px', background: '#09090b', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
-                <div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Headquarters</div><div style={{ fontSize: '14px', fontWeight: '700' }}>Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI</div></div>
+                <div><div style={{ fontSize: '12px', color: '#a1a1aa', fontWeight: '600' }}>Headquarters</div><div style={{ fontSize: '14px', fontWeight: '700', color: '#fff', lineHeight: 1.4 }}>Ritter House, Wickhams Cay 2,<br/>Road Town, Tortola, BVI</div></div>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* 🔥 悬浮胶囊底栏 */}
+      {/* 🔥 直角贴底导航栏 */}
       <div style={{ 
-        position: 'absolute', bottom: '24px', left: '20px', right: '20px', 
+        position: 'absolute', bottom: 0, left: 0, right: 0, 
         display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
-        background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px)', 
-        border: '1px solid rgba(255,255,255,0.5)', borderRadius: '32px', 
-        padding: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', zIndex: 20 
+        background: '#18181b', borderTop: '1px solid #27272a', 
+        padding: '12px 0 20px 0', zIndex: 20 
       }}>
         {[
-          { id: 'swap', label: 'Swap', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg> },
-          { id: 'assets', label: 'Wallet', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
-          { id: 'rules', label: 'Rules', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> },
-          { id: 'contact', label: 'Contact', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> }
+          { id: 'swap', label: 'Swap', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg> },
+          { id: 'assets', label: 'Wallet', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
+          { id: 'rules', label: 'Rules', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> },
+          { id: 'contact', label: 'Contact', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> }
         ].map((tab) => (
           <div 
             key={tab.id} 
             onClick={() => setActiveTab(tab.id)} 
             style={{ 
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', 
-              color: activeTab === tab.id ? '#3b82f6' : '#94a3b8', 
-              flex: 1, cursor: 'pointer', padding: '8px 0', 
-              background: activeTab === tab.id ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-              borderRadius: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+              color: activeTab === tab.id ? '#3b82f6' : '#71717a', 
+              flex: 1, cursor: 'pointer',
             }}
           >
-            <div style={{ transform: activeTab === tab.id ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s' }}>
+            <div style={{ transform: activeTab === tab.id ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s' }}>
               {tab.icon}
             </div>
-            <span style={{ fontSize: '11px', fontWeight: '700' }}>{tab.label}</span>
+            <span style={{ fontSize: '11px', fontWeight: '600' }}>{tab.label}</span>
           </div>
         ))}
       </div>
