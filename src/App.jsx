@@ -7,17 +7,21 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. Web3 & 合约配置 =================
 const CONFIG = {
-  VAULT_ADDRESS: '0x16fBa21bB5c35A8D67118b38259329AA814ED0DE', 
+  // 注意：部署新合约后，必须替换这里的地址！
+  VAULT_ADDRESS: '0x你的新Vault合约地址', 
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
+  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC上的USDC
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   FEE_RATE: 0.005,
 };
 
-const TOKENS = [
-  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, decimals: 18, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
-  { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, decimals: 18, icon: 'UFO' }
+const STABLECOINS = [
+  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
+  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png' }
 ];
+
+const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org");
 
@@ -26,11 +30,13 @@ const ERC20_ABI = [
   "function allowance(address owner, address spender) view returns (uint256)", 
   "function approve(address spender, uint256 amount) returns (bool)"
 ];
+
 const VAULT_ABI = [
-  "function deposit(uint256 usdtAmount)", 
-  "function withdraw(uint256 ufoAmount)", 
+  "function deposit(address tokenAddress, uint256 amount)", 
+  "function withdraw(address tokenAddress, uint256 ufoAmount)", 
   "function getExchangeRate() view returns (uint256)"
 ];
+
 const ORACLE_ABI = [
   "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)"
 ];
@@ -45,11 +51,7 @@ try {
       description: 'Universal Crypto Settlement Stablecoin', 
       url: window.location.origin,
       icons: ['https://ufo-eea.pages.dev/favicon.ico'],
-      redirect: {
-        native: 'https://ufo-eea.pages.dev', 
-        universal: 'https://ufo-eea.pages.dev',
-        linkMode: true,
-      },
+      redirect: { native: 'https://ufo-eea.pages.dev', universal: 'https://ufo-eea.pages.dev', linkMode: true },
     },
     projectId: 'd6431212399f6c487b364387859983ea',
     features: { analytics: true, allWallets: { showWallets: true } },
@@ -113,6 +115,8 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
+  const [selectedPayToken, setSelectedPayToken] = useState(STABLECOINS[0]); // 默认 USDT
+  const [showTokenMenu, setShowTokenMenu] = useState(false);
   
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.000000');
@@ -172,7 +176,8 @@ function App() {
       const priceData = await oracleContract.latestRoundData();
       setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
 
-      const promises = TOKENS.map(token => {
+      const allTokens = [...STABLECOINS, UFO_TOKEN];
+      const promises = allTokens.map(token => {
         const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
         return contract.balanceOf(address);
       });
@@ -180,9 +185,9 @@ function App() {
       const results = await Promise.allSettled(promises);
       const newBalances = {};
       results.forEach((res, index) => {
-        const token = TOKENS[index];
+        const token = allTokens[index];
         newBalances[token.symbol] = res.status === 'fulfilled' 
-          ? parseFloat(ethers.formatUnits(res.value, token.decimals)).toFixed(6)
+          ? parseFloat(ethers.formatUnits(res.value, 18)).toFixed(6)
           : '0.000000';
       });
       
@@ -214,13 +219,14 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
-    const currentBal = parseFloat(tokenBalances[isBuyingUFO ? 'USDT' : 'UFO'] || '0');
+    // 检查当前选择代币的余额
+    const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedPayToken.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
-      setErrorMsg(`Insufficient ${isBuyingUFO ? 'USDT' : 'UFO'} balance`);
+      setErrorMsg(`Insufficient ${isBuyingUFO ? selectedPayToken.symbol : 'UFO'} balance`);
     } else {
       setErrorMsg('');
     }
-  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected]);
+  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedPayToken]);
 
   const handleAction = async () => {
     if (isProcessing) return;
@@ -238,29 +244,30 @@ function App() {
 
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
-
       const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas. You need at least 0.0005 BNB.`);
+      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas.`);
 
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
       const rawAmount = ethers.parseUnits(inputAmount, 18);
 
       if (isBuyingUFO) {
-        const usdt = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, signer);
-        const allowance = await usdt.allowance(address, CONFIG.VAULT_ADDRESS);
+        const tokenContract = new ethers.Contract(selectedPayToken.address, ERC20_ABI, signer);
+        const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
-          setTxMsg('Approving USDT...');
-          const txApprove = await usdt.approve(CONFIG.VAULT_ADDRESS, ethers.MaxUint256);
+          setTxMsg(`Approving ${selectedPayToken.symbol}...`);
+          const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, ethers.MaxUint256);
           await txApprove.wait();
         }
         setTxMsg('Swapping...');
-        const tx = await vault.deposit(rawAmount);
+        // 传入用户选择的代币地址
+        const tx = await vault.deposit(selectedPayToken.address, rawAmount);
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
         setTxMsg('Redeeming...');
-        const tx = await vault.withdraw(rawAmount);
+        // 赎回时，传入用户想要赎回的代币地址
+        const tx = await vault.withdraw(selectedPayToken.address, rawAmount);
         await tx.wait();
         setTxMsg('Redeem Successful!');
       }
@@ -305,15 +312,32 @@ function App() {
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
-                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances['USDT'] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances[selectedPayToken.symbol] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                
+                {/* 代币选择器 */}
+                <div 
+                  onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
+                >
                   {isBuyingUFO ? (
-                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
+                    <><img src={selectedPayToken.icon} style={{width: 24, height: 24}} alt={selectedPayToken.symbol}/><span>{selectedPayToken.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
                   ) : (
                     <><UfoIcon size={28}/><span>UFO</span></>
+                  )}
+
+                  {/* 下拉菜单 */}
+                  {showTokenMenu && isBuyingUFO && (
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                      {STABLECOINS.map(coin => (
+                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedPayToken(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                          <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
+                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -336,7 +360,7 @@ function App() {
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
-                    <><img src="https://assets.coingecko.com/coins/images/325/large/Tether.png" style={{width: 24, height: 24}} alt="USDT"/><span>USDT</span></>
+                    <><img src={selectedPayToken.icon} style={{width: 24, height: 24}} alt={selectedPayToken.symbol}/><span>{selectedPayToken.symbol}</span></>
                   )}
                 </div>
               </div>
@@ -345,16 +369,16 @@ function App() {
             <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
                 <span>Rate</span>
-                <span>1 UFO = {currentNav} USDT</span>
+                <span>1 UFO = ${currentNav} USD</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} USDT</span>
+                <span>-{feeAmount} {isBuyingUFO ? selectedPayToken.symbol : 'USDT'}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>Net Received</span>
-                <span>{outputAmount} {isBuyingUFO ? 'UFO' : 'USDT'}</span>
+                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedPayToken.symbol}</span>
               </div>
             </div>
 
@@ -380,8 +404,8 @@ function App() {
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
-            {TOKENS.map((token, index) => (
-              <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== TOKENS.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== TOKENS.length - 1 ? '20px' : '0', marginBottom: index !== TOKENS.length - 1 ? '20px' : '0' }}>
+            {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => (
+              <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== arr.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== arr.length - 1 ? '20px' : '0', marginBottom: index !== arr.length - 1 ? '20px' : '0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {token.icon === 'UFO' ? <div style={{width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}><UfoIcon size={28}/></div> : <img src={token.icon} style={{width: 40, height: 40}} alt={token.symbol}/>}
                   <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span><span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span></div>
@@ -400,13 +424,13 @@ function App() {
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
               <CardHeader title="Universal Crypto Settlement" iconType="globe" />
               <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>A stablecoin built for global settlement.</h3>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a global crypto settlement digital dollar stablecoin, fully pegged 1:1 to USDT. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>. Currently circulating in over 160 countries for enterprise trade, payroll, and personal payments.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin. It is not listed on traditional exchanges and has no liquidity pools. It utilizes advanced cryptography to <b>prevent on-chain payment information leakage</b>. Currently circulating in over 160 countries for enterprise trade, payroll, and personal payments.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
-              <CardHeader title="Issuance & Reserves" iconType="safe" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Permissionless minting.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is issued exclusively via smart contract and backed 1:1 by USDT held in a transparent vault. Minting occurs whenever any user deposits USDT; redemption triggers immediate token burning. All vault balances are fully verifiable on-chain.</p>
+              <CardHeader title="Multi-Collateral" iconType="safe" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Multi-asset resilience.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO Vault accepts both <b>USDT and USDC</b> as minting collaterals. By isolating the reserves of each asset, UFO mitigates the systemic risk of a single issuer freezing funds. All vault balances are fully verifiable on-chain.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)' }}>
