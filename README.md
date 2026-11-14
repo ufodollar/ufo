@@ -1,84 +1,113 @@
 <div align="center">
+  <!-- 标题 -->
   <h1>🛸 UFO Dollar - Frontend DApp</h1>
-  <p><strong>Private Repository for the UFO Dollar Web Interface</strong></p>
+  
+  <!-- 简介 -->
+  <p><strong>The Official Web Interface for the Next-Generation B2B Settlement Stablecoin.</strong></p>
+  
+  <!-- 极限装饰：超粗的彩色徽章矩阵 -->
   <p>
-    <img src="https://img.shields.io/badge/Status-Production_Ready-success?style=flat-square" alt="Status">
-    <img src="https://img.shields.io/badge/Framework-React_Vite-blue?style=flat-square" alt="React">
-    <img src="https://img.shields.io/badge/Web3-Ethers.js_v6-purple?style=flat-square" alt="Ethers">
-    <img src="https://img.shields.io/badge/Wallet-Reown_AppKit-black?style=flat-square" alt="Reown">
+    <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
+    <img src="https://img.shields.io/badge/Network-BSC_MAINNET-F3BA2F?style=for-the-badge&logo=binance" alt="Network">
+    <img src="https://img.shields.io/badge/Framework-React_Vite-61DAFB?style=for-the-badge&logo=react" alt="React">
+    <img src="https://img.shields.io/badge/Web3-Ethers.js_v6-3C3C3D?style=for-the-badge&logo=ethereum" alt="Ethers">
+    <img src="https://img.shields.io/badge/Wallet-Reown_AppKit-black?style=for-the-badge&logo=walletconnect" alt="Reown">
+    <img src="https://img.shields.io/badge/Security-Private_Repo-red?style=for-the-badge&logo=shieldsdotio" alt="Security">
+  </p>
+
+  <!-- 快速导航（类似按钮的效果） -->
+  <p>
+    <kbd>🚀 Quick Start</kbd> &nbsp; • &nbsp; 
+    <kbd>🛡️ Security</kbd> &nbsp; • &nbsp; 
+    <kbd>⚙️ Config</kbd> &nbsp; • &nbsp; 
+    <kbd>🐞 Debug</kbd>
   </p>
 </div>
 
 <br />
-
-> ⚠️ **CRITICAL NOTICE FOR DEVELOPERS**
-> This is a private internal repository. Do not expose proprietary business logic. If the `UFOVault.sol` or `UFOToken.sol` contracts are upgraded, update the addresses here immediately. If the production domain changes, you MUST update the allowed domains in the Reown AppKit dashboard.
+<hr />
 
 <h2>⚙️ Core Configuration</h2>
-<p>All smart contract addresses, network parameters, and fee rates are centralized in the <code>CONFIG</code> object at the top of <code>src/App.jsx</code>:</p>
+<p>All smart contract addresses and parameters are centralized in <code>src/App.jsx</code>. <b>Ensure you are on BSC Mainnet.</b></p>
 
-<pre><code class="language-javascript">const CONFIG = {
-  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', // Dual-Collateral Vault
-  UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB', // UFO Token
-  USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-  BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-  FEE_RATE: 0.005,
-};</code></pre>
-
-<h2>🚀 Local Development</h2>
-<blockquote>
-  <p>💡 <strong>Quick Start Guide</strong></p>
-  <p>Follow these steps to spin up the local development environment.</p>
-</blockquote>
-
-<h3>1. Install Dependencies</h3>
-<pre><code class="language-bash">npm install</code></pre>
-
-<h3>2. Start Local Server (Port 5173)</h3>
-<pre><code class="language-bash">npm run dev</code></pre>
-
-<h3>3. Build for Production</h3>
-<pre><code class="language-bash">npm run build</code></pre>
-
-<h2>☁️ Deployment & Operations</h2>
-<blockquote>
-  <p>🛡️ <strong>Internal Runbook & Security Procedures</strong></p>
-  <p>Follow these steps immediately if something goes wrong.</p>
-</blockquote>
-
+<!-- 表格模拟卡片布局 -->
 <table>
   <tr>
-    <td width="30%"><strong>Hosting</strong></td>
-    <td>Deployed via Cloudflare Pages. Auto-deploys on push to <code>main</code> branch.</td>
-  </tr>
-  <tr>
-    <td><strong>Network Enforcement</strong></td>
-    <td><code>ensureBscNetwork</code> forces wallet connection to BSC Mainnet (<code>chainId: 0x38</code>).</td>
-  </tr>
-  <tr>
-    <td><strong>Polling</strong></td>
-    <td>User balances are polled every 5 seconds to reflect the latest on-chain state.</td>
-  </tr>
-  <tr>
-    <td><strong>Emergency Pause</strong></td>
-    <td>If <code>UFOVault</code> is paused by the contract owner, the UI intercepts the EVM revert and blocks Swap/Redeem actions.</td>
-  </tr>
-  <tr>
-    <td><strong>IPFS Backup</strong></td>
-    <td>If Cloudflare goes down, deploy the <code>dist/</code> folder to Fleek or Pinata.</td>
+    <td width="50%">
+      <h3>🛡️ Core Vault</h3>
+      <p><code>0x62Eaf08612c77F944265DE421F3Bed054531cC9C</code></p>
+    </td>
+    <td width="50%">
+      <h3>🪙 UFO Token</h3>
+      <p><code>0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB</code></p>
+    </td>
   </tr>
 </table>
 
-<h2>🐞 Troubleshooting</h2>
-<ul>
-  <li><strong>Wallet Connect Fails to Pop Up:</strong> Check if the <code>projectId</code> is valid and if the current domain is whitelisted in the Reown Dashboard.</li>
-  <li><strong>Balances Show 0:</strong> Ensure the user is on BSC Mainnet. The public RPC node might occasionally rate-limit; consider switching to a private RPC provider.</li>
-  <li><strong>Transaction Stuck on "Processing":</strong> The user might have rejected the transaction in their wallet, or the gas fee is too low. Check the browser console for the specific ethers.js error.</li>
-</ul>
+<h3>Frontend Constants</h3>
+<pre><code class="language-javascript">const CONFIG = {
+  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C',
+  UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
+  USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
+  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+  BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
+  FEE_RATE: 0.005, // 0.5% Settlement Fee
+};</code></pre>
+
+<hr />
+
+<h2>🚀 Local Development</h2>
+
+> 💡 **Developer Note:** Use Node.js v18 or higher. Ensure you have your `projectId` configured for Reown AppKit.
+
+<details>
+<summary><b>👉 Click to Expand Full Setup Guide</b></summary>
+<br>
+
+**1. Install Dependencies**
+<pre><code class="language-bash">npm install</code></pre>
+
+**2. Run Locally (Port 5173)**
+<pre><code class="language-bash">npm run dev</code></pre>
+
+**3. Build for Production**
+<pre><code class="language-bash">npm run build</code></pre>
+
+</details>
+
+<hr />
+
+<h2>🛡️ Internal Runbook (Emergency)</h2>
+
+> ⚠️ **CRITICAL:** If a vulnerability is detected, the protocol owner must act immediately.
+
+<table>
+  <thead>
+    <tr>
+      <th align="left" width="30%">Scenario</th>
+      <th align="left" width="70%">Action Required</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Vault Hacked/Frozen</b></td>
+      <td>1. Call <code>pause()</code> on BscScan.<br>2. UI auto-blocks swaps.<br>3. Notify TG/X.</td>
+    </tr>
+    <tr>
+      <td><b>Cloudflare Outage</b></td>
+      <td>Build locally (<code>npm run build</code>) and upload <code>dist/</code> to IPFS (Fleek/Pinata).</td>
+    </tr>
+    <tr>
+      <td><b>WalletConnect Fails</b></td>
+      <td>Verify <code>projectId</code> and domain whitelist in Reown Dashboard.</td>
+    </tr>
+  </tbody>
+</table>
 
 <br />
 
 <div align="center">
-  <i>UFO Dollar - Proprietary & Closed-Source. All rights reserved.</i>
+  <p><i>UFO Dollar - Proprietary & Closed-Source.</i></p>
+  <img src="https://forthebadge.com/images/badges/built-with-love.svg" height="28">
+  <img src="https://forthebadge.com/images/badges/powered-by-black-magic.svg" height="28">
 </div>
