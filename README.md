@@ -1,11 +1,8 @@
 <div align="center">
-  <!-- 标题 -->
   <h1>🛸 UFO Dollar - Frontend DApp</h1>
   
-  <!-- 简介 -->
   <p><strong>The Official Web Interface for the Next-Generation B2B Settlement Stablecoin.</strong></p>
   
-  <!-- 极限装饰：超粗的彩色徽章矩阵 -->
   <p>
     <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
     <img src="https://img.shields.io/badge/Network-BSC_MAINNET-F3BA2F?style=for-the-badge&logo=binance" alt="Network">
@@ -15,7 +12,6 @@
     <img src="https://img.shields.io/badge/Security-Private_Repo-red?style=for-the-badge&logo=shieldsdotio" alt="Security">
   </p>
 
-  <!-- 快速导航（类似按钮的效果） -->
   <p>
     <kbd>🚀 Quick Start</kbd> &nbsp; • &nbsp; 
     <kbd>🛡️ Security</kbd> &nbsp; • &nbsp; 
@@ -30,7 +26,6 @@
 <h2>⚙️ Core Configuration</h2>
 <p>All smart contract addresses and parameters are centralized in <code>src/App.jsx</code>. <b>Ensure you are on BSC Mainnet.</b></p>
 
-<!-- 表格模拟卡片布局 -->
 <table>
   <tr>
     <td width="50%">
@@ -104,10 +99,14 @@
   </tbody>
 </table>
 
+<hr />
+
+<h2>📄 License</h2>
+<p>This project is <b>proprietary and closed-source</b>. All rights reserved. No part of this repository may be reproduced, distributed, or transmitted in any form without prior written permission from the UFO Dollar team.</p>
+
 <br />
 
 <div align="center">
-  <p><i>UFO Dollar - Proprietary & Closed-Source.</i></p>
   <img src="https://forthebadge.com/images/badges/built-with-love.svg" height="28">
   <img src="https://forthebadge.com/images/badges/powered-by-black-magic.svg" height="28">
 </div>
