@@ -1,77 +1,57 @@
-UFO Dollar - Frontend DApp (Private)
+# UFO Dollar - Protocol Core & Smart Contracts
 
-Internal repository for the official UFO Dollar Frontend DApp. This interface facilitates zero-slippage B2B settlement on BNB Smart Chain (BSC), enabling users to mint and redeem the USD-pegged UFO stablecoin using USDT or USDC.
+Smart contract architecture for **UFO Dollar**, a dual-collateral, USD-pegged settlement stablecoin on BNB Smart Chain (BSC).
 
-🛠 Tech Stack
+## 🔗 Live Deployments (BSC Mainnet)
 
-· Framework: React (Vite)
-· Web3 Integration: Ethers.js v6
-· Wallet Connection: Reown AppKit (formerly WalletConnect)
-· Styling: Pure CSS-in-JS (React inline styles)
-· Deployment: Cloudflare Pages
+*   **UFOVault (Dual-Collateral Core):** [0x62Eaf08612c77F944265DE421F3Bed054531cC9C](https://bscscan.com/address/0x62Eaf08612c77F944265DE421F3Bed054531cC9C)
+*   **UFOToken (ERC20):** [0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB](https://bscscan.com/address/0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB)
 
-⚙️ Core Configuration
+## ✨ Core Architecture
 
-All smart contract addresses, network parameters, and fee rates are centralized in the CONFIG object at the top of src/App.jsx.
+*   **Dual-Collateral:** Accepts both USDT and USDC. Reserves are tracked independently via mapping.
+*   **Zero-Slippage:** Hardcoded 1:1 peg (1 USDT/USDC = 1 UFO). No AMM liquidity pools involved.
+*   **Oracle-Free:** No external price feeds required for minting/redeeming.
+*   **0.5% Protocol Fee:** Applied on both deposit and withdraw.
 
-```javascript
-const CONFIG = {
-  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', // Dual-Collateral Vault
-  UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
-  USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-  BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-  FEE_RATE: 0.005,
-};
-```
+## 🛠 Tech Stack
 
-⚠️ CRITICAL NOTICE: If the UFOVault.sol or UFOToken.sol contracts are upgraded/redeployed, the VAULT_ADDRESS or UFO_ADDRESS in this file MUST be updated immediately. Push the change to the main branch to trigger a Cloudflare rebuild.
+*   **Smart Contracts:** Solidity ^0.8.20
+*   **Framework:** Foundry (Forge)
+*   **Libraries:** OpenZeppelin (ReentrancyGuard, Pausable, AccessControl)
+*   **CI/CD:** GitHub Actions
 
-🚀 Local Development
+## 🚀 Local Development & Testing
 
-Prerequisites
+~~~bash
+git clone https://github.com/ufodollar/bsc-vault.git
+cd bsc-vault
+forge install OpenZeppelin/openzeppelin-contracts@v5.0.2 --no-commit
+forge build
+forge test
+~~~
 
-· Node.js (v18 or higher)
-· npm or yarn
+### Environment Variables
 
-1. Install Dependencies
+Create a `.env` file at the root for deployment:
 
-```bash
-npm install
-```
+~~~env
+PRIVATE_KEY=your_wallet_private_key
+BSC_RPC_URL=https://bsc-dataseed.binance.org
+~~~
 
-2. Start Local Server
+### Deployment to BSC Mainnet
 
-```bash
-npm run dev
-```
+~~~bash
+forge create src/UFOVault.sol:UFOVault --rpc-url $BSC_RPC_URL --private-key $PRIVATE_KEY --constructor-args 0x55d398326f99059fF775485246999027B3197955 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d 0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB <FEE_RECIPIENT_ADDRESS>
+~~~
 
-The application will be available at http://localhost:5173.
+## 🛡 Security
 
-3. Build for Production
+*   Only `UFOVault` holds `MINTER_ROLE` and `BURNER_ROLE`.
+*   `Pausable` mechanism for emergency halts.
+*   All transactions and balances are fully verifiable on BscScan.
 
-```bash
-npm run build
-```
+## 📄 License
 
-☁️ Deployment Pipeline
-
-· Hosting: The DApp is hosted on Cloudflare Pages.
-· CI/CD: Pushing code to the main branch automatically triggers a production build and deployment.
-· Branch Management: Use dev or feature branches for testing. All pull requests require review before merging into main.
-
-🛡️ Security & Emergency Operations
-
-Environment & Privacy
-
-· This is a private repository. Do not expose proprietary business logic or internal API keys.
-· The Reown Project ID (d643...) is public-facing and safe to expose in the client, but keep any future RPC keys or backend secrets in Cloudflare Environment Variables (e.g., VITE_ prefix).
-
-Smart Contract Interaction & Pause
-
-· Transaction Reverts: The frontend is designed to catch and display EVM revert reasons (e.g., UnsupportedToken, Insufficient balance, Pausable: paused).
-· Emergency Kill Switch: If a vulnerability is detected in the UFOVault contract, the contract owner must call the pause() function via BscScan. The frontend will automatically block Swap and Redeem attempts and surface the error to the user.
-
-Decentralized Backup
-
-· In the event of a Cloudflare domain ban or outage, the static build (dist/ directory) can be deployed to IPFS (via Fleek or Pinata) to maintain uninterrupted access to the protocol.
+This project is licensed under the MIT License.
