@@ -47,7 +47,7 @@ try {
     networks: [bsc],
     metadata: { 
       name: 'UFO Dollar', 
-      description: 'Universal Crypto Settlement Stablecoin', 
+      description: 'Value-Invisible Settlement Stablecoin', 
       url: window.location.origin,
       icons: ['https://ufo-eea.pages.dev/favicon.ico'],
       redirect: { native: 'https://ufo-eea.pages.dev', universal: 'https://ufo-eea.pages.dev', linkMode: true },
@@ -117,7 +117,7 @@ function App() {
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   
-  // 🔥 隐身模式状态（防物理勒索）
+  // 隐身模式状态
   const [stealthMode, setStealthMode] = useState(false);
 
   const [inputAmount, setInputAmount] = useState('');
@@ -279,9 +279,8 @@ function App() {
     }
   };
 
-  // 隐身模式下的格式化函数
   const formatUsd = (val) => {
-    if (stealthMode) return '***'; 
+    if (stealthMode) return '0.00'; 
     return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
@@ -302,7 +301,6 @@ function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* 🔥 隐身模式切换按钮 */}
           <button 
             onClick={() => setStealthMode(!stealthMode)}
             title="Toggle Stealth Mode (Hide Asset Values)"
@@ -329,7 +327,6 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
             
-            {/* You Pay 框 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
@@ -338,7 +335,6 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
-                {/* 代币选择器 */}
                 <div 
                   onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
@@ -370,7 +366,6 @@ function App() {
               </button>
             </div>
 
-            {/* You Receive 框 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
@@ -438,7 +433,6 @@ function App() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                {/* 隐身模式处理 */}
                 <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
@@ -450,7 +444,6 @@ function App() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                   <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
-                  {/* 隐身模式处理：将估值伪装为 0.00 */}
                   <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0))}</span>
                 </div>
               </div>
@@ -463,11 +456,11 @@ function App() {
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
               <CardHeader title="Value-Invisible Stablecoin" iconType="eye" />
               <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Transparent on-chain. Invisible in your wallet.</h3>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin with no public liquidity pools. Because it is not listed on traditional exchanges, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots, keeping your true net worth completely hidden.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin with no public liquidity pools. Because it is not listed on traditional exchanges, standard wallets display its fiat value as <b>$0.00</b>. However, it has actual value inside UFO Dollar and can be redeemed for USDT/USDC at any time. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots, completely hiding your true net worth.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
-              <CardHeader title="Dual-Collateral" iconType="safe" />
+              <CardHeader title="Multi-Collateral" iconType="safe" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Fully reserved 1:1. Multi-asset resilience.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO Vault accepts both <b>USDT and USDC</b> as minting collaterals. By isolating the reserves of each asset, UFO mitigates the systemic risk of a single issuer freezing funds. All vault balances are fully verifiable on-chain.</p>
             </div>
@@ -481,13 +474,13 @@ function App() {
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
               <CardHeader title="Global Reach" iconType="layers" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Targeting global settlement.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts to anyone, UFO applies ZK-based selective disclosure: transaction details remain hidden from public view, while authorized parties can verify specific data when required.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Unlike public-chain transfers that expose payment amounts to anyone, UFO's closed-loop architecture keeps transaction details out of the public eye. Enterprises can settle cross-border trades with confidence, knowing their on-chain footprint is minimized.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
               <CardHeader title="Privacy & Compliance" iconType="eye" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Confidential by default.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Built on Zero-Knowledge technology, UFO keeps transaction amounts off the public ledger. When regulators or auditors require verification, holders can generate cryptographic proofs through Selective Disclosure.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>While the Vault reserves are 100% transparent and verifiable on BscScan, the transaction flows between users are isolated from public liquidity pools. This ensures your commercial settlement data remains private without relying on centralized intermediaries.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
