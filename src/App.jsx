@@ -389,6 +389,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
+                {/* 🔥 动态展示当前交易币种的手续费 */}
                 <span>-{feeAmount} {selectedStablecoin.symbol}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
