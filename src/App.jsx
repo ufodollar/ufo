@@ -7,7 +7,6 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. Web3 & 合约配置 =================
 const CONFIG = {
-  // 🔥 刚刚部署并授权的双币金库地址
   VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', 
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -16,13 +15,11 @@ const CONFIG = {
   FEE_RATE: 0.005,
 };
 
-// 支持的支付稳定币
 const STABLECOINS = [
   { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
   { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png' }
 ];
 
-// UFO 代币信息
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org");
@@ -33,7 +30,6 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)"
 ];
 
-// 双币 Vault ABI
 const VAULT_ABI = [
   "function deposit(address tokenAddress, uint256 amount)", 
   "function withdraw(address tokenAddress, uint256 ufoAmount)", 
@@ -118,7 +114,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
-  const [selectedPayToken, setSelectedPayToken] = useState(STABLECOINS[0]); // 默认 USDT
+  const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   
   const [inputAmount, setInputAmount] = useState('');
@@ -222,13 +218,13 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
-    const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedPayToken.symbol : 'UFO'] || '0');
+    const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedStablecoin.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
-      setErrorMsg(`Insufficient ${isBuyingUFO ? selectedPayToken.symbol : 'UFO'} balance`);
+      setErrorMsg(`Insufficient ${isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} balance`);
     } else {
       setErrorMsg('');
     }
-  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedPayToken]);
+  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin]);
 
   const handleAction = async () => {
     if (isProcessing) return;
@@ -254,20 +250,20 @@ function App() {
       const rawAmount = ethers.parseUnits(inputAmount, 18);
 
       if (isBuyingUFO) {
-        const tokenContract = new ethers.Contract(selectedPayToken.address, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
-          setTxMsg(`Approving ${selectedPayToken.symbol}...`);
+          setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
           const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, ethers.MaxUint256);
           await txApprove.wait();
         }
         setTxMsg('Swapping...');
-        const tx = await vault.deposit(selectedPayToken.address, rawAmount);
+        const tx = await vault.deposit(selectedStablecoin.address, rawAmount);
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
         setTxMsg('Redeeming...');
-        const tx = await vault.withdraw(selectedPayToken.address, rawAmount);
+        const tx = await vault.withdraw(selectedStablecoin.address, rawAmount);
         await tx.wait();
         setTxMsg('Redeem Successful!');
       }
@@ -289,7 +285,6 @@ function App() {
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -304,29 +299,28 @@ function App() {
         )}
       </div>
 
-      {/* 主内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
         
-        {/* Swap 页面 */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
             
+            {/* You Pay 框 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
-                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances[selectedPayToken.symbol] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
+                <span>Balance: {isConnected ? (isBuyingUFO ? tokenBalances[selectedStablecoin.symbol] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
-                {/* 代币选择器 */}
+                {/* 代币选择器 (买入时选择支付币种) */}
                 <div 
                   onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
                 >
                   {isBuyingUFO ? (
-                    <><img src={selectedPayToken.icon} style={{width: 24, height: 24}} alt={selectedPayToken.symbol}/><span>{selectedPayToken.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
+                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
                   ) : (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   )}
@@ -335,7 +329,7 @@ function App() {
                   {showTokenMenu && isBuyingUFO && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
-                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedPayToken(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
                           <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
                           <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
                         </div>
@@ -353,17 +347,36 @@ function App() {
               </button>
             </div>
 
+            {/* You Receive 框 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
+                <span>Balance: {isConnected ? (!isBuyingUFO ? tokenBalances[selectedStablecoin.symbol] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                
+                {/* 代币选择器 (赎回时选择接收币种) */}
+                <div 
+                  onClick={() => { if (!isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: !isBuyingUFO ? 'pointer' : 'default' }}
+                >
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
-                    <><img src={selectedPayToken.icon} style={{width: 24, height: 24}} alt={selectedPayToken.symbol}/><span>{selectedPayToken.symbol}</span></>
+                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
+                  )}
+
+                  {/* 下拉菜单 */}
+                  {showTokenMenu && !isBuyingUFO && (
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                      {STABLECOINS.map(coin => (
+                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                          <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
+                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -376,12 +389,12 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} {isBuyingUFO ? selectedPayToken.symbol : 'USDT'}</span>
+                <span>-{feeAmount} {selectedStablecoin.symbol}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>Net Received</span>
-                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedPayToken.symbol}</span>
+                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedStablecoin.symbol}</span>
               </div>
             </div>
 
@@ -395,7 +408,6 @@ function App() {
           </div>
         )}
 
-        {/* Wallet 页面 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -423,7 +435,6 @@ function App() {
           </div>
         )}
 
-        {/* Rules 页面 */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
@@ -476,7 +487,6 @@ function App() {
           </div>
         )}
 
-        {/* Contact 页面 */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
@@ -522,7 +532,6 @@ function App() {
         )}
       </div>
 
-      {/* GitHub 风格底部导航栏 */}
       <div style={{ 
         position: 'fixed', bottom: 0, left: 0, right: 0, 
         display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
