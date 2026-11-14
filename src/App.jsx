@@ -7,20 +7,22 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. Web3 & 合约配置 =================
 const CONFIG = {
-  // 注意：部署新合约后，必须替换这里的地址！
-  VAULT_ADDRESS: '0x你的新Vault合约地址', 
+  // 🔥 刚刚部署并授权的双币金库地址
+  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', 
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC上的USDC
+  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC上的USDC地址
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   FEE_RATE: 0.005,
 };
 
+// 支持的支付稳定币
 const STABLECOINS = [
   { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
   { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png' }
 ];
 
+// UFO 代币信息
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 const rpcProvider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org");
@@ -31,6 +33,7 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)"
 ];
 
+// 双币 Vault ABI
 const VAULT_ABI = [
   "function deposit(address tokenAddress, uint256 amount)", 
   "function withdraw(address tokenAddress, uint256 ufoAmount)", 
@@ -219,7 +222,6 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
-    // 检查当前选择代币的余额
     const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedPayToken.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
       setErrorMsg(`Insufficient ${isBuyingUFO ? selectedPayToken.symbol : 'UFO'} balance`);
@@ -260,13 +262,11 @@ function App() {
           await txApprove.wait();
         }
         setTxMsg('Swapping...');
-        // 传入用户选择的代币地址
         const tx = await vault.deposit(selectedPayToken.address, rawAmount);
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
         setTxMsg('Redeeming...');
-        // 赎回时，传入用户想要赎回的代币地址
         const tx = await vault.withdraw(selectedPayToken.address, rawAmount);
         await tx.wait();
         setTxMsg('Redeem Successful!');
@@ -289,6 +289,7 @@ function App() {
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
 
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -303,8 +304,10 @@ function App() {
         )}
       </div>
 
+      {/* 主内容区 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
         
+        {/* Swap 页面 */}
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
@@ -392,6 +395,7 @@ function App() {
           </div>
         )}
 
+        {/* Wallet 页面 */}
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -419,6 +423,7 @@ function App() {
           </div>
         )}
 
+        {/* Rules 页面 */}
         {activeTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
@@ -471,6 +476,7 @@ function App() {
           </div>
         )}
 
+        {/* Contact 页面 */}
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
@@ -516,6 +522,7 @@ function App() {
         )}
       </div>
 
+      {/* GitHub 风格底部导航栏 */}
       <div style={{ 
         position: 'fixed', bottom: 0, left: 0, right: 0, 
         display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
