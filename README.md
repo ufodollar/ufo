@@ -1,70 +1,108 @@
-UFO Dollar: Universal Crypto Settlement Infrastructure
+UFO Dollar - Protocol Core & Architecture
 
-1. Abstract
+UFO Dollar is a privacy-preserving, USD-pegged settlement stablecoin built on BNB Smart Chain (BSC). It is designed specifically for B2B cross-border trade, enterprise payroll, and institutional fund clearing.
 
-UFO Dollar is an open-source, permissionless settlement vault infrastructure deployed on BNB Smart Chain (BSC). It is designed to serve as a foundational PayFi baseline for developers, enabling secure, privacy-preserving B2B and cross-border crypto settlements. By combining a secure vault mechanism, a Zero-Knowledge (ZK) privacy module, and a reusable React DApp template, UFO Dollar eliminates the technical barriers for Web3 builders, offering a battle-tested infrastructure for the next generation of global trade.
+By operating as a closed-loop settlement network with no public liquidity pools, UFO eliminates the price volatility and exposure of commercial transaction data associated with traditional decentralized finance (DeFi).
 
-2. The Problem
+🔗 Live Deployments (BSC Mainnet)
 
-The current landscape of on-chain settlement faces three critical challenges:
+· UFOVault (Dual-Collateral Core): 0x62Eaf08612c77F944265DE421F3Bed054531cC9C
+· UFOToken (ERC20): 0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB
 
-1. Lack of Reusable Primitives: Developers exploring PayFi must build wallet connections, fee routing, and smart contracts from scratch, or fork unauditable commercial code, leading to fragmented and insecure infrastructure.
-2. Privacy Exposure: Public blockchains inherently expose transaction amounts and counterparties. This transparency is a dealbreaker for institutional B2B trade, where supply chain data and commercial secrets must be protected.
-3. Hidden Centralization Risks: Many existing vaults and stablecoin protocols conceal owner-controlled admin powers (pause, fee-recipient changes), forcing developers to inherit unseen risks.
+✨ Core Architecture & Features
 
-3. System Architecture
+1. Multi-Collateral Resilience (Risk Isolation)
 
-The UFO Dollar ecosystem consists of four composable, fully open-source modules:
+To mitigate the systemic risk of a single stablecoin issuer (e.g., Tether or Circle) freezing funds due to regulatory actions, the UFOVault utilizes a dual-collateral architecture.
 
-1. UFOToken (ERC20): The settlement stablecoin template, backed 1:1 by USDT locked in the vault.
-2. UFOVault (Smart Contract): The core engine handling permissionless minting and redemption with transparent fee routing.
-3. ZK Privacy Module: An integrated Zero-Knowledge circuit and verifier providing selective disclosure for settlement data.
-4. Frontend DApp (React/Reown): A mobile-first, fully responsive user interface that demonstrates seamless wallet connection, network switching, and transaction execution.
+· Accepts both USDT and USDC as minting collateral.
+· Reserves are isolated independently on-chain (mapping(address => uint256) public totalReserves).
+· If one asset pool is compromised or frozen, the other pool remains fully operational, ensuring uninterrupted redemption for merchants.
 
-3.1 Core Smart Contracts & Fee Model
+2. Strict 1:1 USD Peg (Zero-Slippage)
 
-· Permissionless Interaction: Any address can deposit USDT to mint UFO, or burn UFO to redeem USDT. There is no KYB gate or frontend whitelist.
-· Sustainable Public Good (0.5% Fee): A transparent 0.5% settlement fee is applied to operations. This fee is strictly not-for-profit. It is routed to a treasury to fund continuous infrastructure maintenance, smart contract audits, UX iteration, and global developer adoption campaigns, ensuring the protocol is self-sustaining.
-· Transparent Admin Controls: The vault includes standard emergency pause and fee-recipient management. All current admin permissions are publicly documented and verifiable on BscScan. A roadmap item is in place to progressively migrate these controls to a DAO multisig.
+Unlike AMM-based DEXs, UFO does not rely on public liquidity pools.
 
-3.2 Zero-Knowledge (ZK) Privacy Module
+· 1 USDT/USDC = $1.00 USD = 1 UFO (minus a 0.5% protocol fee).
+· There is zero slippage, regardless of transaction size. This provides a highly predictable and stable settlement route for institutional traders.
 
-To solve the privacy bottleneck in on-chain trade, UFO Dollar implements an open-source ZK privacy module.
+3. Oracle-Free Stability
 
-· Shielded Settlements: Transaction amounts and counterparties can be shielded from public block explorers.
-· Selective Disclosure: Authorized parties (e.g., auditors or regulators) can verify specific transaction details through cryptographic proofs without exposing the entire ledger.
-· Developer Ready: Abstracted away from complex cryptography, allowing developers to plug ZK privacy directly into their PayFi dApps.
+The UFOVault contract does not rely on external price feeds (such as Chainlink) to calculate minting or redemption rates. The exchange rate is mathematically hardcoded to 1:1. This entirely eliminates the risk of oracle manipulation, flash-loan price attacks, or price-feed latency exploits.
 
-4. Live Infrastructure
+4. Closed-Loop Privacy Architecture
 
-The frontend DApp is fully deployed and live on BNB Smart Chain.
+UFO is not listed on any public exchange and has no public liquidity pools. It operates exclusively as a permissionless settlement network.
 
-· Live Demo: https://ufo-eea.pages.dev/
-· Frontend Repository: https://github.com/ufodollar/ufo
-· Contracts Repository: https://github.com/ufodollar/bsc-vault
+· By avoiding public DEXs, enterprise trade secrets, transaction sizes, and counterparties are shielded from public block explorers and on-chain analysts.
+· The asset is isolated from market speculation, ensuring it remains a pure medium for enterprise fund clearing.
 
-5. Roadmap & Ecosystem Growth
+5. Bilateral Settlement Fee (0.5%)
 
-Supported by the BNB Chain Builder Grant, UFO Dollar is transitioning from a solo-founder prototype to an industry-standard public infrastructure.
+A transparent 0.5% protocol fee is applied on both deposit (Mint) and withdraw (Redeem).
 
-· Phase 1: Security & Compliance (Months 1-2)
-  · Complete a top-tier third-party security audit (e.g., CertiK) for the Vault, Token, and ZK module.
-  · Achieve ≥90% test coverage using Foundry.
-  · Initiate the formal legal incorporation of StoneX to ensure long-term regulatory compliance and institutional trust.
-· Phase 2: Team Expansion & BD (Months 3-4)
-  · Onboard full-stack and smart contract developers.
-  · Global Business Development: Engage with cross-border trade enterprises and institutional partners. Attend international fintech and Web3 conferences to showcase BSC-native settlement solutions.
-· Phase 3: Developer Adoption & Ecosystem (Months 5-6)
-  · Launch the UFO Builder Program, providing integration grants and technical support for the first 10 projects that fork our infrastructure.
-  · Host developer workshops and release comprehensive video tutorials.
+· Not-for-profit structure: The fee is strictly used to fund ongoing infrastructure maintenance, smart contract security audits, and global developer adoption.
+· The fee is routed directly to a designated treasury address, ensuring the protocol remains self-sustaining without relying on token inflation.
 
-6. Developer Integration
+🛠 Tech Stack
 
-We invite the BSC community to build upon UFO Dollar. Fork our repository, customize the fee routing to 0% for your own dApp, and leverage our modular architecture to accelerate your PayFi development.
+· Smart Contracts: Solidity ^0.8.20
+· Development Framework: Foundry (Forge)
+· Security Libraries: OpenZeppelin Contracts (ReentrancyGuard, Pausable, AccessControl, SafeERC20)
+· Frontend Interface: React, Vite, Reown AppKit (Ethers.js)
+· CI/CD: GitHub Actions (Automated smart contract deployment and role management on BSC)
 
-· License: MIT License
-· Documentation: All integration guides and API references are available in the respective GitHub repositories.
+🚀 Local Development
 
----
+Prerequisites
 
-Built for the BNB Chain Ecosystem. Committed to Open-Source, Privacy, and Real-World Utility.
+Ensure you have Foundry installed on your local machine.
+
+1. Clone & Install Dependencies
+
+```bash
+git clone https://github.com/ufodollar/bsc-vault.git
+cd bsc-vault
+forge install OpenZeppelin/openzeppelin-contracts@v5.0.2 --no-commit
+```
+
+2. Compile Contracts
+
+```bash
+forge build
+```
+
+3. Run Tests
+
+```bash
+forge test
+```
+
+4. Deploy to BSC Mainnet
+
+Ensure your .env file contains your PRIVATE_KEY and RPC_URL. Deploy using the following Foundry command:
+
+```bash
+forge create src/UFOVault.sol:UFOVault \
+  --rpc-url https://bsc-dataseed.binance.org \
+  --private-key $PRIVATE_KEY \
+  --constructor-args \
+  0x55d398326f99059fF775485246999027B3197955 \
+  0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d \
+  0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB \
+  <FEE_RECIPIENT_ADDRESS>
+```
+
+🛡 Security & Transparency
+
+· Role-Based Access Control (RBAC): The UFOToken utilizes OpenZeppelin's AccessControl. Only the deployed UFOVault contract is granted the MINTER_ROLE and BURNER_ROLE. No external entity or developer wallet can arbitrarily mint UFO.
+· Emergency Pause Mechanism: The UFOVault includes a Pausable function controlled by the protocol owner, allowing the team to halt deposits and withdrawals in the event of an unforeseen vulnerability.
+· On-Chain Verifiability: All vault balances, reserve allocations (USDT vs. USDC), minting activities, and fee distributions are fully transparent and verifiable on BscScan.
+
+⚠️ Disclaimer
+
+UFO is a payment instrument and settlement infrastructure, not an investment product. It does not offer yields or speculative returns. Users and institutional clients are solely responsible for ensuring their use of the protocol complies with the laws of their local jurisdiction. UFO is not offered to persons or entities located in restricted or comprehensively sanctioned jurisdictions.
+
+📄 License
+
+This project is licensed under the MIT License.
