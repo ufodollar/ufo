@@ -10,7 +10,7 @@ const CONFIG = {
   VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', 
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC上的USDC地址
+  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   FEE_RATE: 0.005,
 };
@@ -114,11 +114,12 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
+  
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   
-  // 隐身模式状态
-  const [stealthMode, setStealthMode] = useState(false);
+  // 赎回随机拆分状态
+  const [randomSplit, setRandomSplit] = useState({ usdt: 0, usdc: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.000000');
@@ -212,6 +213,7 @@ function App() {
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
+      setRandomSplit({ usdt: 0, usdc: 0 });
       setErrorMsg('');
       return;
     }
@@ -221,6 +223,16 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
+    // 🔥 核心逻辑：如果是赎回操作，计算随机拆分的金额
+    if (!isBuyingUFO) {
+      // 生成 0.2 到 0.8 之间的随机数，确保两种资产都会涉及
+      const randomRatio = Math.random() * 0.6 + 0.2; 
+      setRandomSplit({
+        usdt: netAmount * randomRatio,
+        usdc: netAmount * (1 - randomRatio)
+      });
+    }
+
     const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedStablecoin.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
       setErrorMsg(`Insufficient ${isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} balance`);
@@ -246,13 +258,14 @@ function App() {
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
       const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas.`);
+      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.001) throw new Error(`Insufficient BNB for gas. You need more BNB.`);
 
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
       const rawAmount = ethers.parseUnits(inputAmount, 18);
 
       if (isBuyingUFO) {
+        // 买入逻辑不变
         const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
@@ -265,13 +278,24 @@ function App() {
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
-        setTxMsg('Redeeming...');
-        const tx = await vault.withdraw(selectedStablecoin.address, rawAmount);
-        await tx.wait();
-        setTxMsg('Redeem Successful!');
+        // 🔥 赎回逻辑：进行两笔交易
+        const usdtRawAmount = ethers.parseUnits(randomSplit.usdt.toFixed(18), 18);
+        const usdcRawAmount = ethers.parseUnits(randomSplit.usdc.toFixed(18), 18);
+
+        // 1. 提取 USDT
+        setTxMsg(`Redeeming USDT portion... (1/2)`);
+        const tx1 = await vault.withdraw(CONFIG.USDT_ADDRESS, usdtRawAmount);
+        await tx1.wait();
+
+        // 2. 提取 USDC
+        setTxMsg(`Redeeming USDC portion... (2/2)`);
+        const tx2 = await vault.withdraw(CONFIG.USDC_ADDRESS, usdcRawAmount);
+        await tx2.wait();
+        
+        setTxMsg('Redeem Successful! (Mixed Assets)');
       }
 
-      setInputAmount(''); setOutputAmount('0.000000'); setFeeAmount('0.000000'); fetchBalances();
+      setInputAmount(''); setOutputAmount('0.000000'); setFeeAmount('0.000000'); setRandomSplit({ usdt: 0, usdc: 0 }); fetchBalances();
     } catch (error) {
       setErrorMsg(error.reason || error.shortMessage || error.message || 'Transaction failed');
     } finally {
@@ -279,11 +303,7 @@ function App() {
     }
   };
 
-  const formatUsd = (val) => {
-    if (stealthMode) return '0.00'; 
-    return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
+  const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const isButtonDisabled = isProcessing || (isConnected && (errorMsg !== '' || !inputAmount || parseFloat(inputAmount) <= 0));
 
   return (
@@ -300,19 +320,7 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button 
-            onClick={() => setStealthMode(!stealthMode)}
-            title="Toggle Stealth Mode (Hide Asset Values)"
-            style={{ background: stealthMode ? '#1e293b' : '#fff', color: stealthMode ? '#fff' : '#94a3b8', border: '1px solid #e2e8f0', width: '38px', height: '38px', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
-          >
-            {stealthMode ? (
-               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-            ) : (
-               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-            )}
-          </button>
-
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           {isConnected ? <AppKitButton balance="hide" /> : (
             <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
               Connect Wallet
@@ -335,6 +343,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
+                {/* 买入时选币，赎回时固定为 UFO */}
                 <div 
                   onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
@@ -366,36 +375,39 @@ function App() {
               </button>
             </div>
 
+            {/* You Receive 框：买入固定 UFO，赎回显示随机发放 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
-                <span>Balance: {isConnected ? (!isBuyingUFO ? tokenBalances[selectedStablecoin.symbol] : tokenBalances['UFO']) || '0.0' : '0.000000'}</span>
+                {!isBuyingUFO && <span style={{ color: '#f59e0b' }}>* Random Mixed Assets</span>}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                
+                {/* 赎回时显示总金额 */}
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
                 
-                <div 
-                  onClick={() => { if (!isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: !isBuyingUFO ? 'pointer' : 'default' }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
-                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
-                  )}
-
-                  {showTokenMenu && !isBuyingUFO && (
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
-                      {STABLECOINS.map(coin => (
-                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
-                          <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
-                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>USDT + USDC</span>
                   )}
                 </div>
               </div>
+              
+              {/* 🔥 赎回时的随机拆分明细展示 */}
+              {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>USDT Portion:</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{randomSplit.usdt.toFixed(6)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>USDC Portion:</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{randomSplit.usdc.toFixed(6)}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
@@ -405,12 +417,12 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} {selectedStablecoin.symbol}</span>
+                <span>-{feeAmount} {isBuyingUFO ? selectedStablecoin.symbol : 'USDT'}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>Net Received</span>
-                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedStablecoin.symbol}</span>
+                <span>{outputAmount} {isBuyingUFO ? 'UFO' : 'USD Value'}</span>
               </div>
             </div>
 
@@ -456,7 +468,7 @@ function App() {
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
               <CardHeader title="Value-Invisible Stablecoin" iconType="eye" />
               <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Transparent on-chain. Invisible in your wallet.</h3>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin with no public liquidity pools. Because it is not listed on traditional exchanges, standard wallets display its fiat value as <b>$0.00</b>. However, it has actual value inside UFO Dollar and can be redeemed for USDT/USDC at any time. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots, completely hiding your true net worth.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin with no public liquidity pools. Because it is not listed on traditional exchanges, standard wallets display its fiat value as <b>$0.00</b>. However, it has actual value inside UFO Dollar and can be redeemed at any time. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots, completely hiding your true net worth.</p>
             </div>
 
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
