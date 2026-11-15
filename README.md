@@ -1,14 +1,13 @@
 <div align="center">
   <h1>🛸 UFO Dollar - Frontend DApp</h1>
   
-  <p><strong>The Official Web Interface for the Next-Generation B2B Settlement Stablecoin.</strong></p>
+  <p><strong>Private Repository for the Value-Invisible Settlement Interface</strong></p>
   
   <p>
     <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
     <img src="https://img.shields.io/badge/Network-BSC_MAINNET-F3BA2F?style=for-the-badge&logo=binance" alt="Network">
     <img src="https://img.shields.io/badge/Framework-React_Vite-61DAFB?style=for-the-badge&logo=react" alt="React">
     <img src="https://img.shields.io/badge/Web3-Ethers.js_v6-3C3C3D?style=for-the-badge&logo=ethereum" alt="Ethers">
-    <img src="https://img.shields.io/badge/Wallet-Reown_AppKit-black?style=for-the-badge&logo=walletconnect" alt="Reown">
     <img src="https://img.shields.io/badge/Security-Private_Repo-red?style=for-the-badge&logo=shieldsdotio" alt="Security">
   </p>
 
@@ -59,13 +58,13 @@
 <summary><b>👉 Click to Expand Full Setup Guide</b></summary>
 <br>
 
-**1. Install Dependencies**
+<b>1. Install Dependencies</b>
 <pre><code class="language-bash">npm install</code></pre>
 
-**2. Run Locally (Port 5173)**
+<b>2. Run Locally (Port 5173)</b>
 <pre><code class="language-bash">npm run dev</code></pre>
 
-**3. Build for Production**
+<b>3. Build for Production</b>
 <pre><code class="language-bash">npm run build</code></pre>
 
 </details>
