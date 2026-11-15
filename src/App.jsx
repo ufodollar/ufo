@@ -455,7 +455,6 @@ function App() {
                 </div>
               </div>
 
-              {/* 展示池子余额 */}
               {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
                 <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -477,7 +476,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                {/* 🔥 修复：根据当前选择的币种显示单位 */}
+                {/* 🔥 核心修改：直接使用当前选中的代币符号，彻底解决显示错乱 */}
                 <span>-{feeAmount} {selectedStablecoin.symbol}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
