@@ -587,11 +587,11 @@ function App() {
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection and confidential commercial settlement. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
             </div>
 
-            {/* 2. 流通隐私 */}
+            {/* 2. 流通隐私（修改为资产伪装与隐蔽转账） */}
             <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
-              <CardHeader title="Private Circulation" iconType="lock" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Confidential Settlement & Zero Trace.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools, UFO isolates your transactions from public trackers. Enterprises can settle cross-border trades and payroll without exposing commercial data to on-chain analysts.</p>
+              <CardHeader title="Asset Camouflage" iconType="lock" />
+              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Unobtrusive Transfers & Private Settlement.</h4>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset. This natural camouflage allows you to conduct large commercial settlements and payroll transfers without drawing public attention.</p>
             </div>
 
             {/* 3. 刚性兑付 */}
