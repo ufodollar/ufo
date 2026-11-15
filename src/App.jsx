@@ -10,7 +10,7 @@ const CONFIG = {
   VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C', 
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC上的USDC地址
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   FEE_RATE: 0.005,
 };
@@ -118,7 +118,7 @@ function App() {
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   
-  // 赎回随机拆分状态
+  const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
   const [randomSplit, setRandomSplit] = useState({ usdt: 0, usdc: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
@@ -180,6 +180,8 @@ function App() {
       setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
 
       const allTokens = [...STABLECOINS, UFO_TOKEN];
+      
+      // 获取用户余额
       const promises = allTokens.map(token => {
         const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
         return contract.balanceOf(address);
@@ -193,8 +195,22 @@ function App() {
           ? parseFloat(ethers.formatUnits(res.value, 18)).toFixed(6)
           : '0.000000';
       });
-      
       setTokenBalances(newBalances);
+
+      // 🔥 获取金库的 USDT 和 USDC 余额
+      const vaultUsdtContract = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, rpcProvider);
+      const vaultUsdcContract = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, rpcProvider);
+      
+      const [vUsdt, vUsdc] = await Promise.all([
+        vaultUsdtContract.balanceOf(CONFIG.VAULT_ADDRESS),
+        vaultUsdcContract.balanceOf(CONFIG.VAULT_ADDRESS)
+      ]);
+      
+      setVaultBalances({
+        USDT: parseFloat(ethers.formatUnits(vUsdt, 18)),
+        USDC: parseFloat(ethers.formatUnits(vUsdc, 18))
+      });
+
     } catch (error) {
       console.error("Failed to fetch balances:", error);
     }
@@ -208,6 +224,7 @@ function App() {
     }
   }, [isConnected, address, activeTab, fetchBalances]);
 
+  // 🔥 根据金库余额动态计算随机拆分逻辑
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
@@ -223,23 +240,52 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
-    // 🔥 核心逻辑：如果是赎回操作，计算随机拆分的金额
     if (!isBuyingUFO) {
-      // 生成 0.2 到 0.8 之间的随机数，确保两种资产都会涉及
-      const randomRatio = Math.random() * 0.6 + 0.2; 
+      // 检查金库总余额是否足够
+      const totalVault = vaultBalances.USDT + vaultBalances.USDC;
+      if (totalVault < input) {
+        setErrorMsg(`Vault lacks liquidity. Total available: ${totalVault.toFixed(2)}`);
+        return;
+      }
+
+      // 生成 20%~80% 的随机初始权重
+      let w = Math.random() * 0.6 + 0.2;
+      let ufoToUsdt = input * w;
+      let ufoToUsdc = input * (1 - w);
+
+      // 如果 USDT 不够，把差额丢给 USDC
+      if (ufoToUsdt > vaultBalances.USDT) {
+        ufoToUsdt = vaultBalances.USDT;
+        ufoToUsdc = input - ufoToUsdt;
+      }
+      // 如果 USDC 不够，把差额丢给 USDT
+      else if (ufoToUsdc > vaultBalances.USDC) {
+        ufoToUsdc = vaultBalances.USDC;
+        ufoToUsdt = input - ufoToUsdc;
+      }
+
+      // 再校验一次（防止极端情况下两个池子都不够）
+      if (ufoToUsdt > vaultBalances.USDT || ufoToUsdc > vaultBalances.USDC) {
+        setErrorMsg(`Vault lacks mixed liquidity. USDT: ${vaultBalances.USDT.toFixed(2)}, USDC: ${vaultBalances.USDC.toFixed(2)}`);
+        return;
+      }
+
+      setErrorMsg(''); // 清除错误
+
+      // 反推用户最终能拿到多少（扣除各自对应的 0.5% 手续费）
       setRandomSplit({
-        usdt: netAmount * randomRatio,
-        usdc: netAmount * (1 - randomRatio)
+        usdt: ufoToUsdt * (1 - CONFIG.FEE_RATE),
+        usdc: ufoToUsdc * (1 - CONFIG.FEE_RATE),
+        rawUfoToUsdt: ufoToUsdt,
+        rawUfoToUsdc: ufoToUsdc
       });
     }
 
     const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedStablecoin.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
       setErrorMsg(`Insufficient ${isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} balance`);
-    } else {
-      setErrorMsg('');
     }
-  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin]);
+  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances]);
 
   const handleAction = async () => {
     if (isProcessing) return;
@@ -258,14 +304,15 @@ function App() {
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
       const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.001) throw new Error(`Insufficient BNB for gas. You need more BNB.`);
+      // 混合赎回需要发两笔交易，多预留一点 Gas
+      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.001) throw new Error(`Insufficient BNB for gas.`);
 
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
       const rawAmount = ethers.parseUnits(inputAmount, 18);
 
       if (isBuyingUFO) {
-        // 买入逻辑不变
+        // ---- 买入（单笔交易）----
         const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
@@ -278,18 +325,17 @@ function App() {
         await tx.wait();
         setTxMsg('Swap Successful!');
       } else {
-        // 🔥 赎回逻辑：进行两笔交易
-        const usdtRawAmount = ethers.parseUnits(randomSplit.usdt.toFixed(18), 18);
-        const usdcRawAmount = ethers.parseUnits(randomSplit.usdc.toFixed(18), 18);
+        // ---- 混合赎回（两笔交易）----
+        // 这里取反向计算的 raw 值，确保提款额刚好等于 UFO 总量
+        const usdtUfoAmount = ethers.parseUnits(randomSplit.rawUfoToUsdt.toFixed(18), 18);
+        const usdcUfoAmount = ethers.parseUnits(randomSplit.rawUfoToUsdc.toFixed(18), 18);
 
-        // 1. 提取 USDT
         setTxMsg(`Redeeming USDT portion... (1/2)`);
-        const tx1 = await vault.withdraw(CONFIG.USDT_ADDRESS, usdtRawAmount);
+        const tx1 = await vault.withdraw(CONFIG.USDT_ADDRESS, usdtUfoAmount);
         await tx1.wait();
 
-        // 2. 提取 USDC
         setTxMsg(`Redeeming USDC portion... (2/2)`);
-        const tx2 = await vault.withdraw(CONFIG.USDC_ADDRESS, usdcRawAmount);
+        const tx2 = await vault.withdraw(CONFIG.USDC_ADDRESS, usdcUfoAmount);
         await tx2.wait();
         
         setTxMsg('Redeem Successful! (Mixed Assets)');
@@ -343,7 +389,6 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
-                {/* 买入时选币，赎回时固定为 UFO */}
                 <div 
                   onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
@@ -375,15 +420,12 @@ function App() {
               </button>
             </div>
 
-            {/* You Receive 框：买入固定 UFO，赎回显示随机发放 */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
                 {!isBuyingUFO && <span style={{ color: '#f59e0b' }}>* Random Mixed Assets</span>}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                
-                {/* 赎回时显示总金额 */}
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
@@ -394,9 +436,9 @@ function App() {
                   )}
                 </div>
               </div>
-              
-              {/* 🔥 赎回时的随机拆分明细展示 */}
-              {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
+
+              {/* 赎回时的随机拆分明细展示 */}
+              {!isBuyingUFO && parseFloat(inputAmount) > 0 && randomSplit.usdt > 0 && (
                 <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                     <span>USDT Portion:</span>
