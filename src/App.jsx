@@ -119,7 +119,6 @@ function App() {
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
-  const [redeemSplit, setRedeemSplit] = useState({ usdtOut: 0, usdcOut: 0, usdtUfoBurn: 0, usdcUfoBurn: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.000000');
@@ -134,10 +133,8 @@ function App() {
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 🔥 交易历史记录状态
   const [history, setHistory] = useState([]);
 
-  // 加载历史记录
   useEffect(() => {
     const saved = localStorage.getItem('ufo_tx_history');
     if (saved) {
@@ -149,9 +146,8 @@ function App() {
     }
   }, []);
 
-  // 保存历史记录
   const saveTxToHistory = (txRecord) => {
-    const newHistory = [txRecord, ...history].slice(0, 50); // 最多存 50 条
+    const newHistory = [txRecord, ...history].slice(0, 50);
     setHistory(newHistory);
     localStorage.setItem('ufo_tx_history', JSON.stringify(newHistory));
   };
@@ -202,8 +198,6 @@ function App() {
       setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
 
       const allTokens = [...STABLECOINS, UFO_TOKEN];
-      
-      // 获取用户余额
       const promises = allTokens.map(token => {
         const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
         return contract.balanceOf(address);
@@ -219,7 +213,6 @@ function App() {
       });
       setTokenBalances(newBalances);
 
-      // 获取金库的 USDT 和 USDC 余额
       const vaultUsdtContract = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, rpcProvider);
       const vaultUsdcContract = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, rpcProvider);
       
@@ -246,13 +239,12 @@ function App() {
     }
   }, [isConnected, address, activeTab, fetchBalances]);
 
-  // 根据金库余额计算最优赎回路由
+  // 自由选择赎回，但受池子余额约束
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
-      setRedeemSplit({ usdtOut: 0, usdcOut: 0, usdtUfoBurn: 0, usdcUfoBurn: 0 });
       setErrorMsg('');
       return;
     }
@@ -262,47 +254,20 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
+    // 如果是赎回，校验金库余额
     if (!isBuyingUFO) {
-      const totalVault = vaultBalances.USDT + vaultBalances.USDC;
-      if (totalVault < netAmount) {
-        setErrorMsg(`Vault lacks liquidity. Max available: ${totalVault.toFixed(2)} USD`);
+      const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
+      if (netAmount > currentVaultBal) {
+        setErrorMsg(`Insufficient ${selectedStablecoin.symbol} in Vault. Available: ${currentVaultBal.toFixed(2)}`);
         return;
       }
-      setErrorMsg('');
-
-      let usdtOut = 0;
-      let usdcOut = 0;
-
-      // 智能路由核心逻辑
-      if (vaultBalances.USDT >= netAmount) {
-        // 1. USDT 够，全发 USDT
-        usdtOut = netAmount;
-      } else if (vaultBalances.USDC >= netAmount) {
-        // 2. USDT 不够但 USDC 够，全发 USDC
-        usdcOut = netAmount;
-      } else {
-        // 3. 单一币种都不够，但总和够。优先动用余额较大的币种
-        if (vaultBalances.USDT > vaultBalances.USDC) {
-          usdtOut = vaultBalances.USDT; // 掏空 USDT
-          usdcOut = netAmount - usdtOut; // 剩下的用 USDC 补
-        } else {
-          usdcOut = vaultBalances.USDC; // 掏空 USDC
-          usdtOut = netAmount - usdcOut; // 剩下的用 USDT 补
-        }
-      }
-
-      // 反向计算各自需要燃烧的 UFO 数量
-      const usdtUfoBurn = usdtOut / (1 - CONFIG.FEE_RATE);
-      const usdcUfoBurn = usdcOut / (1 - CONFIG.FEE_RATE);
-
-      setRedeemSplit({
-        usdtOut, usdcOut, usdtUfoBurn, usdcUfoBurn
-      });
     }
 
     const currentBal = parseFloat(tokenBalances[isBuyingUFO ? selectedStablecoin.symbol : 'UFO'] || '0');
     if (isConnected && input > currentBal) {
       setErrorMsg(`Insufficient ${isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} balance`);
+    } else {
+      setErrorMsg('');
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances]);
 
@@ -320,15 +285,14 @@ function App() {
     setTxMsg('');
     setErrorMsg('');
 
-    // 生成基础记录
     const currentTime = new Date().toLocaleString();
     const txRecord = {
       time: currentTime,
       type: isBuyingUFO ? 'Swap' : 'Redeem',
       payAmount: inputAmount,
       paySymbol: isBuyingUFO ? selectedStablecoin.symbol : 'UFO',
-      receiveAmount: isBuyingUFO ? outputAmount : (redeemSplit.usdtOut > 0 && redeemSplit.usdcOut > 0 ? `${redeemSplit.usdtOut.toFixed(2)} + ${redeemSplit.usdcOut.toFixed(2)}` : (redeemSplit.usdtOut > 0 ? redeemSplit.usdtOut.toFixed(2) : redeemSplit.usdcOut.toFixed(2))),
-      receiveSymbol: isBuyingUFO ? 'UFO' : 'USD',
+      receiveAmount: outputAmount,
+      receiveSymbol: isBuyingUFO ? 'UFO' : selectedStablecoin.symbol,
       status: 'Pending',
       txHash: ''
     };
@@ -336,13 +300,12 @@ function App() {
     try {
       const provider = new ethers.BrowserProvider(walletProvider);
       const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.001) throw new Error(`Insufficient BNB for gas.`);
+      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) throw new Error(`Insufficient BNB for gas.`);
 
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
 
       if (isBuyingUFO) {
-        // 买入逻辑
         const rawAmount = ethers.parseUnits(inputAmount, 18);
         const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
@@ -361,53 +324,20 @@ function App() {
         saveTxToHistory(txRecord);
 
       } else {
-        // 赎回逻辑
-        const burnUsdt = ethers.parseUnits(redeemSplit.usdtUfoBurn.toFixed(18), 18);
-        const burnUsdc = ethers.parseUnits(redeemSplit.usdcUfoBurn.toFixed(18), 18);
-
-        if (redeemSplit.usdcOut === 0) {
-          // 只需要 USDT（1 笔交易）
-          setTxMsg('Redeeming...');
-          const tx = await vault.withdraw(CONFIG.USDT_ADDRESS, burnUsdt);
-          await tx.wait();
-          setTxMsg('Redeem Successful!');
-          
-          txRecord.status = 'Success';
-          txRecord.txHash = tx.hash;
-          saveTxToHistory(txRecord);
-        } else if (redeemSplit.usdtOut === 0) {
-          // 只需要 USDC（1 笔交易）
-          setTxMsg('Redeeming...');
-          const tx = await vault.withdraw(CONFIG.USDC_ADDRESS, burnUsdc);
-          await tx.wait();
-          setTxMsg('Redeem Successful!');
-          
-          txRecord.status = 'Success';
-          txRecord.txHash = tx.hash;
-          saveTxToHistory(txRecord);
-        } else {
-          // 混合赎回（2 笔交易）
-          setTxMsg(`Redeeming USDT portion... (1/2)`);
-          const tx1 = await vault.withdraw(CONFIG.USDT_ADDRESS, burnUsdt);
-          await tx1.wait();
-
-          setTxMsg(`Redeeming USDC portion... (2/2)`);
-          const tx2 = await vault.withdraw(CONFIG.USDC_ADDRESS, burnUsdc);
-          await tx2.wait();
-          
-          setTxMsg('Redeem Successful! (Auto-split)');
-          
-          txRecord.status = 'Success';
-          txRecord.txHash = tx2.hash;
-          saveTxToHistory(txRecord);
-        }
+        const rawAmount = ethers.parseUnits(inputAmount, 18);
+        setTxMsg('Redeeming...');
+        const tx = await vault.withdraw(selectedStablecoin.address, rawAmount);
+        await tx.wait();
+        setTxMsg('Redeem Successful!');
+        
+        txRecord.status = 'Success';
+        txRecord.txHash = tx.hash;
+        saveTxToHistory(txRecord);
       }
 
       setInputAmount(''); setOutputAmount('0.000000'); setFeeAmount('0.000000'); fetchBalances();
     } catch (error) {
       setErrorMsg(error.reason || error.shortMessage || error.message || 'Transaction failed');
-      
-      // 记录失败的交易
       txRecord.status = 'Failed';
       txRecord.txHash = '-';
       saveTxToHistory(txRecord);
@@ -416,7 +346,6 @@ function App() {
     }
   };
 
-  // 清空历史
   const clearHistory = () => {
     if (window.confirm("Are you sure you want to clear all local history?")) {
       localStorage.removeItem('ufo_tx_history');
@@ -465,8 +394,8 @@ function App() {
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
                 <div 
-                  onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
+                  onClick={() => setShowTokenMenu(!showTokenMenu)}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: 'pointer' }}
                 >
                   {isBuyingUFO ? (
                     <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
@@ -474,12 +403,17 @@ function App() {
                     <><UfoIcon size={28}/><span>UFO</span></>
                   )}
 
-                  {showTokenMenu && isBuyingUFO && (
+                  {showTokenMenu && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
-                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
                           <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
                           <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
+                          {(!isBuyingUFO) && (
+                            <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>
+                              Pool: {vaultBalances[coin.symbol].toFixed(2)}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -498,9 +432,6 @@ function App() {
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
-                {!isBuyingUFO && redeemSplit.usdtOut > 0 && redeemSplit.usdcOut > 0 && (
-                  <span style={{ color: '#f59e0b', fontSize: '11px' }}>Auto-Split</span>
-                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
@@ -509,26 +440,13 @@ function App() {
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
-                    <span style={{ fontSize: '13px', color: '#64748b' }}>USD Value</span>
+                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span></>
                   )}
                 </div>
               </div>
-
-              {/* 赎回时的智能拆分明细展示 */}
-              {!isBuyingUFO && parseFloat(inputAmount) > 0 && !errorMsg && (
-                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
-                  {redeemSplit.usdtOut > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>USDT Output:</span>
-                      <span style={{ fontWeight: '600', color: '#1e293b' }}>{redeemSplit.usdtOut.toFixed(6)}</span>
-                    </div>
-                  )}
-                  {redeemSplit.usdcOut > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>USDC Output:</span>
-                      <span style={{ fontWeight: '600', color: '#1e293b' }}>{redeemSplit.usdcOut.toFixed(6)}</span>
-                    </div>
-                  )}
+              {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '12px', color: '#94a3b8', textAlign: 'right' }}>
+                  Pool Available: <span style={{ fontWeight: '600', color: '#64748b' }}>{vaultBalances[selectedStablecoin.symbol].toFixed(2)} {selectedStablecoin.symbol}</span>
                 </div>
               )}
             </div>
@@ -545,7 +463,7 @@ function App() {
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>Net Received</span>
-                <span>{outputAmount} {isBuyingUFO ? 'UFO' : 'USD'}</span>
+                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedStablecoin.symbol}</span>
               </div>
             </div>
 
@@ -586,7 +504,6 @@ function App() {
           </div>
         )}
 
-        {/* 🔥 历史记录页面 */}
         {activeTab === 'history' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -740,7 +657,6 @@ function App() {
         )}
       </div>
 
-      {/* 底部导航栏 (新增 History 按钮) */}
       <div style={{ 
         position: 'fixed', bottom: 0, left: 0, right: 0, 
         display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
