@@ -1,29 +1,16 @@
 <div align="center">
-  <h1>🛸 UFO Dollar - Frontend DApp</h1>
-  
-  <p><strong>Private Repository for the Value-Invisible Settlement Interface</strong></p>
-  
-  <p>
-    <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
-    <img src="https://img.shields.io/badge/Network-BSC_MAINNET-F3BA2F?style=for-the-badge&logo=binance" alt="Network">
-    <img src="https://img.shields.io/badge/Framework-React_Vite-61DAFB?style=for-the-badge&logo=react" alt="React">
-    <img src="https://img.shields.io/badge/Web3-Ethers.js_v6-3C3C3D?style=for-the-badge&logo=ethereum" alt="Ethers">
-    <img src="https://img.shields.io/badge/Security-Private_Repo-red?style=for-the-badge&logo=shieldsdotio" alt="Security">
-  </p>
-
-  <p>
-    <kbd>🚀 Quick Start</kbd> &nbsp; • &nbsp; 
-    <kbd>🛡️ Security</kbd> &nbsp; • &nbsp; 
-    <kbd>⚙️ Config</kbd> &nbsp; • &nbsp; 
-    <kbd>🐞 Debug</kbd>
-  </p>
+  <h1>🛸 UFO Dollar - Frontend DApp (Private)</h1>
+  <p><strong>The Web Interface for Asset Concealment and Private Settlement.</strong></p>
 </div>
 
 <br />
 <hr />
 
+<h2>📖 Overview</h2>
+<p>This is the private frontend repository for <b>UFO Dollar</b>. It provides a seamless, mobile-first interface for users to mint UFO using USDT/USDC and redeem it back, specifically designed for private commercial settlement.</p>
+
 <h2>⚙️ Core Configuration</h2>
-<p>All smart contract addresses and parameters are centralized in <code>src/App.jsx</code>. <b>Ensure you are on BSC Mainnet.</b></p>
+<p>All smart contract addresses and parameters are centralized in the <code>CONFIG</code> object at the top of <code>src/App.jsx</code>. <b>Ensure you are on BSC Mainnet.</b></p>
 
 <table>
   <tr>
@@ -48,16 +35,14 @@
   FEE_RATE: 0.005, // 0.5% Settlement Fee
 };</code></pre>
 
-<hr />
-
 <h2>🚀 Local Development</h2>
-
-> 💡 **Developer Note:** Use Node.js v18 or higher. Ensure you have your `projectId` configured for Reown AppKit.
+<blockquote>
+  <p>💡 <b>Developer Note:</b> Use Node.js v18 or higher. Ensure you have your Reown AppKit <code>projectId</code> configured.</p>
+</blockquote>
 
 <details>
 <summary><b>👉 Click to Expand Full Setup Guide</b></summary>
 <br>
-
 <b>1. Install Dependencies</b>
 <pre><code class="language-bash">npm install</code></pre>
 
@@ -66,46 +51,36 @@
 
 <b>3. Build for Production</b>
 <pre><code class="language-bash">npm run build</code></pre>
-
 </details>
 
-<hr />
-
-<h2>🛡️ Internal Runbook (Emergency)</h2>
-
-> ⚠️ **CRITICAL:** If a vulnerability is detected, the protocol owner must act immediately.
+<h2>🛡️ Operations & Security Features</h2>
 
 <table>
   <thead>
     <tr>
-      <th align="left" width="30%">Scenario</th>
-      <th align="left" width="70%">Action Required</th>
+      <th align="left" width="30%">Feature</th>
+      <th align="left" width="70%">Description</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><b>Vault Hacked/Frozen</b></td>
-      <td>1. Call <code>pause()</code> on BscScan.<br>2. UI auto-blocks swaps.<br>3. Notify TG/X.</td>
+      <td><b>Local History</b></td>
+      <td>Transactions are stored via <code>localStorage</code> to provide users with a local receipt of successful and failed transactions without backend databases.</td>
     </tr>
     <tr>
-      <td><b>Cloudflare Outage</b></td>
-      <td>Build locally (<code>npm run build</code>) and upload <code>dist/</code> to IPFS (Fleek/Pinata).</td>
+      <td><b>Dynamic Pool Check</b></td>
+      <td>Before redemption, the frontend queries the Vault's real-time USDT/USDC balances to prevent failed transactions due to insufficient liquidity.</td>
     </tr>
     <tr>
-      <td><b>WalletConnect Fails</b></td>
-      <td>Verify <code>projectId</code> and domain whitelist in Reown Dashboard.</td>
+      <td><b>Network Enforcement</b></td>
+      <td>Forces wallet connection to BSC Mainnet (<code>chainId: 0x38</code>) to ensure contracts are called on the correct chain.</td>
+    </tr>
+    <tr>
+      <td><b>Emergency Pause</b></td>
+      <td>If the <code>UFOVault</code> contract is paused by the protocol owner, the UI will intercept the EVM revert and block Swap/Redeem actions.</td>
     </tr>
   </tbody>
 </table>
 
-<hr />
-
 <h2>📄 License</h2>
-<p>This project is <b>proprietary and closed-source</b>. All rights reserved. No part of this repository may be reproduced, distributed, or transmitted in any form without prior written permission from the UFO Dollar team.</p>
-
-<br />
-
-<div align="center">
-  <img src="https://forthebadge.com/images/badges/built-with-love.svg" height="28">
-  <img src="https://forthebadge.com/images/badges/powered-by-black-magic.svg" height="28">
-</div>
+<p>This project is <b>proprietary and closed-source</b>. All rights reserved. No part of this repository may be reproduced without prior written permission from the UFO Dollar team.</p>
