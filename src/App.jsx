@@ -476,7 +476,6 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                {/* 🔥 修复：统一显示为 USD */}
                 <span>-{feeAmount} USD</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
@@ -585,7 +584,7 @@ function App() {
             <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
               <CardHeader title="The Value-Invisible Stablecoin" iconType="eye" />
               <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Transparent on-chain. Invisible in your wallet.</h3>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection and confidential B2B settlement. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection and confidential commercial settlement. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
             </div>
 
             {/* 2. 流通隐私 */}
@@ -595,35 +594,28 @@ function App() {
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools, UFO isolates your transactions from public trackers. Enterprises can settle cross-border trades and payroll without exposing commercial data to on-chain analysts.</p>
             </div>
 
-            {/* 3. 双池隔离防御 */}
-            <div style={{ background: 'linear-gradient(135deg, #0f766e, #14b8a6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(15,118,110,0.3)' }}>
-              <CardHeader title="Dual-Collateral Isolation" iconType="safe" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Resilient against systemic freezing.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>The Vault accepts both <b>USDT and USDC</b>, holding them in strictly isolated pools. If one stablecoin issuer faces regulatory blacklisting, the other pool remains fully operational, ensuring merchants always have a redemption path.</p>
-            </div>
-
-            {/* 4. 刚性兑付 */}
+            {/* 3. 刚性兑付 */}
             <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
               <CardHeader title="Strict 1:1 Peg" iconType="shield" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Zero Slippage. Oracle-Free.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Mint and redeem at a rigid 1:1 ratio. There are no AMM curves, no liquidity slippage, and no external price oracles to manipulate. What you deposit is exactly what you can withdraw.</p>
             </div>
 
-            {/* 5. 结算速度 */}
+            {/* 4. 结算速度 */}
             <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
               <CardHeader title="Instant Settlement" iconType="zap" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>24/7 Global Fund Clearing.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Send money like a message. With UFO, cross-border funds arrive in the recipient's wallet within seconds, bypassing traditional banking delays and operating non-stop every day of the year.</p>
             </div>
 
-            {/* 6. 合规与安全 */}
+            {/* 5. 合规与安全 */}
             <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
               <CardHeader title="Security & Compliance" iconType="layers" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
               <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>While vault reserves are 100% transparent and verifiable on BscScan, user transaction flows are isolated from public pools. Every transaction is secured by blockchain-level cryptography, ensuring absolute asset integrity.</p>
             </div>
 
-            {/* 7. 免责声明 */}
+            {/* 6. 免责声明 */}
             <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
               <CardHeader title="Disclaimer" iconType="alert" />
               <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment.</h4>
