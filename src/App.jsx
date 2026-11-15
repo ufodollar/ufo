@@ -239,7 +239,6 @@ function App() {
     }
   }, [isConnected, address, activeTab, fetchBalances]);
 
-  // 自由选择赎回，但受池子余额约束
   useEffect(() => {
     const input = parseFloat(inputAmount);
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
@@ -254,7 +253,6 @@ function App() {
     setFeeAmount(fee.toFixed(6));
     setOutputAmount(netAmount.toFixed(6));
     
-    // 如果是赎回，校验金库余额
     if (!isBuyingUFO) {
       const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
       if (netAmount > currentVaultBal) {
@@ -394,8 +392,8 @@ function App() {
                 <input type="number" value={inputAmount} onChange={e => setInputAmount(e.target.value)} placeholder="0.000000" style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }} />
                 
                 <div 
-                  onClick={() => setShowTokenMenu(!showTokenMenu)}
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: 'pointer' }}
+                  onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
                 >
                   {isBuyingUFO ? (
                     <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
@@ -403,17 +401,13 @@ function App() {
                     <><UfoIcon size={28}/><span>UFO</span></>
                   )}
 
-                  {showTokenMenu && (
+                  {/* 买入时的下拉菜单 */}
+                  {showTokenMenu && isBuyingUFO && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
                         <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
                           <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
                           <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-                          {(!isBuyingUFO) && (
-                            <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>
-                              Pool: {vaultBalances[coin.symbol].toFixed(2)}
-                            </span>
-                          )}
                         </div>
                       ))}
                     </div>
@@ -436,17 +430,45 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                {/* 赎回时的代币选择器，现在已经加上了下拉箭头 */}
+                <div 
+                  onClick={() => { if (!isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: !isBuyingUFO ? 'pointer' : 'default' }}
+                >
                   {isBuyingUFO ? (
                     <><UfoIcon size={28}/><span>UFO</span></>
                   ) : (
-                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span></>
+                    <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
+                  )}
+
+                  {/* 赎回时的下拉菜单，带上池子余额 */}
+                  {showTokenMenu && !isBuyingUFO && (
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                      {STABLECOINS.map(coin => (
+                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                          <img src={coin.icon} style={{width: 20, height: 20}} alt={coin.symbol}/>
+                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>
+                            Pool: {vaultBalances[coin.symbol].toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* 🔥 展示两个池子的详细余额信息 */}
               {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
-                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '12px', color: '#94a3b8', textAlign: 'right' }}>
-                  Pool Available: <span style={{ fontWeight: '600', color: '#64748b' }}>{vaultBalances[selectedStablecoin.symbol].toFixed(2)} {selectedStablecoin.symbol}</span>
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>USDT Pool:</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{vaultBalances.USDT.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>USDC Pool:</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{vaultBalances.USDC.toFixed(2)}</span>
+                  </div>
                 </div>
               )}
             </div>
