@@ -401,7 +401,6 @@ function App() {
                     <><UfoIcon size={28}/><span>UFO</span></>
                   )}
 
-                  {/* 买入时的下拉菜单 */}
                   {showTokenMenu && isBuyingUFO && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
@@ -430,7 +429,6 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
                 
-                {/* 赎回时的代币选择器，现在已经加上了下拉箭头 */}
                 <div 
                   onClick={() => { if (!isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: !isBuyingUFO ? 'pointer' : 'default' }}
@@ -441,7 +439,6 @@ function App() {
                     <><img src={selectedStablecoin.icon} style={{width: 24, height: 24}} alt={selectedStablecoin.symbol}/><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></>
                   )}
 
-                  {/* 赎回时的下拉菜单，带上池子余额 */}
                   {showTokenMenu && !isBuyingUFO && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
@@ -458,7 +455,7 @@ function App() {
                 </div>
               </div>
 
-              {/* 🔥 展示两个池子的详细余额信息 */}
+              {/* 展示池子余额 */}
               {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
                 <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -480,7 +477,8 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} {isBuyingUFO ? selectedStablecoin.symbol : 'USD'}</span>
+                {/* 🔥 修复：根据当前选择的币种显示单位 */}
+                <span>-{feeAmount} {selectedStablecoin.symbol}</span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
