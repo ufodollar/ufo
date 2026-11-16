@@ -13,7 +13,7 @@ const CONFIG = {
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
 
-  // 这里把 USDC 的前端读取也换成 USDT 的源，保证前端和合约一致
+  // 🟢 链上修复后，USDC 和 USDT 共用同一个喂价源，前端保持同步
   USDT_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
   USDC_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
 
@@ -187,7 +187,7 @@ async function fetchStablecoinPricesFromChainlink() {
     blockTimestamp
   };
 
-  // 🟢 如果读取失败，绝不返回 null，而是回退到 1.0 并打上标记
+  // 🟢 兜底逻辑：如果读取失败，绝不返回 null，回退到 1.0 并打上标记
   if (usdtResult.status === 'fulfilled') {
     result.USDT = usdtResult.value;
   } else {
@@ -313,7 +313,6 @@ function App() {
       const prices = await fetchStablecoinPricesFromChainlink();
       setStablecoinPrices(prices);
     } catch (err) {
-      // 极端情况下的兜底
       setStablecoinPrices(prev => ({
         ...prev,
         errors: [{ token: 'GLOBAL', message: 'Price refresh failed' }],
@@ -597,6 +596,7 @@ function App() {
     }
   };
 
+  // 格式化工具：普通美元 2 位小数，代币单价 4 位小数
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatPrice = (val, isBnb = false) => {
     if (isBnb) return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -648,7 +648,7 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
 
-            {/* 🟢 极简报错提示 */}
+            {/* 🟢 状态条：默认隐藏，仅在真正发生错误时显示 */}
             {currentPriceError && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
