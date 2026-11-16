@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { createRoot } from 'react-dom/client';
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
@@ -22,6 +22,7 @@ const CONFIG = {
   PRICE_DECIMALS: 18,
   MAX_PRICE_DEVIATION: 0.02, // 2%，与合约 MAX_PRICE_DEVIATION 一致
   MAX_PRICE_STALENESS: 3600, // 1 小时，与合约一致
+  NAV_WARNING_THRESHOLD: 0.99, // NAV 低于此值时显示资不抵债警告
 };
 
 const STABLECOINS = [
@@ -124,19 +125,11 @@ const CardHeader = ({ title, iconType }) => (
   </div>
 );
 
-// ================= 5. Chainlink 价格读取 =================
+// ================= 5. Chainlink 价格读取（链上时间 stale 检查） =================
 
-/**
- * 读取 Chainlink AggregatorV3，返回 18 位精度的 USD 价格。
- * 与 Vault 合约的 getPrice() 逻辑保持一致：
- *   - answer 必须 > 0
- *   - 不能 stale（超过 MAX_PRICE_STALENESS）
- *   - answeredInRound >= roundId
- *   - 归一化到 18 位精度
- */
-async function readChainlinkPrice(feedAddress) {
+async function readChainlinkPrice(feedAddress, blockTimestamp) {
   if (!feedAddress || feedAddress === ethers.ZeroAddress) {
-    throw new Error('Price feed not configured');
+    throw new Error('price feed not configured');
   }
 
   const feed = new ethers.Contract(feedAddress, CHAINLINK_ABI, rpcProvider);
@@ -147,13 +140,14 @@ async function readChainlinkPrice(feedAddress) {
 
   const { roundId, answer, updatedAt, answeredInRound } = roundData;
 
-  if (answer <= 0n) throw new Error('Invalid price: answer <= 0');
+  if (answer <= 0n) throw new Error('invalid price (answer <= 0)');
+  if (updatedAt === 0n) throw new Error('stale price (updatedAt = 0)');
 
-  const now = Math.floor(Date.now() / 1000);
-  if (updatedAt === 0n || now - Number(updatedAt) > CONFIG.MAX_PRICE_STALENESS) {
-    throw new Error('Stale price');
+  // 用链上 block.timestamp 做 stale 检查，避免客户端时间偏差
+  if (blockTimestamp !== null && Number(blockTimestamp) - Number(updatedAt) > CONFIG.MAX_PRICE_STALENESS) {
+    throw new Error('stale price (exceeds max staleness)');
   }
-  if (answeredInRound < roundId) throw new Error('Stale price: answeredInRound < roundId');
+  if (answeredInRound < roundId) throw new Error('stale price (answeredInRound < roundId)');
 
   let price18 = BigInt(answer);
   if (decimals < 18) {
@@ -172,29 +166,37 @@ async function readChainlinkPrice(feedAddress) {
 }
 
 async function fetchStablecoinPricesFromChainlink() {
+  // 先取链上时间（失败则回退为 null，跳过 stale 检查但不阻断）
+  let blockTimestamp = null;
+  try {
+    const block = await rpcProvider.getBlock('latest');
+    blockTimestamp = block?.timestamp ?? null;
+  } catch (_) { /* 忽略 */ }
+
   const [usdtResult, usdcResult] = await Promise.allSettled([
-    readChainlinkPrice(CONFIG.USDT_USD_FEED),
-    readChainlinkPrice(CONFIG.USDC_USD_FEED)
+    readChainlinkPrice(CONFIG.USDT_USD_FEED, blockTimestamp),
+    readChainlinkPrice(CONFIG.USDC_USD_FEED, blockTimestamp)
   ]);
 
   const result = {
     USDT: null,
     USDC: null,
-    errors: [],
+    errors: [], // [{ token: 'USDT', message: '...' }]
     source: 'chainlink',
-    lastUpdated: Date.now()
+    lastUpdated: Date.now(),
+    blockTimestamp
   };
 
   if (usdtResult.status === 'fulfilled') {
     result.USDT = usdtResult.value;
   } else {
-    result.errors.push(`USDT: ${usdtResult.reason?.message || 'failed'}`);
+    result.errors.push({ token: 'USDT', message: usdtResult.reason?.message || 'failed' });
   }
 
   if (usdcResult.status === 'fulfilled') {
     result.USDC = usdcResult.value;
   } else {
-    result.errors.push(`USDC: ${usdcResult.reason?.message || 'failed'}`);
+    result.errors.push({ token: 'USDC', message: usdcResult.reason?.message || 'failed' });
   }
 
   return result;
@@ -212,21 +214,27 @@ function App() {
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
 
+  // Vault 储备（公开数据，不依赖连接）
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.000000');
   const [feeAmount, setFeeAmount] = useState('0.000000');
 
+  // NAV 带状态
   const [currentNav, setCurrentNav] = useState(1);
+  const [navStatus, setNavStatus] = useState('loading'); // loading | ready | error
+
   const [bnbPrice, setBnbPrice] = useState(600);
 
+  // 价格状态：errors 为 { token, message }[]
   const [stablecoinPrices, setStablecoinPrices] = useState({
     USDT: null,
     USDC: null,
     errors: [],
     source: 'chainlink',
-    lastUpdated: null
+    lastUpdated: null,
+    blockTimestamp: null
   });
 
   const [bnbBal, setBnbBal] = useState('0.000000');
@@ -236,6 +244,10 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [history, setHistory] = useState([]);
+
+  // 防止轮询重叠
+  const priceRefreshingRef = useRef(false);
+  const balanceRefreshingRef = useRef(false);
 
   // ---------- 本地历史 ----------
   useEffect(() => {
@@ -279,20 +291,34 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
-  // ---------- NAV ----------
-  useEffect(() => {
-    const fetchNav = async () => {
-      try {
-        const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-        const rate = await vault.getExchangeRate();
-        setCurrentNav(parseFloat(ethers.formatUnits(rate, 18)));
-      } catch (error) { /* 保持 1.0 */ }
-    };
-    fetchNav();
+  // ---------- NAV（带状态，失败不再静默回退） ----------
+  const fetchNav = useCallback(async () => {
+    try {
+      const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+      const rate = await vault.getExchangeRate();
+      const nav = parseFloat(ethers.formatUnits(rate, 18));
+      if (!isFinite(nav) || nav <= 0) {
+        setNavStatus('error');
+        return;
+      }
+      setCurrentNav(nav);
+      setNavStatus('ready');
+    } catch (err) {
+      console.error('NAV fetch failed:', err);
+      setNavStatus('error');
+    }
   }, []);
 
-  // ---------- 价格轮询 ----------
+  useEffect(() => {
+    fetchNav();
+    const interval = setInterval(fetchNav, 15000);
+    return () => clearInterval(interval);
+  }, [fetchNav]);
+
+  // ---------- 价格轮询（不依赖连接） ----------
   const refreshPrices = useCallback(async () => {
+    if (priceRefreshingRef.current) return;
+    priceRefreshingRef.current = true;
     try {
       const prices = await fetchStablecoinPricesFromChainlink();
       setStablecoinPrices(prices);
@@ -300,14 +326,38 @@ function App() {
       console.error('Price refresh failed:', err);
       setStablecoinPrices(prev => ({
         ...prev,
-        errors: [err.message || 'Price refresh failed'],
+        errors: [{ token: 'GLOBAL', message: err.message || 'Price refresh failed' }],
         lastUpdated: Date.now()
       }));
+    } finally {
+      priceRefreshingRef.current = false;
     }
   }, []);
 
-  // ---------- 余额 ----------
-  const fetchBalances = useCallback(async () => {
+  // ---------- Vault 储备轮询（不依赖连接） ----------
+  const fetchVaultBalances = useCallback(async () => {
+    if (balanceRefreshingRef.current) return;
+    balanceRefreshingRef.current = true;
+    try {
+      const vaultUsdt = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, rpcProvider);
+      const vaultUsdc = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, rpcProvider);
+      const [vUsdt, vUsdc] = await Promise.all([
+        vaultUsdt.balanceOf(CONFIG.VAULT_ADDRESS),
+        vaultUsdc.balanceOf(CONFIG.VAULT_ADDRESS)
+      ]);
+      setVaultBalances({
+        USDT: parseFloat(ethers.formatUnits(vUsdt, 18)),
+        USDC: parseFloat(ethers.formatUnits(vUsdc, 18))
+      });
+    } catch (error) {
+      console.error('Vault balances fetch failed:', error);
+    } finally {
+      balanceRefreshingRef.current = false;
+    }
+  }, []);
+
+  // ---------- 用户余额（依赖连接） ----------
+  const fetchUserBalances = useCallback(async () => {
     if (!address || !walletProvider) return;
     try {
       const browserProvider = new ethers.BrowserProvider(walletProvider);
@@ -319,12 +369,13 @@ function App() {
       setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
 
       const allTokens = [...STABLECOINS, UFO_TOKEN];
-      const promises = allTokens.map(token => {
-        const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
-        return contract.balanceOf(address);
-      });
+      const results = await Promise.allSettled(
+        allTokens.map(token => {
+          const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
+          return contract.balanceOf(address);
+        })
+      );
 
-      const results = await Promise.allSettled(promises);
       const newBalances = {};
       results.forEach((res, index) => {
         const token = allTokens[index];
@@ -333,39 +384,41 @@ function App() {
           : '0.000000';
       });
       setTokenBalances(newBalances);
-
-      const vaultUsdtContract = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, rpcProvider);
-      const vaultUsdcContract = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, rpcProvider);
-
-      const [vUsdt, vUsdc] = await Promise.all([
-        vaultUsdtContract.balanceOf(CONFIG.VAULT_ADDRESS),
-        vaultUsdcContract.balanceOf(CONFIG.VAULT_ADDRESS)
-      ]);
-
-      setVaultBalances({
-        USDT: parseFloat(ethers.formatUnits(vUsdt, 18)),
-        USDC: parseFloat(ethers.formatUnits(vUsdc, 18))
-      });
-
     } catch (error) {
-      console.error('Failed to fetch balances:', error);
+      console.error('User balances fetch failed:', error);
     }
   }, [address, walletProvider]);
 
-  // 余额 + 价格一起轮询
+  // 价格 + Vault 储备：始终轮询（不依赖连接）
   useEffect(() => {
-    if (isConnected && address) {
-      fetchBalances();
+    refreshPrices();
+    fetchVaultBalances();
+    const interval = setInterval(() => {
       refreshPrices();
-      const interval = setInterval(() => {
-        fetchBalances();
-        refreshPrices();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [isConnected, address, activeTab, fetchBalances, refreshPrices]);
+      fetchVaultBalances();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [refreshPrices, fetchVaultBalances]);
 
-  // ---------- 报价计算（镜像 Vault 合约逻辑） ----------
+  // 用户余额：仅在连接时轮询
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setTokenBalances({});
+      setBnbBal('0.000000');
+      return;
+    }
+    fetchUserBalances();
+    const interval = setInterval(fetchUserBalances, 5000);
+    return () => clearInterval(interval);
+  }, [isConnected, address, fetchUserBalances]);
+
+  // ---------- 当前选中 token 的价格状态 ----------
+  const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
+  const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
+  const globalPriceError = stablecoinPrices.errors.find(e => e.token === 'GLOBAL');
+  const priceReady = !!currentPriceData && !currentPriceError;
+
+  // ---------- 报价估算（镜像 Vault 合约） ----------
   useEffect(() => {
     const input = parseFloat(inputAmount);
 
@@ -376,22 +429,31 @@ function App() {
       return;
     }
 
-    // 选定当前支付/接收稳定币的 Chainlink 价格
-    const priceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
-
-    if (!priceData) {
-      setErrorMsg(`${selectedStablecoin.symbol} price feed not available`);
+    if (globalPriceError) {
+      setErrorMsg('Price feed unavailable. Please retry.');
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
       return;
     }
 
-    const price18 = priceData.price18; // BigInt, 18 decimals
+    if (!currentPriceData) {
+      setErrorMsg(`${selectedStablecoin.symbol} price feed not ready`);
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
+      return;
+    }
+
+    if (currentPriceError) {
+      setErrorMsg(`${selectedStablecoin.symbol}: ${currentPriceError.message}`);
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
+      return;
+    }
+
+    const price18 = currentPriceData.price18;
 
     // 前端展示层偏离熔断（与合约 2% 一致）
-    const deviation = price18 > 10n ** 18n
-      ? price18 - 10n ** 18n
-      : 10n ** 18n - price18;
+    const deviation = price18 > 10n ** 18n ? price18 - 10n ** 18n : 10n ** 18n - price18;
     if (Number(deviation * 10000n / 10n ** 18n) > CONFIG.MAX_PRICE_DEVIATION * 10000) {
       setErrorMsg(`${selectedStablecoin.symbol} price deviation exceeds 2%. Trading paused.`);
       setOutputAmount('0.000000');
@@ -402,20 +464,11 @@ function App() {
     const inputWei = ethers.parseUnits(inputAmount, 18);
 
     if (isBuyingUFO) {
-      // ===== deposit 镜像 =====
-      // usdValue = amount * price / 1e18
       const usdValue = (inputWei * price18) / 10n ** 18n;
-      // feeUsd = usdValue * 0.5%
       const feeUsd = (usdValue * 50n) / 10000n;
-      // feeTokens = feeUsd * 1e18 / price
       const feeTokens = feeUsd === 0n ? 0n : (feeUsd * 10n ** 18n) / price18;
-      // netTokens = amount - feeTokens
-      const netTokens = inputWei - feeTokens;
-      // ufoAmount = usdValue - feeUsd（UFO 刚性 1:1 USD）
       const ufoAmount = usdValue - feeUsd;
 
-      // 流动性检查不适用于 deposit（金库接收资金）
-      // 余额检查
       const currentBal = parseFloat(tokenBalances[selectedStablecoin.symbol] || '0');
       if (isConnected && input > currentBal) {
         setErrorMsg(`Insufficient ${selectedStablecoin.symbol} balance`);
@@ -427,14 +480,10 @@ function App() {
       setOutputAmount(parseFloat(ethers.formatUnits(ufoAmount, 18)).toFixed(6));
 
     } else {
-      // ===== withdraw 镜像 =====
-      // feeUfo = ufoAmount * 0.5%
       const feeUfo = (inputWei * 50n) / 10000n;
       const netUfo = inputWei - feeUfo;
-      // tokenOut = netUfo * 1e18 / price（因为 netUfo 的 USD 价值 = netUfo）
       const tokenOut = (netUfo * 10n ** 18n) / price18;
 
-      // 流动性检查
       const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
       const tokenOutFloat = parseFloat(ethers.formatUnits(tokenOut, 18));
       if (tokenOutFloat > currentVaultBal) {
@@ -451,7 +500,7 @@ function App() {
       setFeeAmount(parseFloat(ethers.formatUnits(feeUfo, 18)).toFixed(6));
       setOutputAmount(parseFloat(ethers.formatUnits(tokenOut, 18)).toFixed(6));
     }
-  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, stablecoinPrices]);
+  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
 
   // ---------- 交易 ----------
   const handleAction = async () => {
@@ -464,9 +513,7 @@ function App() {
     const input = parseFloat(inputAmount);
     if (!inputAmount || input <= 0 || isNaN(input) || errorMsg) return;
 
-    // 二次确认价格可用
-    const priceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
-    if (!priceData) {
+    if (!priceReady) {
       setErrorMsg('Price feed not ready');
       return;
     }
@@ -494,6 +541,15 @@ function App() {
         throw new Error('Insufficient BNB for gas.');
       }
 
+      // ===== 交易前用合约 getPrice() 做最终验证（与合约完全一致） =====
+      const vaultRead = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+      try {
+        await vaultRead.getPrice(selectedStablecoin.address);
+      } catch (priceErr) {
+        const reason = priceErr.reason || priceErr.shortMessage || priceErr.message || 'Price check failed';
+        throw new Error(`Vault rejected price: ${reason}`);
+      }
+
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
 
@@ -513,17 +569,16 @@ function App() {
         receipt = await tx.wait();
         txRecord.txHash = tx.hash;
 
-        // 解析 Deposited 事件，获取链上实际 ufoAmount
         for (const log of receipt.logs) {
           try {
             const parsed = vault.interface.parseLog(log);
             if (parsed && parsed.name === 'Deposited') {
-              const args = parsed.args.toObject ? parsed.args.toObject() : parsed.args;
+              const args = parsed.args;
               txRecord.receiveAmount = parseFloat(ethers.formatUnits(args.ufoAmount, 18)).toFixed(6);
               txRecord.payAmount = parseFloat(ethers.formatUnits(args.amount, 18)).toFixed(6);
               break;
             }
-          } catch (_) { /* 不是本合约事件，跳过 */ }
+          } catch (_) {}
         }
 
         txRecord.status = 'Success';
@@ -536,17 +591,16 @@ function App() {
         receipt = await tx.wait();
         txRecord.txHash = tx.hash;
 
-        // 解析 Withdrawn 事件，获取链上实际 tokenOut
         for (const log of receipt.logs) {
           try {
             const parsed = vault.interface.parseLog(log);
             if (parsed && parsed.name === 'Withdrawn') {
-              const args = parsed.args.toObject ? parsed.args.toObject() : parsed.args;
+              const args = parsed.args;
               txRecord.receiveAmount = parseFloat(ethers.formatUnits(args.amount, 18)).toFixed(6);
               txRecord.payAmount = parseFloat(ethers.formatUnits(args.ufoAmount, 18)).toFixed(6);
               break;
             }
-          } catch (_) { /* 跳过 */ }
+          } catch (_) {}
         }
 
         txRecord.status = 'Success';
@@ -557,7 +611,9 @@ function App() {
       setInputAmount('');
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
-      fetchBalances();
+      fetchUserBalances();
+      fetchVaultBalances();
+      fetchNav();
 
     } catch (error) {
       console.error(error);
@@ -579,22 +635,20 @@ function App() {
 
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const priceReady = !!(selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC);
-  const priceErrors = stablecoinPrices.errors.length > 0;
-
   const isButtonDisabled =
     isProcessing ||
     (isConnected && (
       errorMsg !== '' ||
       !inputAmount ||
       parseFloat(inputAmount) <= 0 ||
-      !priceReady ||
-      priceErrors
+      !priceReady
     ));
 
   const currentPayPrice = isBuyingUFO
-    ? (selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT?.priceFloat : stablecoinPrices.USDC?.priceFloat)
+    ? (currentPriceData?.priceFloat ?? null)
     : currentNav;
+
+  const navWarning = navStatus === 'ready' && currentNav < CONFIG.NAV_WARNING_THRESHOLD;
 
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
@@ -626,22 +680,22 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Swap</h3>
 
-            {/* 价格状态条 */}
+            {/* 价格状态条（只看当前选中 token） */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
               fontSize: '11px', marginBottom: '16px', fontWeight: '600',
-              color: priceErrors ? '#ef4444' : '#64748b'
+              color: currentPriceError ? '#ef4444' : '#64748b'
             }}>
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%',
-                background: priceErrors ? '#ef4444' : (priceReady ? '#10b981' : '#f59e0b'),
+                background: currentPriceError ? '#ef4444' : (priceReady ? '#10b981' : '#f59e0b'),
                 display: 'inline-block'
               }} />
-              {priceErrors
-                ? `Price fault: ${stablecoinPrices.errors.join('; ')}`
+              {currentPriceError
+                ? `${selectedStablecoin.symbol}: ${currentPriceError.message}`
                 : (priceReady
-                  ? `Chainlink · 1 USDT = $${stablecoinPrices.USDT?.priceFloat?.toFixed(4) ?? '—'} · 1 USDC = $${stablecoinPrices.USDC?.priceFloat?.toFixed(4) ?? '—'}`
-                  : 'Loading Chainlink price...')}
+                  ? `Chainlink · 1 ${selectedStablecoin.symbol} = $${currentPriceData.priceFloat.toFixed(4)} USD`
+                  : `Loading ${selectedStablecoin.symbol} price...`)}
             </div>
 
             {/* You Pay */}
@@ -669,15 +723,19 @@ function App() {
                   )}
                   {showTokenMenu && isBuyingUFO && (
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
-                      {STABLECOINS.map(coin => (
-                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
-                          <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
-                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>
-                            ≈ ${(coin.symbol === 'USDT' ? stablecoinPrices.USDT?.priceFloat : stablecoinPrices.USDC?.priceFloat)?.toFixed(4) ?? '—'}
-                          </span>
-                        </div>
-                      ))}
+                      {STABLECOINS.map(coin => {
+                        const coinPrice = coin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
+                        const coinErr = stablecoinPrices.errors.find(e => e.token === coin.symbol);
+                        return (
+                          <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                            <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
+                            <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
+                            <span style={{ fontSize: '11px', color: coinErr ? '#ef4444' : '#94a3b8', marginLeft: 'auto' }}>
+                              {coinErr ? coinErr.message : (coinPrice ? `≈ $${coinPrice.priceFloat.toFixed(4)}` : '—')}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -744,11 +802,14 @@ function App() {
             <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
                 <span>Pay Price</span>
-                <span>1 {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} = ${currentPayPrice?.toFixed(4) ?? '—'} USD</span>
+                <span>1 {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'} USD</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
                 <span>UFO NAV (on-chain)</span>
-                <span>1 UFO = ${currentNav.toFixed(4)} USD</span>
+                <span style={{ color: navWarning ? '#ef4444' : '#64748b' }}>
+                  1 UFO = ${currentNav.toFixed(4)} USD
+                  {navStatus === 'error' && <span style={{ marginLeft: 6 }}>(read failed)</span>}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
@@ -759,6 +820,13 @@ function App() {
                 <span>Net Received (estimated)</span>
                 <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedStablecoin.symbol}</span>
               </div>
+
+              {navWarning && (
+                <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: '600' }}>
+                  ⚠️ On-chain NAV is below $1.00 ({currentNav.toFixed(4)}). Vault reserves may be insufficient. Proceed with caution.
+                </div>
+              )}
+
               <div style={{ marginTop: '8px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
                 Final amount is determined by the Vault contract at execution time using the same Chainlink feed. The on-chain event will be parsed after confirmation to display the actual received amount.
               </div>
