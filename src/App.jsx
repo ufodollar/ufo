@@ -125,7 +125,7 @@ const CardHeader = ({ title, iconType }) => (
   </div>
 );
 
-// ================= 5. Chainlink 价格读取（链上时间 stale 检查） =================
+// ================= 5. Chainlink 价格读取（链上时间 stale 检查 + BigInt 安全转换） =================
 
 async function readChainlinkPrice(feedAddress, blockTimestamp) {
   if (!feedAddress || feedAddress === ethers.ZeroAddress) {
@@ -133,11 +133,13 @@ async function readChainlinkPrice(feedAddress, blockTimestamp) {
   }
 
   const feed = new ethers.Contract(feedAddress, CHAINLINK_ABI, rpcProvider);
-  const [decimals, roundData] = await Promise.all([
+  const [decimalsRaw, roundData] = await Promise.all([
     feed.decimals(),
     feed.latestRoundData()
   ]);
 
+  // 🔥 关键修复：强制将 decimals 转为 Number，避免 ethers v6 返回 BigInt 导致报错
+  const decimals = Number(decimalsRaw);
   const { roundId, answer, updatedAt, answeredInRound } = roundData;
 
   if (answer <= 0n) throw new Error('invalid price (answer <= 0)');
