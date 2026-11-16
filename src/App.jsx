@@ -7,14 +7,13 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🟢 已更新为你刚刚部署上链的新金库地址
   VAULT_ADDRESS: '0x5C4eb7b82EFc4840e2fDa80Df73C53dc6b914790',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
 
-  // 🟢 Chainlink BSC 聚合器 (与 Vault 合约共用同一组 feed)
+  // Chainlink BSC 聚合器
   USDT_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
   USDC_USD_FEED: '0x51597f405303C4377E36123cBc172b13269EA163',
 
@@ -125,7 +124,7 @@ const CardHeader = ({ title, iconType }) => (
   </div>
 );
 
-// ================= 5. Chainlink 价格读取（链上时间 stale 检查 + BigInt 安全转换） =================
+// ================= 5. Chainlink 价格读取 =================
 
 async function readChainlinkPrice(feedAddress, blockTimestamp) {
   if (!feedAddress || feedAddress === ethers.ZeroAddress) {
@@ -138,7 +137,6 @@ async function readChainlinkPrice(feedAddress, blockTimestamp) {
     feed.latestRoundData()
   ]);
 
-  // 🔥 关键修复：强制将 decimals 转为 Number，避免 ethers v6 返回 BigInt 导致报错
   const decimals = Number(decimalsRaw);
   const { roundId, answer, updatedAt, answeredInRound } = roundData;
 
@@ -601,7 +599,12 @@ function App() {
     }
   };
 
+  // 格式化工具
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatPrice = (val, isBnb = false) => {
+    if (isBnb) return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(val).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  };
 
   const isButtonDisabled =
     isProcessing ||
@@ -646,24 +649,15 @@ function App() {
 
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Swap</h3>
+            <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
 
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              fontSize: '11px', marginBottom: '16px', fontWeight: '600',
-              color: currentPriceError ? '#ef4444' : '#64748b'
-            }}>
-              <span style={{
-                width: '6px', height: '6px', borderRadius: '50%',
-                background: currentPriceError ? '#ef4444' : (priceReady ? '#10b981' : '#f59e0b'),
-                display: 'inline-block'
-              }} />
-              {currentPriceError
-                ? `${selectedStablecoin.symbol}: ${currentPriceError.message}`
-                : (priceReady
-                  ? `Chainlink · 1 ${selectedStablecoin.symbol} = $${currentPriceData.priceFloat.toFixed(4)} USD`
-                  : `Loading ${selectedStablecoin.symbol} price...`)}
-            </div>
+            {/* 只有在报错时才显示顶部提示 */}
+            {currentPriceError && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                {selectedStablecoin.symbol}: {currentPriceError.message}
+              </div>
+            )}
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
@@ -688,7 +682,7 @@ function App() {
                     <><UfoIcon size={28} /><span>UFO</span></>
                   )}
                   {showTokenMenu && isBuyingUFO && (
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => {
                         const coinPrice = coin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
                         const coinErr = stablecoinPrices.errors.find(e => e.token === coin.symbol);
@@ -735,7 +729,7 @@ function App() {
                     <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
                   )}
                   {showTokenMenu && !isBuyingUFO && (
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
                         <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
                           <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
@@ -824,7 +818,7 @@ function App() {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>${formatUsd(bnbPrice)}</span>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>${formatPrice(bnbPrice, true)}</span>
                   <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
                 </div>
               </div>
@@ -832,7 +826,6 @@ function App() {
 
             {/* USDT, USDC, UFO */}
             {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => {
-              // 精准获取四种资产的实时市场单价
               let currentPrice = 1.0;
               if (token.symbol === 'UFO') {
                 currentPrice = currentNav;
@@ -854,7 +847,7 @@ function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>${formatUsd(currentPrice)}</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>${formatPrice(currentPrice)}</span>
                       <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>
                         ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
                       </span>
@@ -965,7 +958,6 @@ function App() {
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
             <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
 
-            {/* Social Icons Container */}
             <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '40px' }}>
               
               <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
@@ -986,7 +978,6 @@ function App() {
                 </div>
               </a>
 
-              {/* GitHub Icon */}
               <a href="https://github.com/ufodollar/bsc-vault" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                 <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
