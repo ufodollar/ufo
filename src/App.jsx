@@ -13,9 +13,9 @@ const CONFIG = {
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
 
-  // Chainlink BSC 聚合器
+  // 这里把 USDC 的前端读取也换成 USDT 的源，保证前端和合约一致
   USDT_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
-  USDC_USD_FEED: '0x51597f405303C4377E36123cBc172b13269EA163',
+  USDC_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
 
   FEE_RATE: 0.005,
   PRICE_DECIMALS: 18,
@@ -31,7 +31,8 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-const rpcProvider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org');
+// 🟢 更换为更稳定的公共 RPC
+const rpcProvider = new ethers.JsonRpcProvider('https://bsc-dataseed1.defibit.io');
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
@@ -160,7 +161,8 @@ async function readChainlinkPrice(feedAddress, blockTimestamp) {
     priceFloat: Number(price18) / 1e18,
     decimals,
     updatedAt: Number(updatedAt),
-    roundId: roundId.toString()
+    roundId: roundId.toString(),
+    isFallback: false
   };
 }
 
@@ -185,11 +187,20 @@ async function fetchStablecoinPricesFromChainlink() {
     blockTimestamp
   };
 
-  if (usdtResult.status === 'fulfilled') result.USDT = usdtResult.value;
-  else result.errors.push({ token: 'USDT', message: usdtResult.reason?.message || 'failed' });
+  // 🟢 如果读取失败，绝不返回 null，而是回退到 1.0 并打上标记
+  if (usdtResult.status === 'fulfilled') {
+    result.USDT = usdtResult.value;
+  } else {
+    result.USDT = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
+    result.errors.push({ token: 'USDT', message: 'Price feed failed. Using $1.00 fallback.' });
+  }
 
-  if (usdcResult.status === 'fulfilled') result.USDC = usdcResult.value;
-  else result.errors.push({ token: 'USDC', message: usdcResult.reason?.message || 'failed' });
+  if (usdcResult.status === 'fulfilled') {
+    result.USDC = usdcResult.value;
+  } else {
+    result.USDC = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
+    result.errors.push({ token: 'USDC', message: 'Price feed failed. Using $1.00 fallback.' });
+  }
 
   return result;
 }
@@ -218,8 +229,8 @@ function App() {
   const [bnbPrice, setBnbPrice] = useState(600);
 
   const [stablecoinPrices, setStablecoinPrices] = useState({
-    USDT: null,
-    USDC: null,
+    USDT: { price18: 10n ** 18n, priceFloat: 1.0, isFallback: false },
+    USDC: { price18: 10n ** 18n, priceFloat: 1.0, isFallback: false },
     errors: [],
     source: 'chainlink',
     lastUpdated: null,
@@ -302,9 +313,10 @@ function App() {
       const prices = await fetchStablecoinPricesFromChainlink();
       setStablecoinPrices(prices);
     } catch (err) {
+      // 极端情况下的兜底
       setStablecoinPrices(prev => ({
         ...prev,
-        errors: [{ token: 'GLOBAL', message: err.message || 'Price refresh failed' }],
+        errors: [{ token: 'GLOBAL', message: 'Price refresh failed' }],
         lastUpdated: Date.now()
       }));
     } finally {
@@ -389,7 +401,7 @@ function App() {
   const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
   const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
   const globalPriceError = stablecoinPrices.errors.find(e => e.token === 'GLOBAL');
-  const priceReady = !!currentPriceData && !currentPriceError;
+  const priceReady = !!currentPriceData && !globalPriceError;
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
@@ -402,20 +414,6 @@ function App() {
 
     if (globalPriceError) {
       setErrorMsg('Price feed unavailable. Please retry.');
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
-    }
-
-    if (!currentPriceData) {
-      setErrorMsg(`${selectedStablecoin.symbol} price feed not ready`);
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
-    }
-
-    if (currentPriceError) {
-      setErrorMsg(`${selectedStablecoin.symbol}: ${currentPriceError.message}`);
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
       return;
@@ -599,7 +597,6 @@ function App() {
     }
   };
 
-  // 格式化工具
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatPrice = (val, isBnb = false) => {
     if (isBnb) return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -651,11 +648,11 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
 
-            {/* 只有在报错时才显示顶部提示 */}
+            {/* 🟢 极简报错提示 */}
             {currentPriceError && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
-                {selectedStablecoin.symbol}: {currentPriceError.message}
+                {currentPriceError.message}
               </div>
             )}
 
@@ -691,7 +688,7 @@ function App() {
                             <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
                             <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
                             <span style={{ fontSize: '11px', color: coinErr ? '#ef4444' : '#94a3b8', marginLeft: 'auto' }}>
-                              {coinErr ? coinErr.message : (coinPrice ? `≈ $${coinPrice.priceFloat.toFixed(4)}` : '—')}
+                              {coinErr ? 'Fallback $1.00' : (coinPrice ? `≈ $${coinPrice.priceFloat.toFixed(4)}` : '—')}
                             </span>
                           </div>
                         );
@@ -827,12 +824,15 @@ function App() {
             {/* USDT, USDC, UFO */}
             {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => {
               let currentPrice = 1.0;
+              let isFallback = false;
               if (token.symbol === 'UFO') {
                 currentPrice = currentNav;
               } else if (token.symbol === 'USDT') {
                 currentPrice = stablecoinPrices.USDT?.priceFloat ?? 1.0;
+                isFallback = stablecoinPrices.USDT?.isFallback;
               } else if (token.symbol === 'USDC') {
                 currentPrice = stablecoinPrices.USDC?.priceFloat ?? 1.0;
+                isFallback = stablecoinPrices.USDC?.isFallback;
               }
 
               return (
@@ -847,7 +847,9 @@ function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>${formatPrice(currentPrice)}</span>
+                      <span style={{ fontSize: '11px', color: isFallback ? '#ef4444' : '#64748b' }}>
+                        ${formatPrice(currentPrice)} {isFallback && '*'}
+                      </span>
                       <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>
                         ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
                       </span>
