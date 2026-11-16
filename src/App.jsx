@@ -7,22 +7,22 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
-  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C',
+  // 🟢 已更新为你刚刚部署上链的新金库地址
+  VAULT_ADDRESS: '0x5C4eb7b82EFc4840e2fDa80Df73C53dc6b914790',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
 
-  // Chainlink BSC 聚合器（与 Vault 合约共用同一组 feed）
-  // USDT/USD 已确认；USDC/USD 请从 Chainlink 官方 BSC 页面确认后填入
+  // 🟢 Chainlink BSC 聚合器 (与 Vault 合约共用同一组 feed)
   USDT_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
-  USDC_USD_FEED: '0x0000000000000000000000000000000000000000', // ⚠️ 部署前替换
+  USDC_USD_FEED: '0x51597f405303C4377E36123cBc172b13269EA163',
 
   FEE_RATE: 0.005,
   PRICE_DECIMALS: 18,
-  MAX_PRICE_DEVIATION: 0.02, // 2%，与合约 MAX_PRICE_DEVIATION 一致
-  MAX_PRICE_STALENESS: 3600, // 1 小时，与合约一致
-  NAV_WARNING_THRESHOLD: 0.99, // NAV 低于此值时显示资不抵债警告
+  MAX_PRICE_DEVIATION: 0.02, // 2%
+  MAX_PRICE_STALENESS: 3600, // 1 小时
+  NAV_WARNING_THRESHOLD: 0.99,
 };
 
 const STABLECOINS = [
@@ -143,7 +143,6 @@ async function readChainlinkPrice(feedAddress, blockTimestamp) {
   if (answer <= 0n) throw new Error('invalid price (answer <= 0)');
   if (updatedAt === 0n) throw new Error('stale price (updatedAt = 0)');
 
-  // 用链上 block.timestamp 做 stale 检查，避免客户端时间偏差
   if (blockTimestamp !== null && Number(blockTimestamp) - Number(updatedAt) > CONFIG.MAX_PRICE_STALENESS) {
     throw new Error('stale price (exceeds max staleness)');
   }
@@ -166,12 +165,11 @@ async function readChainlinkPrice(feedAddress, blockTimestamp) {
 }
 
 async function fetchStablecoinPricesFromChainlink() {
-  // 先取链上时间（失败则回退为 null，跳过 stale 检查但不阻断）
   let blockTimestamp = null;
   try {
     const block = await rpcProvider.getBlock('latest');
     blockTimestamp = block?.timestamp ?? null;
-  } catch (_) { /* 忽略 */ }
+  } catch (_) {}
 
   const [usdtResult, usdcResult] = await Promise.allSettled([
     readChainlinkPrice(CONFIG.USDT_USD_FEED, blockTimestamp),
@@ -181,23 +179,17 @@ async function fetchStablecoinPricesFromChainlink() {
   const result = {
     USDT: null,
     USDC: null,
-    errors: [], // [{ token: 'USDT', message: '...' }]
+    errors: [],
     source: 'chainlink',
     lastUpdated: Date.now(),
     blockTimestamp
   };
 
-  if (usdtResult.status === 'fulfilled') {
-    result.USDT = usdtResult.value;
-  } else {
-    result.errors.push({ token: 'USDT', message: usdtResult.reason?.message || 'failed' });
-  }
+  if (usdtResult.status === 'fulfilled') result.USDT = usdtResult.value;
+  else result.errors.push({ token: 'USDT', message: usdtResult.reason?.message || 'failed' });
 
-  if (usdcResult.status === 'fulfilled') {
-    result.USDC = usdcResult.value;
-  } else {
-    result.errors.push({ token: 'USDC', message: usdcResult.reason?.message || 'failed' });
-  }
+  if (usdcResult.status === 'fulfilled') result.USDC = usdcResult.value;
+  else result.errors.push({ token: 'USDC', message: usdcResult.reason?.message || 'failed' });
 
   return result;
 }
@@ -214,20 +206,17 @@ function App() {
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
 
-  // Vault 储备（公开数据，不依赖连接）
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
   const [outputAmount, setOutputAmount] = useState('0.000000');
   const [feeAmount, setFeeAmount] = useState('0.000000');
 
-  // NAV 带状态
   const [currentNav, setCurrentNav] = useState(1);
-  const [navStatus, setNavStatus] = useState('loading'); // loading | ready | error
+  const [navStatus, setNavStatus] = useState('loading'); 
 
   const [bnbPrice, setBnbPrice] = useState(600);
 
-  // 价格状态：errors 为 { token, message }[]
   const [stablecoinPrices, setStablecoinPrices] = useState({
     USDT: null,
     USDC: null,
@@ -245,19 +234,13 @@ function App() {
 
   const [history, setHistory] = useState([]);
 
-  // 防止轮询重叠
   const priceRefreshingRef = useRef(false);
   const balanceRefreshingRef = useRef(false);
 
-  // ---------- 本地历史 ----------
   useEffect(() => {
     const saved = localStorage.getItem('ufo_tx_history');
     if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse history', e);
-      }
+      try { setHistory(JSON.parse(saved)); } catch (e) {}
     }
   }, []);
 
@@ -267,7 +250,6 @@ function App() {
     localStorage.setItem('ufo_tx_history', JSON.stringify(newHistory));
   };
 
-  // ---------- 网络 ----------
   const ensureBscNetwork = useCallback(async () => {
     if (!walletProvider) return false;
     try {
@@ -291,7 +273,6 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
-  // ---------- NAV（带状态，失败不再静默回退） ----------
   const fetchNav = useCallback(async () => {
     try {
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
@@ -304,7 +285,6 @@ function App() {
       setCurrentNav(nav);
       setNavStatus('ready');
     } catch (err) {
-      console.error('NAV fetch failed:', err);
       setNavStatus('error');
     }
   }, []);
@@ -315,7 +295,6 @@ function App() {
     return () => clearInterval(interval);
   }, [fetchNav]);
 
-  // ---------- 价格轮询（不依赖连接） ----------
   const refreshPrices = useCallback(async () => {
     if (priceRefreshingRef.current) return;
     priceRefreshingRef.current = true;
@@ -323,7 +302,6 @@ function App() {
       const prices = await fetchStablecoinPricesFromChainlink();
       setStablecoinPrices(prices);
     } catch (err) {
-      console.error('Price refresh failed:', err);
       setStablecoinPrices(prev => ({
         ...prev,
         errors: [{ token: 'GLOBAL', message: err.message || 'Price refresh failed' }],
@@ -334,7 +312,6 @@ function App() {
     }
   }, []);
 
-  // ---------- Vault 储备轮询（不依赖连接） ----------
   const fetchVaultBalances = useCallback(async () => {
     if (balanceRefreshingRef.current) return;
     balanceRefreshingRef.current = true;
@@ -356,7 +333,6 @@ function App() {
     }
   }, []);
 
-  // ---------- 用户余额（依赖连接） ----------
   const fetchUserBalances = useCallback(async () => {
     if (!address || !walletProvider) return;
     try {
@@ -389,7 +365,6 @@ function App() {
     }
   }, [address, walletProvider]);
 
-  // 价格 + Vault 储备：始终轮询（不依赖连接）
   useEffect(() => {
     refreshPrices();
     fetchVaultBalances();
@@ -400,7 +375,6 @@ function App() {
     return () => clearInterval(interval);
   }, [refreshPrices, fetchVaultBalances]);
 
-  // 用户余额：仅在连接时轮询
   useEffect(() => {
     if (!isConnected || !address) {
       setTokenBalances({});
@@ -412,16 +386,13 @@ function App() {
     return () => clearInterval(interval);
   }, [isConnected, address, fetchUserBalances]);
 
-  // ---------- 当前选中 token 的价格状态 ----------
   const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
   const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
   const globalPriceError = stablecoinPrices.errors.find(e => e.token === 'GLOBAL');
   const priceReady = !!currentPriceData && !currentPriceError;
 
-  // ---------- 报价估算（镜像 Vault 合约） ----------
   useEffect(() => {
     const input = parseFloat(inputAmount);
-
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
@@ -451,8 +422,6 @@ function App() {
     }
 
     const price18 = currentPriceData.price18;
-
-    // 前端展示层偏离熔断（与合约 2% 一致）
     const deviation = price18 > 10n ** 18n ? price18 - 10n ** 18n : 10n ** 18n - price18;
     if (Number(deviation * 10000n / 10n ** 18n) > CONFIG.MAX_PRICE_DEVIATION * 10000) {
       setErrorMsg(`${selectedStablecoin.symbol} price deviation exceeds 2%. Trading paused.`);
@@ -478,7 +447,6 @@ function App() {
 
       setFeeAmount(parseFloat(ethers.formatUnits(feeTokens, 18)).toFixed(6));
       setOutputAmount(parseFloat(ethers.formatUnits(ufoAmount, 18)).toFixed(6));
-
     } else {
       const feeUfo = (inputWei * 50n) / 10000n;
       const netUfo = inputWei - feeUfo;
@@ -502,7 +470,6 @@ function App() {
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
 
-  // ---------- 交易 ----------
   const handleAction = async () => {
     if (isProcessing) return;
     if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
@@ -541,7 +508,6 @@ function App() {
         throw new Error('Insufficient BNB for gas.');
       }
 
-      // ===== 交易前用合约 getPrice() 做最终验证（与合约完全一致） =====
       const vaultRead = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
       try {
         await vaultRead.getPrice(selectedStablecoin.address);
@@ -680,7 +646,6 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Swap</h3>
 
-            {/* 价格状态条（只看当前选中 token） */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
               fontSize: '11px', marginBottom: '16px', fontWeight: '600',
@@ -698,7 +663,6 @@ function App() {
                   : `Loading ${selectedStablecoin.symbol} price...`)}
             </div>
 
-            {/* You Pay */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Pay</span>
@@ -743,7 +707,6 @@ function App() {
               {errorMsg && <div style={{ color: '#ef4444', fontSize: '12px', fontWeight: '600', marginTop: '8px' }}>{errorMsg}</div>}
             </div>
 
-            {/* Swap Direction */}
             <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
               <button
                 onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); setErrorMsg(''); }}
@@ -754,7 +717,6 @@ function App() {
               </button>
             </div>
 
-            {/* You Receive */}
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
                 <span>You Receive (Estimated)</span>
@@ -798,7 +760,6 @@ function App() {
               )}
             </div>
 
-            {/* 汇率明细 */}
             <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
                 <span>Pay Price</span>
@@ -848,31 +809,54 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+            
+            {/* BNB */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
-                <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span><span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>${formatUsd(bnbPrice)}</span>
+                  <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
+                </div>
               </div>
             </div>
+
+            {/* USDT, USDC, UFO */}
             {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => {
-              const price = token.symbol === 'UFO'
-                ? currentNav
-                : token.symbol === 'USDT'
-                  ? (stablecoinPrices.USDT?.priceFloat ?? 1)
-                  : (stablecoinPrices.USDC?.priceFloat ?? 1);
+              // 精准获取四种资产的实时市场单价
+              let currentPrice = 1.0;
+              if (token.symbol === 'UFO') {
+                currentPrice = currentNav;
+              } else if (token.symbol === 'USDT') {
+                currentPrice = stablecoinPrices.USDT?.priceFloat ?? 1.0;
+              } else if (token.symbol === 'USDC') {
+                currentPrice = stablecoinPrices.USDC?.priceFloat ?? 1.0;
+              }
+
               return (
                 <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== arr.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== arr.length - 1 ? '20px' : '0', marginBottom: index !== arr.length - 1 ? '20px' : '0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {token.icon === 'UFO' ? <div style={{ width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><UfoIcon size={28} /></div> : <img src={token.icon} style={{ width: 40, height: 40 }} alt={token.symbol} />}
-                    <div style={{ display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span><span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span></div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
-                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * price)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>${formatUsd(currentPrice)}</span>
+                      <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>
+                        ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -979,22 +963,34 @@ function App() {
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
             <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '40px' }}>
+            {/* Social Icons Container */}
+            <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '40px' }}>
+              
               <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '72px', height: '72px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#000000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" /></svg>
+                <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" /></svg>
                 </div>
               </a>
+
               <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '72px', height: '72px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#000000"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" /></svg>
+                <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" /></svg>
                 </div>
               </a>
+
               <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ width: '72px', height: '72px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="#000000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
+                <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="#000000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
                 </div>
               </a>
+
+              {/* GitHub Icon */}
+              <a href="https://github.com/ufodollar/bsc-vault" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                </div>
+              </a>
+
             </div>
 
             <div style={{ marginBottom: '32px', fontSize: '12px', color: '#94a3b8', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
@@ -1052,3 +1048,4 @@ const container = document.getElementById('root');
 if (container) {
   container.innerHTML = '';
   createRoot(container).render(<App />);
+}
