@@ -6,7 +6,7 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🚨 已更新为最新部署的 Vault 合约地址
+  // 🚨 最新部署的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -26,8 +26,8 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 🟢 修复：使用完全免费公开的 RPC 节点，防止 Key 泄露被盗刷额度
-const rpcProvider = new ethers.JsonRpcProvider('https://binance.llamarpc.com');
+// 🟢 使用你提供的 Ankr RPC 节点
+const rpcProvider = new ethers.JsonRpcProvider('https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749');
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
@@ -41,7 +41,7 @@ const VAULT_ABI = [
   'function withdraw(address tokenAddress, uint256 ufoAmount)',
   'function getExchangeRate() view returns (uint256)',
   'function getPrice(address tokenAddress) view returns (uint256)',
-  'function paused() view returns (bool)', // 🚨 修复：添加暂停查询接口
+  'function paused() view returns (bool)', // 🚨 添加暂停查询接口
   'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
 ];
@@ -117,6 +117,11 @@ const CardHeader = ({ title, iconType }) => (
 );
 
 // ================= 5. 核心读取逻辑 =================
+
+/**
+ * 直接调用 Vault 的 getPrice 获取价格。
+ * 带有 3 次自动重试机制，规避免费 RPC 网络抖动。
+ */
 async function fetchVaultPrice(tokenAddress) {
   const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
   let lastError = null;
@@ -134,6 +139,7 @@ async function fetchVaultPrice(tokenAddress) {
       await new Promise(r => setTimeout(r, 1000));
     }
   }
+  
   throw lastError;
 }
 
@@ -155,14 +161,18 @@ async function fetchStablecoinPrices() {
     result.USDT = usdtResult.value;
   } else {
     result.USDT = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    result.errors.push({ token: 'USDT', message: 'Price feed failed (RPC timeout). Using $1.00 fallback.' });
+    // 🚨 优化：暴露真实的合约报错原因
+    const errMsg = usdtResult.reason?.reason || usdtResult.reason?.shortMessage || 'USDT RPC Failed';
+    result.errors.push({ token: 'USDT', message: `USDT: ${errMsg}` });
   }
 
   if (usdcResult.status === 'fulfilled') {
     result.USDC = usdcResult.value;
   } else {
     result.USDC = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    result.errors.push({ token: 'USDC', message: 'Price feed failed (RPC timeout). Using $1.00 fallback.' });
+    // 🚨 优化：暴露真实的合约报错原因
+    const errMsg = usdcResult.reason?.reason || usdcResult.reason?.shortMessage || 'USDC RPC Failed';
+    result.errors.push({ token: 'USDC', message: `USDC: ${errMsg}` });
   }
 
   return result;
@@ -760,6 +770,7 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
@@ -990,5 +1001,5 @@ function App() {
   );
 }
 
-// 🚨 修复点：删除了末尾冲突的 createRoot，只保留 export default
+// 删除末尾的 createRoot，仅保留 export default
 export default App;
