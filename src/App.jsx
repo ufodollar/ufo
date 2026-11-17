@@ -6,6 +6,7 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
+  // 🚨 已更新为最新部署的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -25,7 +26,7 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 🟢 修复：使用完全免费公开的 RPC 节点，防止 Key 泄露被盗刷
+// 🟢 修复：使用完全免费公开的 RPC 节点，防止 Key 泄露被盗刷额度
 const rpcProvider = new ethers.JsonRpcProvider('https://binance.llamarpc.com');
 
 // ================= 2. ABIs =================
@@ -470,7 +471,7 @@ function App() {
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
 
-      // 🚨 新增：交易前实时检查合约是否暂停
+      // 🚨 修复：交易前实时检查合约是否暂停
       const isPaused = await vault.paused();
       if (isPaused) throw new Error('The vault is currently paused for maintenance. Please try again later.');
 
