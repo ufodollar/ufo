@@ -27,7 +27,7 @@ const STABLECOINS = [
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 // 🟢 使用更稳健的 RPC 节点
-const rpcProvider = new ethers.JsonRpcProvider('https://bsc-dataseed1.defibit.io');
+const rpcProvider = new ethers.JsonRpcProvider('https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749');
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
