@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
-import { createRoot } from 'react-dom/client';
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
+  // 🚨 注意：如果你重新部署了合约，请务必更新这里的地址
   VAULT_ADDRESS: '0x5C4eb7b82EFc4840e2fDa80Df73C53dc6b914790',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -26,8 +26,8 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 🟢 使用更稳健的 RPC 节点
-const rpcProvider = new ethers.JsonRpcProvider('https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749');
+// 🟢 修复：使用完全免费公开的 RPC 节点，防止 Key 泄露被盗刷
+const rpcProvider = new ethers.JsonRpcProvider('https://binance.llamarpc.com');
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
@@ -41,6 +41,7 @@ const VAULT_ABI = [
   'function withdraw(address tokenAddress, uint256 ufoAmount)',
   'function getExchangeRate() view returns (uint256)',
   'function getPrice(address tokenAddress) view returns (uint256)',
+  'function paused() view returns (bool)', // 🚨 修复：添加暂停查询接口
   'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
 ];
@@ -115,12 +116,7 @@ const CardHeader = ({ title, iconType }) => (
   </div>
 );
 
-// ================= 5. 核心读取逻辑（带重试） =================
-
-/**
- * 直接调用 Vault 的 getPrice 获取价格。
- * 带有 3 次自动重试机制，规避免费 RPC 网络抖动。
- */
+// ================= 5. 核心读取逻辑 =================
 async function fetchVaultPrice(tokenAddress) {
   const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
   let lastError = null;
@@ -135,11 +131,9 @@ async function fetchVaultPrice(tokenAddress) {
       };
     } catch (err) {
       lastError = err;
-      await new Promise(r => setTimeout(r, 1000)); // 等待 1 秒后重试
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
-  
-  // 3 次全失败后抛出异常
   throw lastError;
 }
 
@@ -252,7 +246,6 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
-  // NAV 读取（带重试，降低频率到 30 秒）
   const fetchNav = useCallback(async () => {
     const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
     for (let i = 0; i < 3; i++) {
@@ -272,11 +265,10 @@ function App() {
 
   useEffect(() => {
     fetchNav();
-    const interval = setInterval(fetchNav, 30000); // 30 秒读一次
+    const interval = setInterval(fetchNav, 30000);
     return () => clearInterval(interval);
   }, [fetchNav]);
 
-  // 价格读取
   const refreshPrices = useCallback(async () => {
     if (priceRefreshingRef.current) return;
     priceRefreshingRef.current = true;
@@ -347,7 +339,6 @@ function App() {
     }
   }, [address, walletProvider]);
 
-  // 价格和储备统一轮询：8 秒
   useEffect(() => {
     refreshPrices();
     fetchVaultBalances();
@@ -358,7 +349,6 @@ function App() {
     return () => clearInterval(interval);
   }, [refreshPrices, fetchVaultBalances]);
 
-  // 用户余额轮询：10 秒
   useEffect(() => {
     if (!isConnected || !address) {
       setTokenBalances({});
@@ -481,6 +471,10 @@ function App() {
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
 
+      // 🚨 新增：交易前实时检查合约是否暂停
+      const isPaused = await vault.paused();
+      if (isPaused) throw new Error('The vault is currently paused for maintenance. Please try again later.');
+
       let receipt;
 
       if (isBuyingUFO) {
@@ -489,7 +483,8 @@ function App() {
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
           setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
-          const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, ethers.MaxUint256);
+          // 🚨 修复：取消无限授权，仅授权当前交易金额
+          const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
           await txApprove.wait();
         }
         setTxMsg('Swapping...');
@@ -765,8 +760,6 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            
-            {/* BNB */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
@@ -784,7 +777,6 @@ function App() {
               </div>
             </div>
 
-            {/* USDT, USDC, UFO */}
             {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => {
               let currentPrice = 1.0;
               let isFallback = false;
@@ -925,31 +917,26 @@ function App() {
             <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '40px' }}>
-              
               <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                 <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" /></svg>
                 </div>
               </a>
-
               <a href="https://t.me/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                 <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" /></svg>
                 </div>
               </a>
-
               <a href="https://youtube.com/@ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                 <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="#000000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
                 </div>
               </a>
-
               <a href="https://github.com/ufodollar/bsc-vault" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                 <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#000000"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                 </div>
               </a>
-
             </div>
 
             <div style={{ marginBottom: '32px', fontSize: '12px', color: '#94a3b8', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>UFO built by StoneX</div>
@@ -1003,8 +990,5 @@ function App() {
   );
 }
 
-const container = document.getElementById('root');
-if (container) {
-  container.innerHTML = '';
-  createRoot(container).render(<App />);
-}
+// 🚨 修复点：删除了末尾冲突的 createRoot，只保留 export default
+export default App;
