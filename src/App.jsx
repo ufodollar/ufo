@@ -13,14 +13,9 @@ const CONFIG = {
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
 
-  // 🟢 链上修复后，USDC 和 USDT 共用同一个喂价源，前端保持同步
-  USDT_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
-  USDC_USD_FEED: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
-
   FEE_RATE: 0.005,
   PRICE_DECIMALS: 18,
   MAX_PRICE_DEVIATION: 0.02, // 2%
-  MAX_PRICE_STALENESS: 3600, // 1 小时
   NAV_WARNING_THRESHOLD: 0.99,
 };
 
@@ -31,7 +26,7 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 🟢 更换为更稳定的公共 RPC
+// 🟢 使用更稳健的 RPC 节点
 const rpcProvider = new ethers.JsonRpcProvider('https://bsc-dataseed1.defibit.io');
 
 // ================= 2. ABIs =================
@@ -48,11 +43,6 @@ const VAULT_ABI = [
   'function getPrice(address tokenAddress) view returns (uint256)',
   'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
-];
-
-const CHAINLINK_ABI = [
-  'function decimals() view returns (uint8)',
-  'function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)'
 ];
 
 const BNB_ORACLE_ABI = [
@@ -125,81 +115,60 @@ const CardHeader = ({ title, iconType }) => (
   </div>
 );
 
-// ================= 5. Chainlink 价格读取 =================
+// ================= 5. 核心读取逻辑（带重试） =================
 
-async function readChainlinkPrice(feedAddress, blockTimestamp) {
-  if (!feedAddress || feedAddress === ethers.ZeroAddress) {
-    throw new Error('price feed not configured');
+/**
+ * 直接调用 Vault 的 getPrice 获取价格。
+ * 带有 3 次自动重试机制，规避免费 RPC 网络抖动。
+ */
+async function fetchVaultPrice(tokenAddress) {
+  const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+  let lastError = null;
+
+  for (let i = 0; i < 3; i++) {
+    try {
+      const price18 = await vault.getPrice(tokenAddress);
+      return {
+        price18,
+        priceFloat: Number(price18) / 1e18,
+        isFallback: false
+      };
+    } catch (err) {
+      lastError = err;
+      await new Promise(r => setTimeout(r, 1000)); // 等待 1 秒后重试
+    }
   }
-
-  const feed = new ethers.Contract(feedAddress, CHAINLINK_ABI, rpcProvider);
-  const [decimalsRaw, roundData] = await Promise.all([
-    feed.decimals(),
-    feed.latestRoundData()
-  ]);
-
-  const decimals = Number(decimalsRaw);
-  const { roundId, answer, updatedAt, answeredInRound } = roundData;
-
-  if (answer <= 0n) throw new Error('invalid price (answer <= 0)');
-  if (updatedAt === 0n) throw new Error('stale price (updatedAt = 0)');
-
-  if (blockTimestamp !== null && Number(blockTimestamp) - Number(updatedAt) > CONFIG.MAX_PRICE_STALENESS) {
-    throw new Error('stale price (exceeds max staleness)');
-  }
-  if (answeredInRound < roundId) throw new Error('stale price (answeredInRound < roundId)');
-
-  let price18 = BigInt(answer);
-  if (decimals < 18) {
-    price18 *= 10n ** BigInt(18 - decimals);
-  } else if (decimals > 18) {
-    price18 /= 10n ** BigInt(decimals - 18);
-  }
-
-  return {
-    price18,
-    priceFloat: Number(price18) / 1e18,
-    decimals,
-    updatedAt: Number(updatedAt),
-    roundId: roundId.toString(),
-    isFallback: false
-  };
+  
+  // 3 次全失败后抛出异常
+  throw lastError;
 }
 
-async function fetchStablecoinPricesFromChainlink() {
-  let blockTimestamp = null;
-  try {
-    const block = await rpcProvider.getBlock('latest');
-    blockTimestamp = block?.timestamp ?? null;
-  } catch (_) {}
-
+async function fetchStablecoinPrices() {
   const [usdtResult, usdcResult] = await Promise.allSettled([
-    readChainlinkPrice(CONFIG.USDT_USD_FEED, blockTimestamp),
-    readChainlinkPrice(CONFIG.USDC_USD_FEED, blockTimestamp)
+    fetchVaultPrice(CONFIG.USDT_ADDRESS),
+    fetchVaultPrice(CONFIG.USDC_ADDRESS)
   ]);
 
   const result = {
     USDT: null,
     USDC: null,
     errors: [],
-    source: 'chainlink',
+    source: 'vault',
     lastUpdated: Date.now(),
-    blockTimestamp
   };
 
-  // 🟢 兜底逻辑：如果读取失败，绝不返回 null，回退到 1.0 并打上标记
   if (usdtResult.status === 'fulfilled') {
     result.USDT = usdtResult.value;
   } else {
     result.USDT = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    result.errors.push({ token: 'USDT', message: 'Price feed failed. Using $1.00 fallback.' });
+    result.errors.push({ token: 'USDT', message: 'Price feed failed (RPC timeout). Using $1.00 fallback.' });
   }
 
   if (usdcResult.status === 'fulfilled') {
     result.USDC = usdcResult.value;
   } else {
     result.USDC = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    result.errors.push({ token: 'USDC', message: 'Price feed failed. Using $1.00 fallback.' });
+    result.errors.push({ token: 'USDC', message: 'Price feed failed (RPC timeout). Using $1.00 fallback.' });
   }
 
   return result;
@@ -232,9 +201,8 @@ function App() {
     USDT: { price18: 10n ** 18n, priceFloat: 1.0, isFallback: false },
     USDC: { price18: 10n ** 18n, priceFloat: 1.0, isFallback: false },
     errors: [],
-    source: 'chainlink',
+    source: 'vault',
     lastUpdated: null,
-    blockTimestamp: null
   });
 
   const [bnbBal, setBnbBal] = useState('0.000000');
@@ -284,38 +252,41 @@ function App() {
     if (isConnected && walletProvider) ensureBscNetwork();
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
+  // NAV 读取（带重试，降低频率到 30 秒）
   const fetchNav = useCallback(async () => {
-    try {
-      const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-      const rate = await vault.getExchangeRate();
-      const nav = parseFloat(ethers.formatUnits(rate, 18));
-      if (!isFinite(nav) || nav <= 0) {
-        setNavStatus('error');
+    const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
+    for (let i = 0; i < 3; i++) {
+      try {
+        const rate = await vault.getExchangeRate();
+        const nav = parseFloat(ethers.formatUnits(rate, 18));
+        if (!isFinite(nav) || nav <= 0) throw new Error("Invalid NAV");
+        setCurrentNav(nav);
+        setNavStatus('ready');
         return;
+      } catch (err) {
+        if (i === 2) setNavStatus('error');
+        else await new Promise(r => setTimeout(r, 1000));
       }
-      setCurrentNav(nav);
-      setNavStatus('ready');
-    } catch (err) {
-      setNavStatus('error');
     }
   }, []);
 
   useEffect(() => {
     fetchNav();
-    const interval = setInterval(fetchNav, 15000);
+    const interval = setInterval(fetchNav, 30000); // 30 秒读一次
     return () => clearInterval(interval);
   }, [fetchNav]);
 
+  // 价格读取
   const refreshPrices = useCallback(async () => {
     if (priceRefreshingRef.current) return;
     priceRefreshingRef.current = true;
     try {
-      const prices = await fetchStablecoinPricesFromChainlink();
+      const prices = await fetchStablecoinPrices();
       setStablecoinPrices(prices);
     } catch (err) {
       setStablecoinPrices(prev => ({
         ...prev,
-        errors: [{ token: 'GLOBAL', message: 'Price refresh failed' }],
+        errors: [{ token: 'GLOBAL', message: 'Network error. Please check your connection.' }],
         lastUpdated: Date.now()
       }));
     } finally {
@@ -376,16 +347,18 @@ function App() {
     }
   }, [address, walletProvider]);
 
+  // 价格和储备统一轮询：8 秒
   useEffect(() => {
     refreshPrices();
     fetchVaultBalances();
     const interval = setInterval(() => {
       refreshPrices();
       fetchVaultBalances();
-    }, 5000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [refreshPrices, fetchVaultBalances]);
 
+  // 用户余额轮询：10 秒
   useEffect(() => {
     if (!isConnected || !address) {
       setTokenBalances({});
@@ -393,7 +366,7 @@ function App() {
       return;
     }
     fetchUserBalances();
-    const interval = setInterval(fetchUserBalances, 5000);
+    const interval = setInterval(fetchUserBalances, 10000);
     return () => clearInterval(interval);
   }, [isConnected, address, fetchUserBalances]);
 
@@ -412,7 +385,7 @@ function App() {
     }
 
     if (globalPriceError) {
-      setErrorMsg('Price feed unavailable. Please retry.');
+      setErrorMsg('Network error. Please retry.');
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
       return;
@@ -478,7 +451,7 @@ function App() {
     if (!inputAmount || input <= 0 || isNaN(input) || errorMsg) return;
 
     if (!priceReady) {
-      setErrorMsg('Price feed not ready');
+      setErrorMsg('Price feed not ready. Please wait or refresh.');
       return;
     }
 
@@ -503,14 +476,6 @@ function App() {
       const bnbBalance = await provider.getBalance(address);
       if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) {
         throw new Error('Insufficient BNB for gas.');
-      }
-
-      const vaultRead = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
-      try {
-        await vaultRead.getPrice(selectedStablecoin.address);
-      } catch (priceErr) {
-        const reason = priceErr.reason || priceErr.shortMessage || priceErr.message || 'Price check failed';
-        throw new Error(`Vault rejected price: ${reason}`);
       }
 
       const signer = await provider.getSigner();
@@ -596,7 +561,6 @@ function App() {
     }
   };
 
-  // 格式化工具：普通美元 2 位小数，代币单价 4 位小数
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatPrice = (val, isBnb = false) => {
     if (isBnb) return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -648,7 +612,6 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
 
-            {/* 🟢 状态条：默认隐藏，仅在真正发生错误时显示 */}
             {currentPriceError && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
@@ -782,7 +745,7 @@ function App() {
               )}
 
               <div style={{ marginTop: '8px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
-                Final amount is determined by the Vault contract at execution time using the same Chainlink feed. The on-chain event will be parsed after confirmation to display the actual received amount.
+                Final amount is determined by the Vault contract at execution time. The on-chain event will be parsed after confirmation to display the actual received amount.
               </div>
             </div>
 
@@ -827,6 +790,7 @@ function App() {
               let isFallback = false;
               if (token.symbol === 'UFO') {
                 currentPrice = currentNav;
+                isFallback = navStatus === 'error';
               } else if (token.symbol === 'USDT') {
                 currentPrice = stablecoinPrices.USDT?.priceFloat ?? 1.0;
                 isFallback = stablecoinPrices.USDT?.isFallback;
