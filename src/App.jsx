@@ -6,8 +6,7 @@ import { bsc } from '@reown/appkit/networks';
 
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🚨 注意：如果你重新部署了合约，请务必更新这里的地址
-  VAULT_ADDRESS: '0x5C4eb7b82EFc4840e2fDa80Df73C53dc6b914790',
+  VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
