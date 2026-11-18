@@ -4,11 +4,12 @@ import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitBut
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
-// 🚨 引入抽离出来的文案组件
+// 引入抽离出来的文案组件
 import RulesTab from './components/RulesTab';
 
 // ================= 1. 配置 =================
 const CONFIG = {
+  // 🚨 正确的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -28,6 +29,7 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
+// 使用 Ankr RPC 节点
 const rpcProvider = new ethers.JsonRpcProvider('https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749');
 
 // ================= 2. ABIs =================
@@ -372,7 +374,9 @@ function App() {
       return;
     }
 
-    const inputWei = ethers.parseUnits(inputAmount, 18);
+    // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+    const cleanInput = inputAmount.toString().replace(/\.$/, '');
+    const inputWei = ethers.parseUnits(cleanInput || '0', 18);
 
     if (isBuyingUFO) {
       const usdValue = (inputWei * price18) / 10n ** 18n;
@@ -458,12 +462,16 @@ function App() {
 
       let receipt;
 
+      // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+      const cleanAmount = inputAmount.toString().replace(/\.$/, '');
+      const rawAmount = ethers.parseUnits(cleanAmount || '0', 18);
+
       if (isBuyingUFO) {
-        const rawAmount = ethers.parseUnits(inputAmount, 18);
         const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
           setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
+          // 🚨 修复：精确授权当前交易额度，取消无限授权
           const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
           await txApprove.wait();
         }
@@ -488,7 +496,6 @@ function App() {
         setTxMsg('Swap Successful!');
 
       } else {
-        const rawAmount = ethers.parseUnits(inputAmount, 18);
         setTxMsg('Redeeming...');
         const tx = await vault.withdraw(selectedStablecoin.address, rawAmount);
         receipt = await tx.wait();
@@ -845,7 +852,7 @@ function App() {
           </div>
         )}
 
-        {/* 🚨 直接使用抽离出的组件，代码变得极度清爽 */}
+        {/* 抽离出的 RulesTab 组件 */}
         {activeTab === 'rules' && <RulesTab />}
 
         {activeTab === 'contact' && (
