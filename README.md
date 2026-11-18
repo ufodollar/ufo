@@ -28,7 +28,7 @@
   <tr>
     <td width="50%">
       <h3>🛡️ Core Vault</h3>
-      <p><code>0x62Eaf08612c77F944265DE421F3Bed054531cC9C</code></p>
+      <p><code>0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2</code></p>
     </td>
     <td width="50%">
       <h3>🪙 UFO Token</h3>
@@ -39,7 +39,7 @@
 
 <h3>Frontend Constants</h3>
 <pre><code class="language-javascript">const CONFIG = {
-  VAULT_ADDRESS: '0x62Eaf08612c77F944265DE421F3Bed054531cC9C',
+  VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
   USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
@@ -65,7 +65,7 @@
 <pre><code class="language-bash">npm run build</code></pre>
 </details>
 
-<h2>🛡️ Operations & Security Features</h2>
+<h2>🛡️ Operations &amp; Security Features</h2>
 
 <table>
   <thead>
