@@ -25,9 +25,9 @@ export default function RulesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
       
-      {/* 🟢 新增卡片：USDC 受信任 */}
+      {/* 🟢 新增卡片：UFO 受信任 */}
       <div style={{ background: 'linear-gradient(135deg, #047857, #10b981)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(4,120,87,0.3)' }}>
-        <CardHeader title="USDC 受信任" iconType="safe" />
+        <CardHeader title="UFO 受信任" iconType="safe" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>UFO 是受监管的美元数字货币。</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
           UFO 是现实世界贸易结算工具。
