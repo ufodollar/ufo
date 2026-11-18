@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   define: {
     global: 'globalThis',
-    'process.env': {}
+    // 🚨 修复：兼容底层 Web3 库的 process.env 读取
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
   }
 })
