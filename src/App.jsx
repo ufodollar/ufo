@@ -4,9 +4,11 @@ import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitBut
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 
+// 🚨 引入抽离出来的文案组件
+import RulesTab from './components/RulesTab';
+
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🚨 最新部署的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -15,7 +17,7 @@ const CONFIG = {
 
   FEE_RATE: 0.005,
   PRICE_DECIMALS: 18,
-  MAX_PRICE_DEVIATION: 0.02, // 2%
+  MAX_PRICE_DEVIATION: 0.02,
   NAV_WARNING_THRESHOLD: 0.99,
 };
 
@@ -26,7 +28,6 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 🟢 使用你提供的 Ankr RPC 节点
 const rpcProvider = new ethers.JsonRpcProvider('https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749');
 
 // ================= 2. ABIs =================
@@ -41,7 +42,7 @@ const VAULT_ABI = [
   'function withdraw(address tokenAddress, uint256 ufoAmount)',
   'function getExchangeRate() view returns (uint256)',
   'function getPrice(address tokenAddress) view returns (uint256)',
-  'function paused() view returns (bool)', // 🚨 添加暂停查询接口
+  'function paused() view returns (bool)',
   'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
 ];
@@ -95,33 +96,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-const RuleIcon = ({ type }) => {
-  const icons = {
-    globe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
-    safe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>,
-    shield: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-    eye: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
-    layers: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
-    zap: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-    lock: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
-    alert: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  };
-  return icons[type] || null;
-};
-
-const CardHeader = ({ title, iconType }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-    <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginTop: '6px' }}>{title}</div>
-    <div style={{ color: 'rgba(255,255,255,0.8)' }}><RuleIcon type={iconType} /></div>
-  </div>
-);
-
 // ================= 5. 核心读取逻辑 =================
-
-/**
- * 直接调用 Vault 的 getPrice 获取价格。
- * 带有 3 次自动重试机制，规避免费 RPC 网络抖动。
- */
 async function fetchVaultPrice(tokenAddress) {
   const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
   let lastError = null;
@@ -139,7 +114,6 @@ async function fetchVaultPrice(tokenAddress) {
       await new Promise(r => setTimeout(r, 1000));
     }
   }
-  
   throw lastError;
 }
 
@@ -161,7 +135,6 @@ async function fetchStablecoinPrices() {
     result.USDT = usdtResult.value;
   } else {
     result.USDT = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    // 🚨 优化：暴露真实的合约报错原因
     const errMsg = usdtResult.reason?.reason || usdtResult.reason?.shortMessage || 'USDT RPC Failed';
     result.errors.push({ token: 'USDT', message: `USDT: ${errMsg}` });
   }
@@ -170,7 +143,6 @@ async function fetchStablecoinPrices() {
     result.USDC = usdcResult.value;
   } else {
     result.USDC = { price18: 10n ** 18n, priceFloat: 1.0, isFallback: true };
-    // 🚨 优化：暴露真实的合约报错原因
     const errMsg = usdcResult.reason?.reason || usdcResult.reason?.shortMessage || 'USDC RPC Failed';
     result.errors.push({ token: 'USDC', message: `USDC: ${errMsg}` });
   }
@@ -481,7 +453,6 @@ function App() {
       const signer = await provider.getSigner();
       const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
 
-      // 🚨 修复：交易前实时检查合约是否暂停
       const isPaused = await vault.paused();
       if (isPaused) throw new Error('The vault is currently paused for maintenance. Please try again later.');
 
@@ -493,7 +464,6 @@ function App() {
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
           setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
-          // 🚨 修复：取消无限授权，仅授权当前交易金额
           const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
           await txApprove.wait();
         }
@@ -770,7 +740,6 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
-            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
@@ -876,51 +845,8 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'rules' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
-              <CardHeader title="The Value-Invisible Stablecoin" iconType="eye" />
-              <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Designed for concealing stablecoin assets and private commercial settlement.</h3>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
-              <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '12px', fontSize: '14px', lineHeight: 1.6 }}>
-                <b>How it works:</b> Mint UFO with USDT/USDC and send it to your commercial partners. They can seamlessly redeem it for stablecoins, bypassing the friction and exposure of traditional transfers.
-              </div>
-              <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.8)' }}>
-                🌍 Currently widely used in over 60 countries globally for cryptocurrency security and private commercial settlement.
-              </div>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
-              <CardHeader title="Asset Camouflage" iconType="lock" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Unobtrusive Transfers & Private Settlement.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
-              <CardHeader title="Strict 1:1 Peg to USD" iconType="shield" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Rigid USD peg. Stablecoins priced via Chainlink.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is rigidly pegged to the US Dollar. USDT and USDC are <b>not</b> treated as $1.00 — their live Chainlink USD prices are read on-chain by the Vault contract itself. If a stablecoin deviates more than 2% from $1, transactions revert automatically.</p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
-              <CardHeader title="Instant Settlement" iconType="zap" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>24/7 Global Fund Clearing.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Send money like a message. With UFO, cross-border funds arrive in the recipient's wallet within seconds, bypassing traditional banking delays.</p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
-              <CardHeader title="Security & Compliance" iconType="layers" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Vault reserves are transparent and verifiable on BscScan. Every transaction is secured by blockchain-level cryptography.</p>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
-              <CardHeader title="Disclaimer" iconType="alert" />
-              <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment.</h4>
-              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields or speculative returns. Users are solely responsible for ensuring their use of the protocol complies with local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.</p>
-            </div>
-          </div>
-        )}
+        {/* 🚨 直接使用抽离出的组件，代码变得极度清爽 */}
+        {activeTab === 'rules' && <RulesTab />}
 
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
@@ -1001,5 +927,4 @@ function App() {
   );
 }
 
-// 删除末尾的 createRoot，仅保留 export default
 export default App;
