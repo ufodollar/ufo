@@ -16,14 +16,16 @@ const RuleIcon = ({ type }) => {
   return icons[type] || null;
 };
 
-const CardHeader = ({ title, iconType }) => (
+const CardHeader = ({ title, iconType, accent }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-    <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginTop: '6px' }}>{title}</div>
-    <div style={{ color: 'rgba(255,255,255,0.8)' }}><RuleIcon type={iconType} /></div>
+    <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: accent || 'rgba(255,255,255,0.7)', marginTop: '6px' }}>{title}</div>
+    <div style={{ color: accent || 'rgba(255,255,255,0.8)' }}><RuleIcon type={iconType} /></div>
   </div>
 );
 
 export default function RulesTab() {
+  const GOLD = '#D4AF37';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
 
@@ -47,16 +49,19 @@ export default function RulesTab() {
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
       </div>
 
-      {/* 3. Trusted UFO (深墨绿/银行权威色, 英文合规版) */}
-      <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
-        <CardHeader title="Trusted UFO" iconType="scale" />
+      {/* 3. Trusted UFO (藏青 + 暗金 / 审计机构配色) */}
+      <div style={{ position: 'relative', background: 'linear-gradient(135deg, #0b2545 0%, #123a63 58%, #8a6d1f 100%)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(11,37,69,0.45)', borderTop: `2px solid rgba(212,175,55,0.55)` }}>
+        <CardHeader title="Trusted UFO" iconType="scale" accent={GOLD} />
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
           UFO is a regulated digital asset issued in 2023 by Stone X, a regulated financial services firm strictly adhering to U.S. laws and standards to safeguard your funds. Each UFO is fully backed 1:1 by USD or cash equivalents from Stone X's public reserves, with monthly attestations provided by one of the Big Four accounting firms. We provide this level of transparency to demonstrate our commitment to accountability—trust verifiable facts, not empty promises.
         </p>
+        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(212,175,55,0.35)', fontSize: '12px', fontWeight: '700', letterSpacing: '1px', color: 'rgba(212,175,55,0.9)' }}>
+          1:1 RESERVE BACKED · MONTHLY ATTESTED
+        </div>
       </div>
 
-      {/* 4. 严格锚定 */}
-      <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
+      {/* 4. 严格锚定 (墨绿/银行权威色) */}
+      <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
         <CardHeader title="Strict 1:1 Peg to USD" iconType="shield" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Rigid USD peg. Stablecoins priced via Chainlink.</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is rigidly pegged to the US Dollar. USDT and USDC are <b>not</b> treated as $1.00 — their live Chainlink USD prices are read on-chain by the Vault contract itself. If a stablecoin deviates more than 2% from $1, transactions revert automatically.</p>
