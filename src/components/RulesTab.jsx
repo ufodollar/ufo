@@ -29,8 +29,8 @@ export default function RulesTab() {
       
       {/* 1. 核心介绍 */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
-        <CardHeader title="隐藏价值的现实世界贸易结算工具" iconType="eye" />
-        <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Designed for concealing stablecoin assets and private commercial settlement.</h3>
+        <CardHeader title="Value-Invisible Trade Settlement" iconType="eye" />
+        <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Specifically designed for concealing stablecoin assets and private crypto commercial settlement.</h3>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
         <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '12px', fontSize: '14px', lineHeight: 1.6 }}>
           <b>How it works:</b> Mint UFO with USDT/USDC and send it to your commercial partners. They can seamlessly redeem it for stablecoins, bypassing the friction and exposure of traditional transfers.
@@ -47,11 +47,11 @@ export default function RulesTab() {
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
       </div>
 
-      {/* 3. Trusted UFO (合规重写版) */}
-      <div style={{ background: 'linear-gradient(135deg, #db2777, #f472b6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(219,39,119,0.3)' }}>
+      {/* 3. Trusted UFO (移至第三位, 颜色换为深红, 英文合规版) */}
+      <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
         <CardHeader title="Trusted UFO" iconType="scale" />
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
-          UFO 是由受监管的金融服务机构 Stone X 于 2023 年发行的合规数字资产。Stone X 严格遵循美国法律与监管标准，致力于为您提供坚实的资金安全保障。每一枚 UFO 均享有 1:1 的美元或高流动性现金等价物全额储备，并定期由国际顶尖审计机构（四大）出具独立鉴证报告。我们崇尚透明与可验证，坚信确凿的事实远比空头支票更能构筑信任。
+          UFO is a regulated digital asset issued in 2023 by Stone X, a regulated financial services firm strictly adhering to U.S. laws and standards to safeguard your funds. Each UFO is fully backed 1:1 by USD or cash equivalents from Stone X's public reserves, with monthly attestations provided by one of the Big Four accounting firms. We provide this level of transparency to demonstrate our commitment to accountability—trust verifiable facts, not empty promises.
         </p>
       </div>
 
@@ -69,15 +69,15 @@ export default function RulesTab() {
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Send money like a message. With UFO, cross-border funds arrive in the recipient's wallet within seconds, bypassing traditional banking delays.</p>
       </div>
 
-      {/* 6. 安全与合规 */}
+      {/* 6. 安全与合规 (原第五条, 保持不变) */}
       <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
         <CardHeader title="Security & Compliance" iconType="layers" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Vault reserves are transparent and verifiable on BscScan. Every transaction is secured by blockchain-level cryptography.</p>
       </div>
 
-      {/* 7. 免责声明 */}
-      <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
+      {/* 7. 免责声明 (原第六条, 颜色换为粉红) */}
+      <div style={{ background: 'linear-gradient(135deg, #db2777, #f472b6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(219,39,119,0.3)' }}>
         <CardHeader title="Disclaimer" iconType="alert" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment.</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields or speculative returns. Users are solely responsible for ensuring their use of the protocol complies with local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.</p>
