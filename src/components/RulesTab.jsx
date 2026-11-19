@@ -30,13 +30,13 @@ export default function RulesTab() {
       {/* 1. 核心介绍 */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
         <CardHeader title="Value-Invisible Trade Settlement" iconType="eye" />
-        <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Specifically designed for concealing stablecoin assets and private crypto commercial settlement.</h3>
+        <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>专为隐藏稳定币资产和全球贸易隐形结算而设计</h3>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
         <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '12px', fontSize: '14px', lineHeight: 1.6 }}>
           <b>How it works:</b> Mint UFO with USDT/USDC and send it to your commercial partners. They can seamlessly redeem it for stablecoins, bypassing the friction and exposure of traditional transfers.
         </div>
         <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.8)' }}>
-          🌍 Currently widely used in over 60 countries globally for cryptocurrency security and commercial settlement.
+          🌍 目前在全球60多个国家广泛用于全球贸易隐形结算。
         </div>
       </div>
 
@@ -47,7 +47,7 @@ export default function RulesTab() {
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
       </div>
 
-      {/* 3. Trusted UFO (移至第三位, 颜色改为深墨绿/银行权威色, 英文合规版) */}
+      {/* 3. Trusted UFO (深墨绿/银行权威色, 英文合规版) */}
       <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
         <CardHeader title="Trusted UFO" iconType="scale" />
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
