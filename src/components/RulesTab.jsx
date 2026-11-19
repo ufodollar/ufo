@@ -1,242 +1,88 @@
 import React from 'react';
 
-/* ============================================================
-   主题色板（每个卡片一组渐变色）
-   ============================================================ */
-const CARD = {
-  intro:      { from: '#2563eb', to: '#06b6d4' }, // 正蓝 → 天青
-  trusted:    { from: '#059669', to: '#10b981' }, // 深翠 → 薄荷
-  instant:    { from: '#ea580c', to: '#f59e0b' }, // 橙红 → 琥珀
-  security:   { from: '#7c3aed', to: '#a855f7' }, // 靛紫 → 紫罗兰
-  disclaimer: { from: '#475569', to: '#64748b' }, // 岩灰 → 雾灰
-};
-
-/* ============================================================
-   图标（统一线条风格，24 网格）
-   ============================================================ */
-const ICON_PROPS = {
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.8,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-};
-
-const Icon = ({ type, size = 26 }) => {
-  const shapes = {
-    globe: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18" />
-        <ellipse cx="12" cy="12" rx="4.5" ry="9" />
-      </>
-    ),
-    dollar: (
-      <>
-        <path d="M12 2v20" />
-        <path d="M17 5.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-      </>
-    ),
-    zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
-    shield: (
-      <>
-        <path d="M12 22s8-3.6 8-10V5.5L12 2.5 4 5.5V12c0 6.4 8 10 8 10Z" />
-        <path d="m9 12 2 2 4-4" />
-      </>
-    ),
-    alert: (
-      <>
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </>
-    ),
+const RuleIcon = ({ type }) => {
+  const icons = {
+    globe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+    safe: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>,
+    shield: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+    eye: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+    layers: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+    zap: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+    lock: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+    alert: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    // 天平图标
+    scale: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="M7 7l-4 8a4 4 0 0 0 8 0L7 7z"/><path d="M17 7l-4 8a4 4 0 0 0 8 0l-4-8z"/></svg>
   };
-
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" {...ICON_PROPS} aria-hidden="true">
-      {shapes[type]}
-    </svg>
-  );
+  return icons[type] || null;
 };
 
-/* ============================================================
-   卡片数据（已合并去重：Reserve 与 Peg 合为一条）
-   ============================================================ */
-const CARDS = [
-  {
-    key: 'intro',
-    icon: 'globe',
-    title: 'Core Positioning',
-    text: 'Value-stealth trade settlement. Built to conceal stablecoin assets and enable unassuming, private transfers.',
-  },
-  {
-    key: 'trusted',
-    icon: 'dollar',
-    title: 'Trusted 1:1 Reserve',
-    text: '1:1 reserve backed by USD equivalents, attested monthly by a Big Four firm. A rigid USD peg is enforced via Chainlink — transactions revert if the price deviates over 2%.',
-  },
-  {
-    key: 'instant',
-    icon: 'zap',
-    title: 'Instant Settlement',
-    text: '24/7 global fund clearing. Cross-border funds arrive in seconds.',
-  },
-  {
-    key: 'security',
-    icon: 'shield',
-    title: 'Security & Compliance',
-    text: 'Cryptographically tamper-proof and fully verifiable on BscScan.',
-  },
-  {
-    key: 'disclaimer',
-    icon: 'alert',
-    title: 'Disclaimer',
-    text: 'A payment instrument, not an investment. Not offered in restricted jurisdictions.',
-  },
-];
+const CardHeader = ({ title, iconType }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+    <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginTop: '6px' }}>{title}</div>
+    <div style={{ color: 'rgba(255,255,255,0.8)' }}><RuleIcon type={iconType} /></div>
+  </div>
+);
 
-/* ============================================================
-   右上角图标容器样式
-   ============================================================ */
-const badgeStyle = {
-  position: 'absolute',
-  top: 18,
-  right: 18,
-  width: 46,
-  height: 46,
-  borderRadius: 15,
-  display: 'grid',
-  placeItems: 'center',
-  color: '#ffffff',
-  background: 'rgba(255, 255, 255, 0.18)',
-  border: '1px solid rgba(255, 255, 255, 0.3)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-  backdropFilter: 'blur(6px)',
-  WebkitBackdropFilter: 'blur(6px)',
-  zIndex: 1,
-};
-
-/* ============================================================
-   单个卡片
-   ============================================================ */
-const RuleCard = ({ item }) => {
-  const theme = CARD[item.key];
-
-  return (
-    <article
-      className="ufo-rule-card"
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 26,
-        padding: '22px 22px 24px',
-        color: '#ffffff',
-        background: `linear-gradient(135deg, ${theme.from} 0%, ${theme.to} 100%)`,
-        boxShadow: `0 20px 38px -22px ${theme.from}, 0 4px 12px -8px rgba(15, 23, 42, 0.35)`,
-      }}
-    >
-      {/* 右上角装饰光斑 */}
-      <span
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: -70,
-          right: -60,
-          width: 180,
-          height: 180,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0) 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-      {/* 左下角暗角，增加层次 */}
-      <span
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          bottom: -90,
-          left: -60,
-          width: 170,
-          height: 170,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0) 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* 右上角图标 */}
-      <span style={badgeStyle}>
-        <Icon type={item.icon} />
-      </span>
-
-      {/* 文案 */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <h4
-          style={{
-            margin: '0 0 10px',
-            paddingRight: 70,
-            fontSize: 17,
-            fontWeight: 800,
-            letterSpacing: '-0.01em',
-            lineHeight: 1.3,
-          }}
-        >
-          {item.title}
-        </h4>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            lineHeight: 1.7,
-            color: 'rgba(255, 255, 255, 0.92)',
-          }}
-        >
-          {item.text}
-        </p>
-      </div>
-    </article>
-  );
-};
-
-/* ============================================================
-   页面
-   ============================================================ */
 export default function RulesTab() {
   return (
-    <div
-      style={{
-        height: '100%',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        background: '#f8fafc',
-        padding: '20px 16px 40px',
-      }}
-    >
-      <style>{`
-        .ufo-rule-card {
-          transition: transform 220ms ease, box-shadow 220ms ease;
-        }
-        @media (hover: hover) and (pointer: fine) {
-          .ufo-rule-card:hover {
-            transform: translateY(-3px);
-          }
-        }
-      `}</style>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
 
-      <div
-        style={{
-          maxWidth: 720,
-          margin: '0 auto',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 16,
-        }}
-      >
-        {CARDS.map((item) => (
-          <RuleCard key={item.key} item={item} />
-        ))}
+      {/* 1. 核心介绍 */}
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
+        <CardHeader title="Value-Invisible Trade Settlement" iconType="eye" />
+        <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px' }}>Specifically designed for concealing stablecoin assets and private crypto commercial settlement.</h3>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is a USD-pegged stablecoin engineered for absolute asset protection. By avoiding public exchange listings, standard wallets display its fiat value as <b>$0.00</b>. This acts as a powerful physical camouflage against extortion and automated wallet-draining bots.</p>
+        <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '12px', fontSize: '14px', lineHeight: 1.6 }}>
+          <b>How it works:</b> Mint UFO with USDT/USDC and send it to your commercial partners. They can seamlessly redeem it for stablecoins, bypassing the friction and exposure of traditional transfers.
+        </div>
+        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.8)' }}>
+          🌍 Currently widely used in over 60 countries globally for cryptocurrency security and commercial settlement.
+        </div>
       </div>
+
+      {/* 2. 资产伪装 */}
+      <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
+        <CardHeader title="Asset Camouflage" iconType="lock" />
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Unobtrusive Transfers & Settlement.</h4>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
+      </div>
+
+      {/* 3. Trusted UFO (移至第三位, 颜色改为深墨绿/银行权威色, 英文合规版) */}
+      <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
+        <CardHeader title="Trusted UFO" iconType="scale" />
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
+          UFO is a regulated digital asset issued in 2023 by Stone X, a regulated financial services firm strictly adhering to U.S. laws and standards to safeguard your funds. Each UFO is fully backed 1:1 by USD or cash equivalents from Stone X's public reserves, with monthly attestations provided by one of the Big Four accounting firms. We provide this level of transparency to demonstrate our commitment to accountability—trust verifiable facts, not empty promises.
+        </p>
+      </div>
+
+      {/* 4. 严格锚定 */}
+      <div style={{ background: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(76,29,149,0.3)' }}>
+        <CardHeader title="Strict 1:1 Peg to USD" iconType="shield" />
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Rigid USD peg. Stablecoins priced via Chainlink.</h4>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO is rigidly pegged to the US Dollar. USDT and USDC are <b>not</b> treated as $1.00 — their live Chainlink USD prices are read on-chain by the Vault contract itself. If a stablecoin deviates more than 2% from $1, transactions revert automatically.</p>
+      </div>
+
+      {/* 5. 即时结算 */}
+      <div style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(180,83,9,0.3)' }}>
+        <CardHeader title="Instant Settlement" iconType="zap" />
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>24/7 Global Fund Clearing.</h4>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Send money like a message. With UFO, cross-border funds arrive in the recipient's wallet within seconds, bypassing traditional banking delays.</p>
+      </div>
+
+      {/* 6. 安全与合规 */}
+      <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
+        <CardHeader title="Security & Compliance" iconType="layers" />
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Vault reserves are transparent and verifiable on BscScan. Every transaction is secured by blockchain-level cryptography.</p>
+      </div>
+
+      {/* 7. 免责声明 */}
+      <div style={{ background: 'linear-gradient(135deg, #db2777, #f472b6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(219,39,119,0.3)' }}>
+        <CardHeader title="Disclaimer" iconType="alert" />
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment.</h4>
+        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>UFO does not offer yields or speculative returns. Users are solely responsible for ensuring their use of the protocol complies with local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.</p>
+      </div>
+
     </div>
   );
 }
