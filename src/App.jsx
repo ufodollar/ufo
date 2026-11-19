@@ -714,21 +714,12 @@ function App() {
                 <span>Protocol Fee (0.5%)</span>
                 <span>-{feeAmount} {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'}</span>
               </div>
-              <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 0' }}></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
-                <span>Net Received (estimated)</span>
-                <span>{outputAmount} {isBuyingUFO ? 'UFO' : selectedStablecoin.symbol}</span>
-              </div>
-
               {navWarning && (
                 <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: '600' }}>
                   ⚠️ On-chain NAV is below $1.00 ({currentNav.toFixed(4)}). Vault reserves may be insufficient. Proceed with caution.
                 </div>
               )}
 
-              <div style={{ marginTop: '8px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
-                Final amount is determined by the Vault contract at execution time. The on-chain event will be parsed after confirmation to display the actual received amount.
-              </div>
             </div>
 
             {txMsg && (
@@ -751,16 +742,16 @@ function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>${formatPrice(bnbPrice, true)}</span>
+                  </div>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>${formatPrice(bnbPrice, true)}</span>
-                  <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
-                </div>
+                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
 
@@ -783,20 +774,20 @@ function App() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {token.icon === 'UFO' ? <div style={{ width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><UfoIcon size={28} /></div> : <img src={token.icon} style={{ width: 40, height: 40 }} alt={token.symbol} />}
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: isFallback ? '#ef4444' : '#64748b' }}>
+                          ${formatPrice(currentPrice)}{isFallback && '*'}
+                        </span>
+                      </div>
                       <span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11px', color: isFallback ? '#ef4444' : '#64748b' }}>
-                        ${formatPrice(currentPrice)} {isFallback && '*'}
-                      </span>
-                      <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace' }}>
-                        ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
-                      </span>
-                    </div>
+                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>
+                      ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
+                    </span>
                   </div>
                 </div>
               );
