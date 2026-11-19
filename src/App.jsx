@@ -397,9 +397,12 @@ function App() {
       const feeUfo = (inputWei * 50n) / 10000n;
       const netUfo = inputWei - feeUfo;
       const tokenOut = (netUfo * 10n ** 18n) / price18;
+      // 合约实际转出 = 净额 + 以稳定币扣除的手续费（与 withdraw() 的 totalOut 对齐）
+      const feeTokens = (feeUfo * 10n ** 18n) / price18;
+      const totalOut = tokenOut + feeTokens;
 
       const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
-      const tokenOutFloat = parseFloat(ethers.formatUnits(tokenOut, 18));
+      const tokenOutFloat = parseFloat(ethers.formatUnits(totalOut, 18));
       if (tokenOutFloat > currentVaultBal) {
         setErrorMsg(`Insufficient ${selectedStablecoin.symbol} in Vault. Available: ${currentVaultBal.toFixed(2)}`);
       } else {
@@ -411,7 +414,7 @@ function App() {
         }
       }
 
-      setFeeAmount(parseFloat(ethers.formatUnits(feeUfo, 18)).toFixed(6));
+      setFeeAmount(parseFloat(ethers.formatUnits(feeTokens, 18)).toFixed(6));
       setOutputAmount(parseFloat(ethers.formatUnits(tokenOut, 18)).toFixed(6));
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
@@ -712,7 +715,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'}</span>
+                <span>-{feeAmount} {selectedStablecoin.symbol}</span>
               </div>
               {navWarning && (
                 <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: '600' }}>
