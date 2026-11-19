@@ -26,7 +26,7 @@ const CardHeader = ({ title, iconType }) => (
 export default function RulesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-      
+
       {/* 1. 核心介绍 */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,58,138,0.3)' }}>
         <CardHeader title="Value-Invisible Trade Settlement" iconType="eye" />
@@ -36,19 +36,19 @@ export default function RulesTab() {
           <b>How it works:</b> Mint UFO with USDT/USDC and send it to your commercial partners. They can seamlessly redeem it for stablecoins, bypassing the friction and exposure of traditional transfers.
         </div>
         <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.8)' }}>
-          🌍 Currently widely used in over 60 countries globally for cryptocurrency security and private commercial settlement.
+          🌍 Currently widely used in over 60 countries globally for cryptocurrency security and commercial settlement.
         </div>
       </div>
 
       {/* 2. 资产伪装 */}
       <div style={{ background: 'linear-gradient(135deg, #1e293b, #475569)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(30,41,59,0.3)' }}>
         <CardHeader title="Asset Camouflage" iconType="lock" />
-        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Unobtrusive Transfers & Private Settlement.</h4>
+        <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Unobtrusive Transfers & Settlement.</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Operating as a closed-loop network with no public DEX liquidity pools. When you send or receive UFO in mainstream wallets, bystanders and automated trackers only see a transfer of a $0.00 asset.</p>
       </div>
 
-      {/* 3. Trusted UFO (移至第三位, 颜色换为深红, 英文合规版) */}
-      <div style={{ background: 'linear-gradient(135deg, #7f1d1d, #ef4444)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(127,29,29,0.3)' }}>
+      {/* 3. Trusted UFO (移至第三位, 颜色改为深墨绿/银行权威色, 英文合规版) */}
+      <div style={{ background: 'linear-gradient(135deg, #064e3b, #047857)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(6,78,59,0.3)' }}>
         <CardHeader title="Trusted UFO" iconType="scale" />
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>
           UFO is a regulated digital asset issued in 2023 by Stone X, a regulated financial services firm strictly adhering to U.S. laws and standards to safeguard your funds. Each UFO is fully backed 1:1 by USD or cash equivalents from Stone X's public reserves, with monthly attestations provided by one of the Big Four accounting firms. We provide this level of transparency to demonstrate our commitment to accountability—trust verifiable facts, not empty promises.
@@ -69,14 +69,14 @@ export default function RulesTab() {
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Send money like a message. With UFO, cross-border funds arrive in the recipient's wallet within seconds, bypassing traditional banking delays.</p>
       </div>
 
-      {/* 6. 安全与合规 (原第五条, 保持不变) */}
+      {/* 6. 安全与合规 */}
       <div style={{ background: 'linear-gradient(135deg, #4338ca, #6366f1)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(67,56,202,0.3)' }}>
         <CardHeader title="Security & Compliance" iconType="layers" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>Cryptographically tamper-proof.</h4>
         <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>Vault reserves are transparent and verifiable on BscScan. Every transaction is secured by blockchain-level cryptography.</p>
       </div>
 
-      {/* 7. 免责声明 (原第六条, 颜色换为粉红) */}
+      {/* 7. 免责声明 */}
       <div style={{ background: 'linear-gradient(135deg, #db2777, #f472b6)', padding: '24px', borderRadius: '24px', color: '#fff', boxShadow: '0 10px 30px -10px rgba(219,39,119,0.3)' }}>
         <CardHeader title="Disclaimer" iconType="alert" />
         <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '10px' }}>A payment instrument, not an investment.</h4>
