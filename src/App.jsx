@@ -692,7 +692,7 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
 
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
@@ -728,6 +728,9 @@ function App() {
                     <><UfoIcon size={28} /><span>UFO</span></>
                   )}
                   {showTokenMenu && isBuyingUFO && (
+                    <>
+                    {/* 全屏透明层：点页面任意位置关闭菜单，避免菜单挡住下方区域后无法操作 */}
+                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => {
                         const coinPrice = coin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
@@ -743,6 +746,7 @@ function App() {
                         );
                       })}
                     </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -775,6 +779,8 @@ function App() {
                     <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
                   )}
                   {showTokenMenu && !isBuyingUFO && (
+                    <>
+                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
                         <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
@@ -784,6 +790,7 @@ function App() {
                         </div>
                       ))}
                     </div>
+                    </>
                   )}
                 </div>
               </div>

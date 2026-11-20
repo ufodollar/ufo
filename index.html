@@ -15,9 +15,14 @@
 
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
-      body {
+      html, body {
         background-color: #f8fafc;
         color: #1e293b;
+      }
+      body {
+        /* 先写 100vh 兜底：旧版 WebView（微信 X5、部分钱包内置浏览器）不认 dvh，
+           只写 100dvh 会让高度失效，配合下面的 overflow:hidden 就是整页点不动的成因 */
+        height: 100vh;
         height: 100dvh;
         display: flex;
         justify-content: center;
@@ -26,6 +31,7 @@
       #root {
         width: 100%;
         max-width: 480px;
+        height: 100vh;
         height: 100dvh;
         display: flex;
         flex-direction: column;
@@ -35,7 +41,7 @@
 
       /* 首屏骨架：内联在 HTML 里，不依赖 JS，脚本下来之前就能看到 */
       .boot {
-        height: 100dvh;
+        height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -74,6 +80,25 @@
         This app requires JavaScript. Please enable it and reload the page.
       </div>
     </noscript>
+    <script>
+      // 自愈：脚本没下载下来 / 加载报错时，不要让人对着一个永远转圈的页面干等
+      (function () {
+        function fail() {
+          var boot = document.querySelector('#root .boot');
+          if (!boot) return; // React 已接管，说明正常
+          boot.innerHTML =
+            '<div style="text-align:center;line-height:1.9">' +
+            '<div style="font-size:13px;color:#475569;font-weight:600">页面加载失败</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8">请检查网络后重新加载</div>' +
+            '</div>' +
+            '<button onclick="location.reload()" style="margin-top:6px;padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">重新加载</button>';
+        }
+        setTimeout(fail, 9000);
+        window.addEventListener('error', function (e) {
+          if (e && e.target && e.target.tagName === 'SCRIPT') fail();
+        }, true);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
