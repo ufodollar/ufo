@@ -66,6 +66,10 @@ export function walletList() {
   const target = autoconnectUrl();
   const bare = target.replace(/^https?:\/\//, '');
   const enc = encodeURIComponent(target);
+  // Bitget 要在 dapp 链接上追加 _needChain 才会预选网络，否则进 App 后
+  // 先弹一层「选择网络」让用户手点。官方文档 Switch Network 一节：
+  //   BSC → {DAppLink}?_needChain=bnb
+  const encBitget = encodeURIComponent(target + '&_needChain=bnb');
 
   return [
     {
@@ -77,9 +81,9 @@ export function walletList() {
     },
     {
       id: 'trust', name: 'Trust Wallet', direct: true,
-      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。用 60 进站后
-      // 用户还要手动切到 BSC，但目前真机验证过的就是 60，先不动。
-      url: `https://link.trustwallet.com/open_url?coin_id=60&url=${enc}`,
+      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。之前用 60 进站后
+      // 还要手动切到 BSC，改成 714 让钱包进来就停在 BNB Chain。
+      url: `https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`,
       fallback: 'https://trustwallet.com/download'
     },
     {
@@ -95,7 +99,7 @@ export function walletList() {
       // 真机验证（Android / BitKeep 9.70.1，2026-11-20）：只有纯 scheme 能进。
       // https://bkcode.vip?action=dapp&url= 是 Branch 中转，未收录站点不被解析，
       // 直接落下载页；换成 scheme 后一次即通，落地链已是 BNB Smart Chain。
-      url: `bitkeep://bkconnect?action=dapp&url=${enc}&version=1`,
+      url: `bitkeep://bkconnect?action=dapp&url=${encBitget}&version=1`,
       fallback: 'https://web3.bitget.com/',
       scheme: true
     },
@@ -119,11 +123,11 @@ export function walletList() {
       scheme: true
     },
     {
-      id: 'mathwallet', name: 'MathWallet', direct: true,
-      // 官方博客给的格式：action=link，value 直接放目标 URL（不套 JSON）。
-      // 与 TokenPocket / imToken 同属 scheme 直达，未安装时由 1.8 秒兜底转下载页。
-      url: `mathwallet://mathwallet.org?action=link&value=${enc}`,
-      fallback: 'https://mathwallet.org/en-us/',
+      id: 'coin98', name: 'Coin98', direct: true,
+      // 移动端 scheme：coin98://browser?url=…，与 imToken 同属纯 scheme 直达。
+      // 千万级下载，内置浏览器支持列表里明确包含 BNB Chain。
+      url: `coin98://browser?url=${enc}`,
+      fallback: 'https://coin98.com/',
       scheme: true
     },
     {
