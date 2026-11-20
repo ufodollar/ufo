@@ -118,7 +118,7 @@ function App() {
   // 跳进钱包自己的浏览器，落地后同样是注入 —— 全程不经过任何中继，见 wallets.js
   const {
     address, provider: walletProvider, isConnected,
-    busy: walletBusy, error: walletError,
+    busy: walletBusy, autoConnecting, error: walletError,
     connect, disconnect,
     pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
@@ -503,6 +503,8 @@ function App() {
 
   const isButtonDisabled =
     isProcessing ||
+    // 自动授权正在进行时，钱包自己的弹窗盖在上面，此时按钮不该再被点
+    (!isConnected && autoConnecting) ||
     (isConnected && (
       errorMsg !== '' ||
       !inputAmount ||
@@ -591,14 +593,14 @@ function App() {
           ) : (
             <button
               onClick={connect}
-              disabled={walletBusy}
+              disabled={walletBusy || autoConnecting}
               style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                       background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
+                       background: (walletBusy || autoConnecting) ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
                        padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
-                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer',
+                       lineHeight: 1.2, cursor: (walletBusy || autoConnecting) ? 'wait' : 'pointer',
                        boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
-              {walletBusy ? 'Connecting…' : 'Connect Wallet'}
+              {autoConnecting ? 'Approve in wallet…' : walletBusy ? 'Connecting…' : 'Connect Wallet'}
             </button>
           )}
         </div>
@@ -755,7 +757,9 @@ function App() {
               disabled={isButtonDisabled}
               style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isButtonDisabled ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isButtonDisabled ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isButtonDisabled ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}
             >
-              {isProcessing ? 'Processing...' : (isConnected ? (isBuyingUFO ? 'Swap Now' : 'Redeem Now') : 'Connect Wallet')}
+              {isProcessing ? 'Processing...'
+                : !isConnected ? (autoConnecting ? 'Approve in wallet…' : 'Connect Wallet')
+                : (isBuyingUFO ? 'Swap Now' : 'Redeem Now')}
             </button>
           </div>
         )}

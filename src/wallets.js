@@ -21,14 +21,33 @@ export function currentUrl() {
 }
 
 /**
+ * 落地标记：从钱包图标跳进来时带上 #c=1。
+ *
+ * 钱包内置浏览器打开一个「从没授权过」的站点时，eth_accounts 一定返回空数组
+ * （MetaMask 如此，Trust Wallet 会直接放行，所以它看起来是秒连的）。
+ * 页面只能靠这个标记知道「用户就是为了连接才进来的」，从而立刻主动发起
+ * eth_requestAccounts —— 少一次点击，且不需要用户去页面上找按钮。
+ *
+ * 必须用 query 而不是 #hash：metamask.app.link 这类 https 中转是把目标地址
+ * 当路径传给服务器再由服务端 302，而 # 之后的内容浏览器根本不发给服务器，
+ * 会在中转环节被整段丢掉。query 才会被原样带进目标 URL 再落到页面上。
+ */
+export const AUTOCONNECT_PARAM = 'c';
+
+export function autoconnectUrl() {
+  return currentUrl() + '?' + AUTOCONNECT_PARAM + '=1';
+}
+
+/**
  * 钱包清单。
  * `scheme: true` 表示自定义协议，需要超时回落；
  * 其余是 https universal link，App 没装会自己落到下载页。
  */
 export function walletList() {
-  const here = currentUrl();
-  const bare = here.replace(/^https?:\/\//, '');
-  const enc = encodeURIComponent(here);
+  // 落地即请求授权的地址：用户点图标的目的就是连接，不该让他进去再找按钮
+  const target = autoconnectUrl();
+  const bare = target.replace(/^https?:\/\//, '');
+  const enc = encodeURIComponent(target);
 
   return [
     {
@@ -55,7 +74,7 @@ export function walletList() {
     {
       id: 'tokenpocket', name: 'TokenPocket',
       // chain 显式声明 BSC，部分版本会据此预选网络
-      url: `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: here, chain: 'BSC' }))}`,
+      url: `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: target, chain: 'BSC' }))}`,
       fallback: 'https://www.tokenpocket.pro/',
       scheme: true
     },
