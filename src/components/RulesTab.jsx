@@ -341,7 +341,7 @@ export default function RulesTab() {
       >
         <h4 style={cardTitle}>A payment instrument, not an investment.</h4>
         <p style={cardText}>
-          UFO does not offer yields or speculative returns. Users are solely responsible for ensuring their use of the protocol complies with local laws. UFO is not offered to persons in restricted jurisdictions including the <b>United States, Mainland China, Iran, North Korea, Syria, Cuba, Venezuela, Russia, and Belarus</b>.
+          UFO does not offer yields or speculative returns. Users are solely responsible for ensuring their use of the protocol complies with local laws. UFO is not offered to persons in restricted jurisdictions including <b>Afghanistan, Algeria, Bangladesh, Belarus, Bolivia, China, Cuba, Egypt, Iran, Iraq, Morocco, Nepal, North Korea, Qatar, Russia, Syria, Tunisia, and Venezuela</b>.
         </p>
       </Card>
     </div>

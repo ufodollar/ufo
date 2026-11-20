@@ -56,10 +56,10 @@ export function autoconnectUrl() {
  * direct: true  → 能直接落进内置浏览器并加载本站
  * direct: false → 只能打开 App 本身，进去后要用户自己粘贴链接
  *
- * 目前全部是 direct:true。经过真机排查，SafePal / Binance / Coinbase 三个
- * 入口没有任何参数组合能加载任意 URL（前两个官方文档已明确，Coinbase 的
- * cb_url 文档已撤下），OKX 的 okx:// 格式始终无公开文档且 intent 实测不可靠。
- * 宁可少一个图标，也不要留下点了没反应的入口。
+ * 目前全部是 direct:true。经过真机排查，SafePal / Binance 两个入口没有任何
+ * 参数组合能加载任意 URL（官方文档已明确），OKX 的 okx:// 格式始终无公开文档
+ * 且 intent 实测不可靠，Bybit 的 app.bybit.com/inapp 其官方适配器自己注明
+ * 「只打开 App，不加载页面」。宁可少一个图标，也不要留下点了没反应的入口。
  */
 export function walletList() {
   // 落地即请求授权的地址：用户点图标的目的就是连接，不该让他进去再找按钮
@@ -83,6 +83,14 @@ export function walletList() {
       fallback: 'https://trustwallet.com/download'
     },
     {
+      id: 'coinbase', name: 'Coinbase Wallet', direct: true,
+      // cb_url 是 Wallet SDK 时代的格式，cdp 文档站已撤下对应页面，但社区
+      // 仍在用、2026 年仍能落进内置浏览器。这一条待真机确认，若落到下载页
+      // 就改成 direct:false 走复制兜底。
+      url: `https://go.cb-w.com/dapp?cb_url=${enc}`,
+      fallback: 'https://www.coinbase.com/wallet/downloads'
+    },
+    {
       id: 'bitget', name: 'Bitget Wallet', direct: true,
       // 真机验证（Android / BitKeep 9.70.1，2026-11-20）：只有纯 scheme 能进。
       // https://bkcode.vip?action=dapp&url= 是 Branch 中转，未收录站点不被解析，
@@ -90,6 +98,12 @@ export function walletList() {
       url: `bitkeep://bkconnect?action=dapp&url=${enc}&version=1`,
       fallback: 'https://web3.bitget.com/',
       scheme: true
+    },
+    {
+      id: 'phantom', name: 'Phantom', direct: true,
+      // 官方格式：url 作为路径段整段编码，ref 是发起方地址
+      url: `https://phantom.com/ul/browse/${enc}?ref=${enc}`,
+      fallback: 'https://phantom.app/download'
     },
     {
       id: 'tokenpocket', name: 'TokenPocket', direct: true,
@@ -105,10 +119,12 @@ export function walletList() {
       scheme: true
     },
     {
-      id: 'phantom', name: 'Phantom', direct: true,
-      // 官方格式：url 作为路径段整段编码，ref 是发起方地址
-      url: `https://phantom.com/ul/browse/${enc}?ref=${enc}`,
-      fallback: 'https://phantom.app/download'
+      id: 'mathwallet', name: 'MathWallet', direct: true,
+      // 官方博客给的格式：action=link，value 直接放目标 URL（不套 JSON）。
+      // 与 TokenPocket / imToken 同属 scheme 直达，未安装时由 1.8 秒兜底转下载页。
+      url: `mathwallet://mathwallet.org?action=link&value=${enc}`,
+      fallback: 'https://mathwallet.org/en-us/',
+      scheme: true
     },
     {
       id: 'onto', name: 'ONTO', direct: true,
