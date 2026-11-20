@@ -747,8 +747,9 @@ function App() {
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
 
-      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
-      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
+      {/* 装饰光斑：纯视觉，必须让点击穿透，否则会盖在内容上吞掉点击 */}
+      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
+      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
 
       {notice && (
         <div style={{ position: 'fixed', top: '12px', left: '12px', right: '12px', zIndex: 10001, pointerEvents: 'none',
@@ -1099,9 +1100,10 @@ function App() {
         )}
       </div>
 
-      {/* Bottom Nav */}
+      {/* Bottom Nav：absolute 而非 fixed —— 相对 #root 停靠，
+          桌面宽屏下不会横跨整个视口（#root 有 max-width 480px） */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
+        position: 'absolute', bottom: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-around', alignItems: 'center',
         background: '#ffffff', borderTop: '1px solid #e2e8f0',
         padding: '8px 0 16px 0', zIndex: 20
