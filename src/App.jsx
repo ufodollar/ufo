@@ -391,10 +391,12 @@ function App() {
         setErrorMsg('');
       }
 
-      setFeeAmount(parseFloat(ethers.formatUnits(feeTokens, 18)).toFixed(6));
+      setFeeAmount(parseFloat(ethers.formatUnits(feeUsd, 18)).toFixed(6));
       setOutputAmount(parseFloat(ethers.formatUnits(ufoAmount, 18)).toFixed(6));
     } else {
       const feeUfo = (inputWei * 50n) / 10000n;
+      // 1 UFO = 1 USD 面值，因此 UFO 计价的费用数值上等于 USD 金额
+      const feeUsd = feeUfo;
       const netUfo = inputWei - feeUfo;
       const tokenOut = (netUfo * 10n ** 18n) / price18;
       // 合约实际转出 = 净额 + 以稳定币扣除的手续费（与 withdraw() 的 totalOut 对齐）
@@ -414,7 +416,7 @@ function App() {
         }
       }
 
-      setFeeAmount(parseFloat(ethers.formatUnits(feeTokens, 18)).toFixed(6));
+      setFeeAmount(parseFloat(ethers.formatUnits(feeUsd, 18)).toFixed(6));
       setOutputAmount(parseFloat(ethers.formatUnits(tokenOut, 18)).toFixed(6));
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
@@ -715,7 +717,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                 <span>Protocol Fee (0.5%)</span>
-                <span>-{feeAmount} {selectedStablecoin.symbol}</span>
+                <span>-{feeAmount} USD</span>
               </div>
               {navWarning && (
                 <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: '600' }}>
