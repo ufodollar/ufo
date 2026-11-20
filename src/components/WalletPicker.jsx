@@ -145,7 +145,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
         {/* 桌面且一个扩展都没有：二维码兜底 */}
         {showQR && (
           <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
-            <img src="/qr.svg" alt="Scan to open on your phone" width="150" height="150"
+            <img src="/qr.png" alt="Scan to open on your phone" width="150" height="150"
                  style={{ display: 'block', margin: '0 auto 10px', borderRadius: '10px' }} />
             <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6 }}>
               Scan with your phone camera, then tap Connect and pick a wallet.
