@@ -16,6 +16,50 @@ function normalizeAddress(addr) {
   return String(addr || '').toLowerCase();
 }
 
+// BNB Smart Chain
+const BSC_CHAIN_ID = '0x38';
+
+/**
+ * 连上之后立刻把钱包拨到 BSC，全程不弹我们自己的任何 UI。
+ *
+ * 为什么放在「连上之后」而不是页面加载时：授权之前钱包不会响应
+ * wallet_switchEthereumChain，太早调用只会拿到 4100（unauthorized）。
+ *
+ * 这是网页能做的极限。钱包自己那一层「选择网络」弹窗属于 App 的
+ * dapp 浏览器，在页面加载前就已发生，任何 JS 都够不着 —— 那一层只能靠
+ * deeplink 参数（Bitget 的 _needChain、Trust 的 coin_id、Coin98 的 chainId）。
+ *
+ * 失败一律吞掉：链不对只影响写交易，读数据走的是固定 RPC，
+ * 页面照常显示余额，不该因为切链失败就报错给用户。
+ */
+async function ensureBscChain(provider) {
+  if (!provider || typeof provider.request !== 'function') return;
+  try {
+    const current = await provider.request({ method: 'eth_chainId' });
+    if (!current || String(current).toLowerCase() === BSC_CHAIN_ID) return;
+
+    try {
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: BSC_CHAIN_ID }]
+      });
+    } catch (err) {
+      // 4902 = 钱包里还没有这条链。补一次 addEthereumChain，添加后多数钱包会自己切过去。
+      if (!err || (err.code !== 4902 && err.code !== -32603)) return;
+      await provider.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: BSC_CHAIN_ID,
+          chainName: 'BNB Smart Chain',
+          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+          rpcUrls: ['https://bsc-dataseed.binance.org/'],
+          blockExplorerUrls: ['https://bscscan.com/']
+        }]
+      });
+    }
+  } catch (e) { /* 用户拒绝 / 钱包不支持，保持原状 */ }
+}
+
 function readFlag(storage, key) {
   try { return storage.getItem(key) === '1'; } catch (e) { return false; }
 }
@@ -79,6 +123,9 @@ export function useWallet() {
     try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) { /* 无痕模式 */ }
     setAccount({ address: normalizeAddress(accounts[0]), provider });
     setError('');
+    // 不等它：切链是后台动作，用户点完图标应当立刻看到页面。
+    // 已经在 BSC 时会先读一次 chainId 就返回，代价是一次本地调用。
+    ensureBscChain(provider);
     return true;
   }, []);
 

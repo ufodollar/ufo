@@ -66,10 +66,16 @@ export function walletList() {
   const target = autoconnectUrl();
   const bare = target.replace(/^https?:\/\//, '');
   const enc = encodeURIComponent(target);
+
   // Bitget 要在 dapp 链接上追加 _needChain 才会预选网络，否则进 App 后
   // 先弹一层「选择网络」让用户手点。官方文档 Switch Network 一节：
   //   BSC → {DAppLink}?_needChain=bnb
-  const encBitget = encodeURIComponent(target + '&_needChain=bnb');
+  //
+  // 注意它是 `?` 紧跟参数，不是 `&` 追加。Bitget 是按字面量匹配
+  // `?_needChain=` 的，写成 `?c=1&_needChain=bnb` 匹配不上，参数被忽略，
+  // 弹窗照旧 —— 这正是第一版没生效的原因。所以这里让 _needChain 打头。
+  const bitgetTarget = `${currentUrl()}?_needChain=bnb&${AUTOCONNECT_PARAM}=1`;
+  const encBitget = encodeURIComponent(bitgetTarget);
 
   return [
     {
@@ -124,11 +130,17 @@ export function walletList() {
     },
     {
       id: 'coin98', name: 'Coin98', direct: true,
-      // 移动端 scheme：coin98://browser?url=…，与 imToken 同属纯 scheme 直达。
-      // 千万级下载，内置浏览器支持列表里明确包含 BNB Chain。
-      url: `coin98://browser?url=${enc}`,
-      fallback: 'https://coin98.com/',
-      scheme: true
+      // 官方文档（docs.coin98.com/developer-guide/deeplink）给的是 https 路径，
+      // 不是 scheme：
+      //   https://coin98.com/dapp/:link/:chainId
+      // 之前用第三方资料里的 coin98://browser?url= 是错的 —— App 被拉起来，
+      // 但停在首页，不会加载页面，和 SafePal 的表现一样。
+      //
+      // :link 不带协议头（官方示例是 uniswap.com），钱包自己补 https://；
+      // ?c=1 必须一起编码进这一段，否则会被当成 coin98.com 自己的 query 丢掉。
+      // 56 = BNB Smart Chain 的 chainId，钱包据此预选网络。
+      url: `https://coin98.com/dapp/${encodeURIComponent(bare)}/56`,
+      fallback: 'https://coin98.com/'
     },
     {
       id: 'onto', name: 'ONTO', direct: true,
