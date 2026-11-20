@@ -51,60 +51,45 @@ export function autoconnectUrl() {
 }
 
 /**
- * Android 专用：intent:// 带上包名，系统找不到目标就自动去
- * browser_fallback_url（下载页），不会再出现「点了没反应」。
- *
- * 语法是 intent://<host><path>#Intent;scheme=…;package=…;end，
- * 注意 host 是 scheme 里 // 后面那一段（okx://wallet/dapp/url 的 host 是 wallet），
- * 不是 scheme 本身。
- * package 名取自各钱包 Google Play 正式版本。
- */
-function androidIntent(scheme, host, path, query, pkg, fallback) {
-  const q = query ? '?' + query : '';
-  return `intent://${host}${path}${q}#Intent;scheme=${scheme};` +
-         `package=${pkg};S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
-}
-
-/**
  * 钱包清单。
  *
  * direct: true  → 能直接落进内置浏览器并加载本站
  * direct: false → 只能打开 App 本身，进去后要用户自己粘贴链接
- *                  （SafePal / Binance 属于后者，见各自注释）
+ *
+ * 目前全部是 direct:true。经过真机排查，SafePal / Binance / Coinbase 三个
+ * 入口没有任何参数组合能加载任意 URL（前两个官方文档已明确，Coinbase 的
+ * cb_url 文档已撤下），OKX 的 okx:// 格式始终无公开文档且 intent 实测不可靠。
+ * 宁可少一个图标，也不要留下点了没反应的入口。
  */
 export function walletList() {
   // 落地即请求授权的地址：用户点图标的目的就是连接，不该让他进去再找按钮
   const target = autoconnectUrl();
   const bare = target.replace(/^https?:\/\//, '');
   const enc = encodeURIComponent(target);
-  const p = platform();
 
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
+      // Branch 通用链接。文档现在主推 link.metamask.io/dapp/…，但 app.link
+      // 这条在真机上验证过可用，没有理由冒险换。
       url: `https://metamask.app.link/dapp/${bare}`,
       fallback: 'https://metamask.io/download/'
     },
     {
       id: 'trust', name: 'Trust Wallet', direct: true,
+      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。用 60 进站后
+      // 用户还要手动切到 BSC，但目前真机验证过的就是 60，先不动。
       url: `https://link.trustwallet.com/open_url?coin_id=60&url=${enc}`,
       fallback: 'https://trustwallet.com/download'
     },
     {
-      id: 'okx', name: 'OKX Wallet', direct: true,
-      // Android 必须走 intent：只给 okx:// 时，已安装的 OKX 也可能不响应，
-      // 用户看到的就是「提示未安装」。
-      url: p === 'android'
-        ? androidIntent('okx', 'wallet', '/dapp/url', `dappUrl=${enc}`, 'com.okinc.okex.gp', 'https://www.okx.com/web3')
-        : `okx://wallet/dapp/url?dappUrl=${enc}`,
-      fallback: 'https://www.okx.com/web3',
-      scheme: p !== 'android',
-      intent: p === 'android'
-    },
-    {
       id: 'bitget', name: 'Bitget Wallet', direct: true,
-      url: `https://bkcode.vip?action=dapp&url=${enc}`,
-      fallback: 'https://web3.bitget.com/'
+      // 真机验证（Android / BitKeep 9.70.1，2026-11-20）：只有纯 scheme 能进。
+      // https://bkcode.vip?action=dapp&url= 是 Branch 中转，未收录站点不被解析，
+      // 直接落下载页；换成 scheme 后一次即通，落地链已是 BNB Smart Chain。
+      url: `bitkeep://bkconnect?action=dapp&url=${enc}&version=1`,
+      fallback: 'https://web3.bitget.com/',
+      scheme: true
     },
     {
       id: 'tokenpocket', name: 'TokenPocket', direct: true,
@@ -114,38 +99,23 @@ export function walletList() {
       scheme: true
     },
     {
-      id: 'phantom', name: 'Phantom', direct: true,
-      // 官方格式：url 作为路径段整段编码，ref 是发起方地址
-      url: `https://phantom.com/ul/browse/${enc}?ref=${enc}`,
-      fallback: 'https://phantom.app/download'
-    },
-    {
-      id: 'safepal', name: 'SafePal', direct: false,
-      // SafePal 官方文档明确：deeplink 只拉起 App，不会导航到内置浏览器，
-      // 也不会自动加载传入的 URL。任何参数组合都改变不了这个行为。
-      // 所以点它之后：复制链接 + 打开 App，由用户自己粘贴。
-      url: `https://link.safepal.io/wallet/openurl?url=${enc}`,
-      fallback: 'https://www.safepal.com/download'
-    },
-    {
       id: 'imtoken', name: 'imToken', direct: true,
       url: `imtokenv2://navigate/DappView?url=${enc}`,
       fallback: 'https://token.im/download',
       scheme: true
     },
     {
-      id: 'coinbase', name: 'Coinbase Wallet', direct: true,
-      url: `https://go.cb-w.com/dapp?cb_url=${enc}`,
-      fallback: 'https://www.coinbase.com/wallet/downloads'
+      id: 'phantom', name: 'Phantom', direct: true,
+      // 官方格式：url 作为路径段整段编码，ref 是发起方地址
+      url: `https://phantom.com/ul/browse/${enc}?ref=${enc}`,
+      fallback: 'https://phantom.app/download'
     },
     {
-      id: 'binance', name: 'Binance Wallet', direct: false,
-      // Binance 收到这个 deeplink 后只显示一段「长按复制 URL 用浏览器打开」，
-      // 不加载页面 —— 它对未收录域名有额外的安全拦截（pages.dev 这类共享域
-      // 尤其明显）。同样降级成「复制 + 打开 App」。
-      url: `bnc://app.binance.com/cedefi/dapp?url=${enc}`,
-      fallback: 'https://www.binance.com/en/web3wallet',
-      scheme: true
+      id: 'onto', name: 'ONTO', direct: true,
+      // 官方文档 docs.onto.app/deep-link：chain 必填、可多值，url 必填。
+      // 是少数把「打开任意 URL」写进文档的钱包，和 TokenPocket / imToken 同一类。
+      url: `https://link.onto.app/open_url?chain=bsc&url=${enc}`,
+      fallback: 'https://onto.app/download'
     }
   ].map((w) => ({ ...w, icon: ICON(w.id), target }));
 }

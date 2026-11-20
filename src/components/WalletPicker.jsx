@@ -6,7 +6,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 /**
  * 钱包选择面板。
  *
- * 移动端：10 个钱包图标墙，点了直接跳进该 App 的内置浏览器，
+ * 移动端：7 个钱包图标墙，点了直接跳进该 App 的内置浏览器，
  *        落地时页面里已有注入，自动就是已连接状态 —— 没有二维码、没有配对。
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
@@ -30,9 +30,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
     setOpening(wallet.name);
     setCopied(false);
 
-    // 这类钱包（SafePal / Binance）只会被拉起 App，不会加载我们传过去的地址。
-    // 与其让用户进去看到首页一脸茫然，不如先把链接放进剪贴板，
-    // 进去后直接粘贴。
+    // 目前名单里已经全是 direct:true（能直接加载本站），这个分支暂时走不到。
+    // 保留它是因为将来若加入只能拉起 App 的钱包，这里就是唯一需要改的地方：
+    // 先把链接放进剪贴板，用户进去后直接粘贴。
     //
     // 不加 await：复制是异步的，但跳转不能等它 —— 用户点完要立刻有反应。
     // 复制必须在手势的同步调用栈里发起，浏览器才认为这是用户意图。
