@@ -73,6 +73,101 @@ try {
   });
 } catch (e) { console.error('AppKit Init Error:', e); }
 
+// ================= 3.5 移动端「在钱包中打开」深链 =================
+// AppKit 弹窗里每个钱包跳去哪里，由 Reown 的 wallet registry 决定，前端改不了：
+//   Phantom  → registry 给它配的就是「在 App 内置浏览器打开网址」的深链，所以点一下直接进浏览器
+//   MetaMask → registry 配的是 WalletConnect 深链（metamask://wc?uri=），只把 App 拉起来
+//   Trust    → 同上，只拉 App
+// 结果是 MetaMask 打开 App、用户授权完回到手机浏览器时，那一页被系统挂起过，
+// WalletConnect 的 websocket 断了，React 状态还是旧的 —— 必须刷新。
+//
+// 下面这组深链换个思路：把「打开网址」这一步直接交给钱包自己。
+// 页面在钱包内置浏览器里加载 → window.ethereum 可用 → 第 5.5 节的钩子自动连接，
+// 全程没有回跳，也就不存在「回来是旧的」。
+// 用当前访问域名，将来绑定 ufodollar.com 后深链会自动跟着变，不用再改代码
+const DAPP_URL = typeof window !== 'undefined' ? window.location.origin + '/' : 'https://ufo-eea.pages.dev/';
+const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+const OPEN_IN_WALLET = [
+  {
+    id: 'metamask',
+    name: 'MetaMask',
+    bg: '#FFF3E8',
+    fg: '#F6851B',
+    mark: '\u{1F98A}',
+    // 官方格式：metamask.app.link/dapp/<host><path>，不带 https:// 头
+    link: `https://metamask.app.link/dapp/${DAPP_URL.replace(/^https?:\/\//, '')}`,
+  },
+  {
+    id: 'trust',
+    name: 'Trust',
+    bg: '#EAF2FB',
+    fg: '#3375BB',
+    mark: '\u{1F6E1}',
+    // 官方两种写法：link.trustwallet.com/open_url?... 或 trust://open_url?...
+    // 用自定义 scheme，不依赖域名解析（link.trustwallet.com 在部分网络下会被污染）
+    link: `trust://open_url?coin_id=60&url=${encodeURIComponent(DAPP_URL)}`,
+  },
+  {
+    id: 'phantom',
+    name: 'Phantom',
+    bg: '#F1EEFF',
+    fg: '#7C66DC',
+    mark: '\u{1F47B}',
+    link: `https://phantom.app/ul/browse/${encodeURIComponent(DAPP_URL)}?ref=${encodeURIComponent(DAPP_URL)}`,
+  },
+  {
+    id: 'safepal',
+    name: 'SafePal',
+    bg: '#EAF3FF',
+    fg: '#2B6CB0',
+    mark: '\u{1F537}',
+    link: `https://link.safepal.io/wallet/openurl?url=${encodeURIComponent(DAPP_URL)}`,
+  },
+];
+
+function WalletSheet({ onClose, onMore }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: '480px', background: '#fff', borderRadius: '20px 20px 0 0', padding: '18px 18px 26px', boxShadow: '0 -10px 40px rgba(15,23,42,0.15)' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, fontSize: '15px' }}>在钱包中打开</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', lineHeight: 1, color: '#94a3b8', cursor: 'pointer', padding: 0 }}>&times;</button>
+        </div>
+        <p style={{ margin: '6px 0 16px', fontSize: '11.5px', color: '#64748b', lineHeight: 1.6 }}>
+          页面会在钱包自带的浏览器里打开；此前授权过的钱包，进去就是已连接状态。
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+          {OPEN_IN_WALLET.map((w) => (
+            <a
+              key={w.id}
+              href={w.link}
+              style={{ textDecoration: 'none', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px' }}
+            >
+              <span style={{ width: '48px', height: '48px', borderRadius: '14px', background: w.bg, color: w.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>
+                {w.mark}
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 600 }}>{w.name}</span>
+            </a>
+          ))}
+        </div>
+        <button
+          onClick={onMore}
+          style={{ width: '100%', marginTop: '16px', padding: '11px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+        >
+          其他钱包 / 桌面端扫码
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ================= 4. 样式与图标 =================
 const FONT_STYLE = {
   fontFamily: '"Lora", "Noto Serif SC", "Songti SC", Georgia, "Times New Roman", serif'
@@ -233,6 +328,7 @@ function App() {
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
+  const [showWalletSheet, setShowWalletSheet] = useState(false);
 
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
@@ -279,6 +375,11 @@ function App() {
 
   const ensureBscNetwork = useCallback(async () => {
     if (!walletProvider) return false;
+    // 先读当前链：已经在 BSC 就直接返回，避免每次连接都弹一次切换确认框
+    try {
+      const cur = await walletProvider.request({ method: 'eth_chainId' });
+      if (String(cur).toLowerCase() === '0x38') return true;
+    } catch (e) { /* 个别钱包不支持 eth_chainId，继续走标准切换 */ }
     try {
       await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
       return true;
@@ -297,7 +398,12 @@ function App() {
   }, [walletProvider]);
 
   useEffect(() => {
-    if (isConnected && walletProvider) ensureBscNetwork();
+    if (!isConnected || !walletProvider) return;
+    ensureBscNetwork();
+    // 用户在钱包里手动切到别的网络时，立刻请求切回 BSC
+    const onChainChanged = () => { ensureBscNetwork(); };
+    try { walletProvider.on?.('chainChanged', onChainChanged); } catch (e) {}
+    return () => { try { walletProvider.removeListener?.('chainChanged', onChainChanged); } catch (e) {} };
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
   const fetchNav = useCallback(async () => {
@@ -660,7 +766,16 @@ function App() {
               {injectedAddress.slice(0, 6)}…{injectedAddress.slice(-4)}
             </div>
           ) : (
-            <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+            <button
+              onClick={() => {
+                // 手机浏览器（无注入）：先给「在钱包中打开」的四家入口，点一下直接进钱包内置浏览器
+                // 桌面端 / 已在钱包内置浏览器：仍走原来的 AppKit 弹窗
+                const hasInjected = typeof window !== 'undefined' && !!window.ethereum;
+                if (IS_MOBILE && !hasInjected) setShowWalletSheet(true);
+                else open({ view: 'AllWallets' });
+              }}
+              style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+            >
               Connect Wallet
             </button>
           )}
@@ -975,6 +1090,13 @@ function App() {
           </div>
         )}
       </div>
+
+      {showWalletSheet && (
+        <WalletSheet
+          onClose={() => setShowWalletSheet(false)}
+          onMore={() => { setShowWalletSheet(false); open({ view: 'AllWallets' }); }}
+        />
+      )}
 
       {/* Bottom Nav */}
       <div style={{
