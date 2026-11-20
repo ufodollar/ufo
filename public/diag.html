@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>连接自检 · UFO</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+         background: #f8fafc; color: #0f172a; padding: 16px 14px 40px; font-size: 14px; line-height: 1.5; }
+  h1 { font-size: 17px; margin-bottom: 4px; }
+  .sub { color: #64748b; font-size: 12px; margin-bottom: 14px; }
+  .row { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 11px 12px; margin-bottom: 8px; }
+  .k { font-size: 11px; color: #64748b; letter-spacing: .02em; }
+  .v { font-size: 14px; font-weight: 600; word-break: break-all; margin-top: 2px; }
+  .ok { color: #15803d; } .bad { color: #b91c1c; } .wait { color: #b45309; }
+  .hint { font-size: 12px; color: #475569; margin-top: 6px; }
+  button { width: 100%; padding: 13px; border: 0; border-radius: 12px; background: #0f172a; color: #fff;
+           font-size: 15px; font-weight: 600; margin-top: 6px; }
+  .foot { margin-top: 14px; font-size: 11px; color: #94a3b8; text-align: center; }
+</style>
+</head>
+<body>
+<h1>钱包连接自检</h1>
+<div class="sub">在 Chrome 和 Edge 各打开一次，把结果截图对比即可定位问题。</div>
+<div id="list"></div>
+<button onclick="run()">重新检测</button>
+<div class="foot">UFO Dollar · 诊断页</div>
+
+<script>
+const PROJECT_ID = 'd6431212399f6c487b364387859983ea';
+const list = document.getElementById('list');
+const rows = {};
+
+function row(id, key) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  el.innerHTML = '<div class="k">' + key + '</div><div class="v wait">检测中…</div>';
+  list.appendChild(el);
+  rows[id] = el.querySelector('.v');
+  return rows[id];
+}
+function set(id, text, state) {
+  const v = rows[id];
+  if (!v) return;
+  v.textContent = text;
+  v.className = 'v ' + (state || '');
+}
+
+// 1. 环境
+const env = row('env', '浏览器 / 环境');
+(function () {
+  const ua = navigator.userAgent;
+  const m = ua.match(/(Chrome|Edg|Firefox|SamsungBrowser)\/([\d.]+)/);
+  const name = /Edg\//.test(ua) ? 'Edge' : (/Chrome\//.test(ua) ? 'Chrome' : '其他');
+  const ver = m ? m[2].split('.')[0] : '?';
+  set('env', name + ' ' + ver + ' · ' + (navigator.platform || '') +
+      ' · ' + (navigator.maxTouchPoints > 0 ? '触摸屏' : '无触摸'), 'ok');
+})();
+
+// 2. 安全上下文 + 存储
+const sto = row('sto', 'HTTPS 与本地存储');
+(function () {
+  try {
+    localStorage.setItem('__t', '1'); localStorage.removeItem('__t');
+    set('sto', (window.isSecureContext ? 'HTTPS 正常' : '非 HTTPS') + ' · localStorage 可写', 'ok');
+  } catch (e) {
+    set('sto', 'localStorage 被禁用：' + e.name, 'bad');
+  }
+})();
+
+// 3. api.web3modal.org
+const api = row('api', '钱包列表接口 api.web3modal.org');
+fetch('https://api.web3modal.org/appkit/v1/config?projectId=' + PROJECT_ID, { mode: 'cors' })
+  .then(r => set('api', 'HTTP ' + r.status + '（' + (r.ok ? '可达' : '异常') + '）', r.ok ? 'ok' : 'bad'))
+  .catch(e => set('api', '失败：' + (e.message || e.name), 'bad'));
+
+// 4. relay WebSocket —— 关键项
+const relay = row('relay', 'WalletConnect 中继 relay.walletconnect.org');
+(function () {
+  const t0 = Date.now();
+  let done = false;
+  const finish = (text, state) => { if (done) return; done = true; set('relay', text + '（' + (Date.now() - t0) + 'ms）', state); };
+  let ws;
+  try {
+    ws = new WebSocket('wss://relay.walletconnect.org/?projectId=' + PROJECT_ID);
+  } catch (e) {
+    return finish('创建失败：' + (e.message || e.name), 'bad');
+  }
+  ws.onopen = () => finish('握手成功，中继可达', 'ok');
+  ws.onerror = () => { /* onclose 会紧跟 */ };
+  ws.onclose = (ev) => finish('握手失败（code ' + ev.code + '），中继不可达', 'bad');
+  setTimeout(() => finish('10 秒无响应，判定不可达', 'bad'), 10000);
+  setTimeout(() => { try { ws.close(); } catch (e) {} }, 15000);
+})();
+
+// 5. IndexedDB（WalletConnect 用它存会话密钥）
+const idb = row('idb', 'IndexedDB 可用性');
+(function () {
+  try {
+    const req = indexedDB.open('__probe', 1);
+    req.onsuccess = () => { set('idb', '可用', 'ok'); req.result.close(); indexedDB.deleteDatabase('__probe'); };
+    req.onerror = () => set('idb', '被禁用（WalletConnect 会初始化失败）', 'bad');
+    req.onblocked = () => set('idb', '被阻塞', 'bad');
+  } catch (e) { set('idb', '异常：' + e.name, 'bad'); }
+})();
+
+// 6. 第三方 Cookie（AppKit 的验证 iframe 需要）
+const ck = row('ck', '第三方存储 / Cookie');
+(function () {
+  if (navigator.cookieEnabled === false) return set('ck', 'Cookie 被完全禁用', 'bad');
+  set('ck', navigator.cookieEnabled ? 'Cookie 已启用（具体分区策略需看浏览器设置）' : '未知', 'ok');
+})();
+
+function run() {
+  Object.keys(rows).forEach(k => set(k, '检测中…', 'wait'));
+  location.reload();
+}
+</script>
+</body>
+</html>
