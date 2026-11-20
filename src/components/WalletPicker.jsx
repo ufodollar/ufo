@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { walletList, openInWallet, isMobile, currentUrl } from '../wallets';
+import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
 
@@ -13,11 +13,12 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  */
 export default function WalletPicker({ open, onClose, injectedWallets, onPick, busy, error }) {
   const [opening, setOpening] = useState('');
+  const [copied, setCopied] = useState(false);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
 
   useEffect(() => {
-    if (!open) { setOpening(''); return; }
+    if (!open) { setOpening(''); setCopied(false); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -27,6 +28,22 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
 
   const handleApp = (wallet) => {
     setOpening(wallet.name);
+    setCopied(false);
+
+    // 这类钱包（SafePal / Binance）只会被拉起 App，不会加载我们传过去的地址。
+    // 与其让用户进去看到首页一脸茫然，不如先把链接放进剪贴板，
+    // 进去后直接粘贴。
+    //
+    // 不加 await：复制是异步的，但跳转不能等它 —— 用户点完要立刻有反应。
+    // 复制必须在手势的同步调用栈里发起，浏览器才认为这是用户意图。
+    if (!wallet.direct) {
+      try {
+        navigator.clipboard.writeText(wallet.target)
+          .then(() => setCopied(true))
+          .catch(() => {});
+      } catch (e) { /* 浏览器不支持剪贴板，下面的兜底文案仍然可用 */ }
+    }
+
     openInWallet(wallet);
   };
 
@@ -36,7 +53,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
   const showQR = !mobile && !hasExt;  // 桌面什么都没有：扫码去手机
 
   const subtitle = mobile
-    ? 'Opens inside the wallet’s own browser — already connected.'
+    ? 'Opens this page inside your wallet’s own browser.'
     : hasExt
       ? 'Choose an installed browser wallet.'
       : 'No browser wallet found on this device.';
@@ -86,10 +103,16 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
           </div>
         )}
 
-        {opening && (
-          <div style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px', background: '#eff6ff',
-                        border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: '12px', fontWeight: '600' }}>
-            Opening {opening}… If nothing happens, it isn’t installed.
+        {(opening || copied) && (
+          <div style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px',
+                        background: copied ? '#f0fdf4' : '#eff6ff',
+                        border: `1px solid ${copied ? '#bbf7d0' : '#bfdbfe'}`,
+                        color: copied ? '#15803d' : '#1d4ed8', fontSize: '12px', lineHeight: 1.55, fontWeight: '600' }}>
+            {copied
+              ? (opening
+                  ? `Link copied. In ${opening}, open its DApp browser and paste it.`
+                  : 'Link copied. Open your wallet’s DApp browser and paste it.')
+              : `Opening ${opening}… If nothing happens, it isn’t installed.`}
           </div>
         )}
 
@@ -154,17 +177,18 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
         )}
 
         <button
-          onClick={() => {
-            const url = currentUrl();
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(url).then(() => setOpening(''), () => {});
-            }
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(autoconnectUrl());
+              setOpening('');
+              setCopied(true);
+            } catch (e) { /* 权限被拒时保持原样 */ }
           }}
           style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%', marginTop: '16px',
                    padding: '12px', background: '#fff', border: '1px solid #dbeafe', color: '#1d4ed8',
                    borderRadius: '12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
         >
-          Copy link
+          {copied ? 'Link copied' : 'Copy link'}
         </button>
       </div>
     </div>
