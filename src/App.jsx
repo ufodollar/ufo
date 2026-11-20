@@ -374,7 +374,25 @@ function App() {
   const [currentNav, setCurrentNav] = useState(1);
   const [navStatus, setNavStatus] = useState('loading'); 
 
-  const [bnbPrice, setBnbPrice] = useState(600);
+  const [bnbPrice, setBnbPrice] = useState(null);
+
+  // 未连接钱包时也展示真实 BNB 价格。此前初始值是硬编码的 600，
+  // 在真实价格约 575 的行情下等于展示假数据，金融产品不能这么做。
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const raw = await rpcProvider.send('eth_call', [
+          { to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }, 'latest'
+        ]);
+        const answer = BigInt('0x' + raw.slice(66, 130)); // 第 2 个字 = answer(int256)
+        if (alive && answer > 0n) setBnbPrice(parseFloat(ethers.formatUnits(answer, 8)));
+      } catch (e) {
+        // 预言机不可达时保持占位符，不编造价格
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const [stablecoinPrices, setStablecoinPrices] = useState({
     USDT: { price18: 10n ** 18n, priceFloat: 1.0, isFallback: false },
@@ -986,14 +1004,14 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                     <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>${formatPrice(bnbPrice, true)}</span>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>{bnbPrice == null ? '—' : '$' + formatPrice(bnbPrice, true)}</span>
                   </div>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>≈ ${formatUsd(Number(bnbBal) * bnbPrice)}</span>
+                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>{bnbPrice == null ? '≈ —' : '≈ $' + formatUsd(Number(bnbBal) * bnbPrice)}</span>
               </div>
             </div>
 
