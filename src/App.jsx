@@ -6,6 +6,7 @@ import { formatUnits, parseUnits } from './units';
 import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot } from './chain';
 import { submitSwap, toWei, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
+import WalletPicker from './components/WalletPicker';
 
 // 引入抽离出来的文案组件
 import RulesTab from './components/RulesTab';
@@ -112,44 +113,18 @@ async function fetchStablecoinPrices() {
 
 // ================= 4. 主应用 =================
 function App() {
-  // 注入式优先，没有注入才按需加载 AppKit —— 细节见 useWallet.js
+  // 钱包层只有一条路径：EIP-1193 注入。
+  // 桌面扩展、钱包 App 内置浏览器都走这条；手机普通浏览器则由 WalletPicker
+  // 跳进钱包自己的浏览器，落地后同样是注入 —— 全程不经过任何中继，见 wallets.js
   const {
     address, provider: walletProvider, isConnected,
     busy: walletBusy, error: walletError,
-    connect, close: closeWallets, disconnect
+    connect, disconnect,
+    pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
 
-  // 提示条内容（钱包连接被中断时显示）
+  // 提示条内容（钱包连接异常时显示）
   const [notice, setNotice] = useState('');
-
-  // 「整页点不动」的兜底。
-  // AppKit 的钱包弹窗是 <w3m-modal>，宿主元素铺满全屏、z-index 9999。
-  // 连接失败（例如 WalletConnect 连不上中继）之后，它可能停在 class="open"
-  // 但内部卡片已被清空的状态：宿主仍是 pointer-events:auto，于是页面上每一次
-  // 点击都被这个看不见的空壳吃掉，表现就是「页面好好的，但哪里都点不动」。
-  // 正常弹窗一定有可见的 wui-card，据此识别空壳并强制解封。
-  useEffect(() => {
-    let emptyTicks = 0;
-    const timer = setInterval(() => {
-      const host = document.querySelector('w3m-modal');
-      if (!host || !host.shadowRoot) { emptyTicks = 0; return; }
-      const cs = getComputedStyle(host);
-      if (cs.pointerEvents === 'none' || Number(cs.opacity) < 0.05) { emptyTicks = 0; return; }
-
-      const hasSheet = Array.from(host.shadowRoot.querySelectorAll('wui-card'))
-        .some(el => el.getBoundingClientRect().height > 40);
-      if (hasSheet) { emptyTicks = 0; return; }
-
-      // 连续 3 秒都是空壳才动手：弹窗刚打开的瞬间还没渲染出卡片，不能误杀
-      if (++emptyTicks < 3) return;
-      emptyTicks = 0;
-      host.style.pointerEvents = 'none';
-      host.classList.remove('open');
-      try { closeWallets(); } catch (e) { /* 已经关掉了，忽略 */ }
-      setNotice('Wallet connection was interrupted. Please retry, or open this page inside your wallet app.');
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [closeWallets]);
 
   // 提示条 8 秒后自动消失，pointer-events:none 保证它永远不会挡住点击
   useEffect(() => {
@@ -158,7 +133,7 @@ function App() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  // 连接器自身报错（例如 AppKit chunk 拉不下来）也走同一条提示条
+  // 钱包层报错也走同一条提示条
   useEffect(() => {
     if (walletError) setNotice(walletError);
   }, [walletError]);
@@ -557,7 +532,9 @@ function App() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
+      {/* zIndex 必须高于主内容(10)和底栏(20)：header 和主内容是兄弟节点，
+          同级时后渲染的会盖住前面的，账户菜单就会被 Swap 卡片压住 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 30, flexShrink: 0, position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             <UfoIcon size={28} />
@@ -569,7 +546,11 @@ function App() {
             <>
               <button
                 onClick={() => setShowAccountMenu(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}
+                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                         display: 'flex', alignItems: 'center', gap: '6px',
+                         background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                         padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
+                         lineHeight: 1.2, cursor: 'pointer' }}
               >
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
                 {address.slice(0, 6)}…{address.slice(-4)}
@@ -577,19 +558,29 @@ function App() {
               {showAccountMenu && (
                 <>
                   <div onClick={() => setShowAccountMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '190px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                  {/* 每一项都写死 height：部分 Android 浏览器和 WebView 会忽略 button 的
+                      padding、只按文字行高算高度，之前 Disconnect 就是这样从 44px 塌到 19px
+                      并被容器裁掉的。显式高度不依赖任何盒模型默认值。 */}
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '200px',
+                                background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                                border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden', padding: '6px' }}>
                     <a
                       href={`https://bscscan.com/address/${address}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setShowAccountMenu(false)}
-                      style={{ display: 'block', padding: '12px 16px', fontSize: '13px', color: '#1e293b', textDecoration: 'none', borderBottom: '1px solid #f1f5f9' }}
+                      style={{ display: 'flex', alignItems: 'center', height: '44px', padding: '0 14px',
+                               fontSize: '13px', lineHeight: 1.2, color: '#1e293b', textDecoration: 'none', borderRadius: '8px' }}
                     >
                       View on BscScan
                     </a>
                     <button
                       onClick={() => { setShowAccountMenu(false); disconnect(); }}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 16px', fontSize: '13px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               display: 'flex', alignItems: 'center', width: '100%', height: '44px',
+                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
+                               color: '#ef4444', background: 'transparent', border: 'none',
+                               borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
                     >
                       Disconnect
                     </button>
@@ -601,9 +592,13 @@ function App() {
             <button
               onClick={connect}
               disabled={walletBusy}
-              style={{ background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: walletBusy ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+              style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                       background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
+                       padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
+                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer',
+                       boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
-              {walletBusy ? 'Loading wallet…' : 'Connect Wallet'}
+              {walletBusy ? 'Connecting…' : 'Connect Wallet'}
             </button>
           )}
         </div>
@@ -950,6 +945,15 @@ function App() {
           </div>
         ))}
       </div>
+
+      <WalletPicker
+        open={pickerOpen}
+        onClose={closePicker}
+        injectedWallets={injectedWallets}
+        onPick={connectWith}
+        busy={walletBusy}
+        error={walletError}
+      />
 
     </div>
   );

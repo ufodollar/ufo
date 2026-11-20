@@ -6,7 +6,7 @@
     <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
     <img src="https://img.shields.io/badge/Framework-React_Vite-61DAFB?style=for-the-badge&logo=react" alt="React">
     <img src="https://img.shields.io/badge/Web3-Ethers.js_v6-3C3C3D?style=for-the-badge&logo=ethereum" alt="Ethers">
-    <img src="https://img.shields.io/badge/Wallet-Reown_AppKit-black?style=for-the-badge&logo=walletconnect" alt="Reown">
+    <img src="https://img.shields.io/badge/Wallet-EIP--1193-black?style=for-the-badge&logo=ethereum" alt="EIP-1193">
     <img src="https://img.shields.io/badge/Security-Private_Repo-red?style=for-the-badge&logo=shieldsdotio" alt="Security">
   </p>
 
@@ -47,24 +47,32 @@
   FEE_RATE: 0.005, // 0.5% Settlement Fee
 };</code></pre>
 
-<h2>⚡ 首屏加载策略（为什么它这么快）</h2>
-<p>这个页面刻意只让「打开就要用」的东西进主包，其余全部按需下载。</p>
+<h2>⚡ 连接架构（没有钱包 SDK，也没有中继服务器）</h2>
+<p>页面不依赖 AppKit、WalletConnect 或任何钱包 SDK。连接只有一条路径：<b>EIP-1193 注入</b>。</p>
+<table>
+  <tr><th>场景</th><th>怎么连上</th><th>下载量</th></tr>
+  <tr><td>钱包 App 内置浏览器</td><td>页面里已有 <code>window.ethereum</code>，<code>eth_accounts</code> 静默恢复</td><td>0</td></tr>
+  <tr><td>桌面装了扩展</td><td>EIP-6963 发现，点一下直连；多个扩展时让用户自己选</td><td>0</td></tr>
+  <tr><td>手机普通浏览器</td><td>点钱包图标 → universal link / scheme 跳进该 App 的内置浏览器 → 回到第一条</td><td>0</td></tr>
+  <tr><td>桌面什么钱包都没有</td><td>显示二维码，手机扫码后在手机上下载的流程里完成</td><td>0</td></tr>
+</table>
+<p>这意味着任何网络环境下都能连上：没有 <code>relay.walletconnect.org</code> 可连，就没有连不上的理由。</p>
 <table>
   <tr><th>模块</th><th>何时加载</th><th>大小（min / gzip）</th></tr>
-  <tr><td>React + UI + 读链层</td><td>首屏必需</td><td>≈200KB / 63KB</td></tr>
-  <tr><td>WalletConnect（AppKit）</td><td>点「Connect」且浏览器里没有注入钱包时</td><td>≈1.5MB / 460KB</td></tr>
-  <tr><td>Ethers.js</td><td>点「Swap」第一次签名前（输入金额时即预取）</td><td>≈180KB / 72KB</td></tr>
+  <tr><td>React + UI + 读链层 + 钱包层</td><td>首屏必需</td><td>≈204KB / 64KB</td></tr>
+  <tr><td>Ethers.js</td><td>第一次签交易前（输入金额时即预取）</td><td>≈214KB / 82KB</td></tr>
 </table>
-<p>三个设计决定值得记住，改代码时不要退回去：</p>
+<p>四个设计决定值得记住，改代码时不要退回去：</p>
 <ol>
-  <li><b>读链不用 ethers。</b> 所有读取都是 <code>eth_call</code>，参数只有 <code>address</code> / <code>uint256</code> 两种，<code>src/chain.js</code> 里手写了编码，省下 270KB。</li>
-  <li><b>AppKit 不能静态 import。</b> 一旦写在文件顶部，1.5MB 就会跟着首屏一起下载，这是之前「网页变慢」的真正原因。</li>
-  <li><b>有钱包注入时永远不加载 AppKit。</b> 钱包 App 内置浏览器、装了扩展的桌面浏览器都走 EIP-1193 直连，零下载、几十毫秒连上。</li>
+  <li><b>读链不用 ethers。</b> 所有读取都是 <code>eth_call</code>，参数只有 <code>address</code> / <code>uint256</code>，<code>src/chain.js</code> 手写编码，省下 270KB。</li>
+  <li><b>不引入钱包 SDK。</b> AppKit 一家 1.5MB，且强制依赖 Relay。用户要的只是「点一下进钱包」，用系统 universal link 就够。</li>
+  <li><b>自定义 scheme 必须设超时回落。</b> 没装 App 时浏览器不会有任何回调，1.8 秒后跳下载页，否则用户会以为按钮坏了。</li>
+  <li><b>钱包图标本地打包。</b> 走 App Store 原图转 webp，10 个共 16KB，不依赖任何图床（国内访问 coingecko 会超时）。</li>
 </ol>
 
 <h2>🚀 Local Development</h2>
 <blockquote>
-  <p>💡 <b>Developer Note:</b> Use Node.js v18 or higher. Ensure you have your Reown AppKit <code>projectId</code> configured.</p>
+  <p>💡 <b>Developer Note:</b> Use Node.js v18 or higher. No API keys or project IDs are required.</p>
 </blockquote>
 
 <details>

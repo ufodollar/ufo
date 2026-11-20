@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ensureAppKit, getModal, WC_MARK_KEY } from './wallet';
+import { watchInjectedWallets } from './wallets';
 
 // 本会话主动断开后，不要再用注入式自动连回去
 const OPTOUT_KEY = 'ufo_inj_off';
@@ -7,8 +7,6 @@ const OPTOUT_KEY = 'ufo_inj_off';
 // 地址统一小写。
 // 不用 ethers 的 getAddress：它会对混合大小写做 EIP-55 校验和验证，
 // 钱包返回不规范的地址时会抛错，导致「有地址却显示未连接」。
-// 界面上只显示 0xabc…1234，大小写对用户没有任何区别，
-// 而省掉 ethers/address 这条依赖链又少 10KB。
 function normalizeAddress(addr) {
   return String(addr || '').toLowerCase();
 }
@@ -18,166 +16,155 @@ function readFlag(storage, key) {
 }
 
 /**
- * 统一钱包状态。
+ * 钱包状态。
  *
- * 两个来源，优先级固定：
- *   injected —— window.ethereum，钱包 App 内置浏览器 / 装了扩展的桌面浏览器。
- *               打开页面即静默恢复（eth_accounts 不需要用户操作），零网络开销。
- *   appkit   —— WalletConnect / 社交登录，只有页面里没有注入时才会被拉起。
+ * 只有一条连接路径：EIP-1193。
+ *   - 钱包 App 内置浏览器 / 装了扩展的桌面浏览器：window.ethereum 已经在那儿，
+ *     打开页面即静默恢复，零网络开销、零下载。
+ *   - 多个扩展并存时用 EIP-6963 精确选出用户点的那一个。
+ *   - 手机普通浏览器：没有注入，交给 WalletPicker 跳 App 内置浏览器，
+ *     落地后仍然是这条路径 —— 所以永远不需要 WalletConnect 中转。
  *
- * 对上层暴露的仍然是老三样：address / provider / isConnected，
- * 业务代码（切链、签交易、读余额）完全不用区分来源。
+ * 对上层暴露的仍然是老三样：address / provider / isConnected。
  */
 export function useWallet() {
-  const [injected, setInjected] = useState(null);   // { address, provider }
-  const [appkitAccount, setAppkitAccount] = useState({ address: null, isConnected: false, status: 'disconnected' });
-  const [appkitProvider, setAppkitProvider] = useState(null);
+  const [account, setAccount] = useState(null);       // { address, provider }
+  const [injectedWallets, setInjectedWallets] = useState([]); // EIP-6963 发现的扩展
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const injectedOptOut = useRef(false);
-  const subscribed = useRef(false);
+  const optedOut = useRef(false);
 
-  // 订阅 AppKit 的账户与 provider 变化，写回本地 state。
-  // 用订阅而不是 hook，是为了让 AppKit 整个从首屏 bundle 里消失。
-  const subscribeModal = useCallback((modal) => {
-    if (!modal || subscribed.current) return;
-    subscribed.current = true;
+  // 发现浏览器里所有实现了 EIP-6963 的钱包
+  useEffect(() => watchInjectedWallets(setInjectedWallets), []);
 
-    modal.subscribeAccount((acc) => {
-      setAppkitAccount({
-        address: acc && acc.address ? normalizeAddress(acc.address) : null,
-        isConnected: !!(acc && acc.isConnected),
-        status: (acc && acc.status) || 'disconnected'
-      });
-      if (acc && acc.isConnected) {
-        try { localStorage.setItem(WC_MARK_KEY, '1'); } catch (e) { /* 无痕模式 */ }
-        setError('');
-      }
-    });
-
-    modal.subscribeProviders((providers) => {
-      setAppkitProvider((providers && providers['eip155']) || null);
-    });
-  }, []);
-
-  // ---- 注入式：进入页面就尝试静默恢复 ----
-  useEffect(() => {
-    const eth = typeof window !== 'undefined' ? window.ethereum : null;
-    if (!eth) return;
-
-    const off = readFlag(sessionStorage, OPTOUT_KEY);
-    injectedOptOut.current = off;
-
-    let cancelled = false;
-    const adopt = (accounts) => {
-      if (cancelled) return;
-      if (accounts && accounts.length) {
-        setInjected({ address: normalizeAddress(accounts[0]), provider: eth });
-      } else {
-        setInjected(null);
-      }
-    };
-
-    if (!off) {
-      (async () => {
-        try { adopt(await eth.request({ method: 'eth_accounts' })); }
-        catch (e) { adopt(null); }
-      })();
-    }
-
-    const onAccounts = (accounts) => {
-      if (injectedOptOut.current) return;
-      adopt(accounts);
-    };
-
-    try { eth.on?.('accountsChanged', onAccounts); } catch (e) { /* 个别钱包不支持事件 */ }
-    return () => {
-      cancelled = true;
-      try { eth.removeListener?.('accountsChanged', onAccounts); } catch (e) { /* noop */ }
-    };
-  }, []);
-
-  // ---- AppKit 的加载时机 ----
-  // 只有一种情况会在首屏自动加载：访客以前用 WalletConnect 连过。
-  // 不预取。AppKit 全家桶解压后 4MB 出头，对手机流量和低端机的解析都是实打实的成本；
-  // 为了「点连接时快 1 秒」而让每个只看汇率的访客多下 1.5MB，不划算。
-  // 没注入钱包的访客点头像时才下载，那时界面已经有 loading 文案。
+  // ---- 进入页面就尝试静默恢复（钱包内置浏览器的主要路径）----
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (window.ethereum) return;
-    if (!readFlag(localStorage, WC_MARK_KEY)) return;
+    const eth = window.ethereum;
+    if (!eth) return;
 
-    ensureAppKit().then(subscribeModal).catch(() => {});
-  }, [subscribeModal]);
+    optedOut.current = readFlag(sessionStorage, OPTOUT_KEY);
+    if (optedOut.current) return;
 
+    let cancelled = false;
+    (async () => {
+      try {
+        const accounts = await eth.request({ method: 'eth_accounts' });
+        if (!cancelled && accounts && accounts.length) {
+          setAccount({ address: normalizeAddress(accounts[0]), provider: eth });
+        }
+      } catch (e) {
+        // 未授权，保持未连接
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- 跟随当前 provider 的账户变化 ----
+  // 依赖用 provider 引用而不是整个 account 对象，避免每次地址变化都重绑。
+  const activeProvider = account && account.provider;
+  useEffect(() => {
+    if (!activeProvider || typeof activeProvider.on !== 'function') return;
+
+    const onAccounts = (accounts) => {
+      if (optedOut.current) return;
+      if (accounts && accounts.length) {
+        setAccount({ address: normalizeAddress(accounts[0]), provider: activeProvider });
+      } else {
+        setAccount(null);
+      }
+    };
+
+    try { activeProvider.on('accountsChanged', onAccounts); } catch (e) { /* 个别钱包不支持事件 */ }
+    return () => {
+      try { activeProvider.removeListener('accountsChanged', onAccounts); } catch (e) { /* noop */ }
+    };
+  }, [activeProvider]);
+
+  const accept = useCallback((accounts, provider) => {
+    if (!accounts || !accounts.length) return false;
+    optedOut.current = false;
+    try { sessionStorage.removeItem(OPTOUT_KEY); } catch (e) { /* 无痕模式 */ }
+    setAccount({ address: normalizeAddress(accounts[0]), provider });
+    setError('');
+    return true;
+  }, []);
+
+  // 主入口：有注入就直接连；多个扩展或没有注入才弹选择器
   const connect = useCallback(async () => {
     if (busy) return;
     setError('');
 
-    // 1) 有注入：直接连，不下载任何东西
     const eth = typeof window !== 'undefined' ? window.ethereum : null;
-    if (eth) {
-      setBusy(true);
-      try {
-        const accounts = await eth.request({ method: 'eth_requestAccounts' });
-        if (accounts && accounts.length) {
-          injectedOptOut.current = false;
-          try { sessionStorage.removeItem(OPTOUT_KEY); } catch (e) { /* noop */ }
-          setInjected({ address: normalizeAddress(accounts[0]), provider: eth });
-          return;
-        }
-      } catch (e) {
-        // 4001 = 用户主动取消。安静退出，也不该再弹 WalletConnect 去打扰他。
-        if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return;
-        // 其他异常继续尝试 WalletConnect
-      } finally {
-        setBusy(false);
-      }
-    }
 
-    // 2) 无注入：按需加载 AppKit，再开弹窗
+    // 装了不止一个扩展时，window.ethereum 只是「最后注入的那个」，
+    // 直接连等于替用户做了选择 —— 这种情况必须让他自己挑。
+    if (injectedWallets.length > 1) { setPickerOpen(true); return; }
+
+    const provider = injectedWallets.length === 1 ? injectedWallets[0].provider : eth;
+    if (!provider) { setPickerOpen(true); return; }
+
     setBusy(true);
     try {
-      const modal = await ensureAppKit();
-      subscribeModal(modal);
-      await modal.open({ view: 'AllWallets' });
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      accept(accounts, provider);
     } catch (e) {
-      setError('Could not open the wallet selector. Please open this page inside your wallet app.');
+      // 4001 = 用户主动取消。安静退出，不要再弹选择器打扰他。
+      if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return;
+      setError((e && (e.message || e.reason)) || 'Could not connect to the wallet.');
+      setPickerOpen(true);
     } finally {
       setBusy(false);
     }
-  }, [busy, subscribeModal]);
+  }, [busy, accept, injectedWallets]);
 
-  const close = useCallback(async () => {
-    const modal = getModal();
-    if (!modal) return;
-    try { await modal.close(); } catch (e) { /* noop */ }
-  }, []);
+  // 用户在 EIP-6963 列表里点了一个扩展
+  const connectWith = useCallback(async (provider) => {
+    if (!provider || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      if (accept(accounts, provider)) setPickerOpen(false);
+    } catch (e) {
+      if (e && e.code !== 4001) setError((e && (e.message || e.reason)) || 'Connection rejected.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, accept]);
 
   const disconnect = useCallback(async () => {
-    injectedOptOut.current = true;
+    optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
-    setInjected(null);
 
-    const modal = getModal();
-    if (modal) {
-      try { await modal.disconnect('eip155'); } catch (e) { /* noop */ }
+    // 有 revokePermissions 的钱包（MetaMask 等）会真的撤销授权，
+    // 下次打开页面就不会再自动连回来。不支持的忽略即可。
+    const provider = account && account.provider;
+    if (provider && typeof provider.request === 'function') {
+      try { await provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }); }
+      catch (e) { /* 不支持就算了 */ }
     }
-    try { localStorage.removeItem(WC_MARK_KEY); } catch (e) { /* noop */ }
-    setAppkitAccount({ address: null, isConnected: false, status: 'disconnected' });
-    setAppkitProvider(null);
-  }, []);
+
+    setAccount(null);
+    setPickerOpen(false);
+  }, [account]);
 
   return {
-    address: appkitAccount.address || (injected && injected.address) || null,
-    provider: appkitProvider || (injected && injected.provider) || null,
-    isConnected: appkitAccount.isConnected || !!(injected && injected.address),
-    source: appkitAccount.isConnected ? 'walletconnect' : (injected && injected.address ? 'injected' : null),
+    address: account ? account.address : null,
+    provider: account ? account.provider : null,
+    isConnected: !!account,
+    source: account ? 'injected' : null,
+    injectedWallets,
+    pickerOpen,
+    openPicker: () => setPickerOpen(true),
+    closePicker: () => setPickerOpen(false),
     busy,
     error,
     connect,
-    close,
+    connectWith,
     disconnect,
     clearError: () => setError('')
   };

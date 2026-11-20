@@ -16,6 +16,10 @@
 /*.woff2
   Cache-Control: public, max-age=31536000, immutable
 
+# 钱包图标：文件名固定，内容几乎不变。换图标时改文件名即可绕过缓存。
+/wallets/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # 入口 HTML 必须每次校验，否则更新发不出去
 /
   Cache-Control: public, max-age=0, must-revalidate
