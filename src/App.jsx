@@ -11,9 +11,9 @@ import { useWallet } from './useWallet';
 import RulesTab from './components/RulesTab';
 
 // ================= 1. 币种图标 =================
-// 币种图标：Tether / Circle 官方 logo 的矢量路径，内联成 data URI。
+// Tether / Circle / Binance 官方 logo 的矢量路径，内联成 data URI。
 // 不引用外部图床（assets.coingecko.com 在国内实测 20 秒超时），
-// 也不用「字母 T / $」替代——这里就是官方标志本身的形状。
+// 也不用「字母 T / $」替代 —— 这里就是官方标志本身的形状。
 const svgIcon = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg);
 
 // USDT（Tether 官方标志：绿底白色 T，含椭圆底座）
@@ -32,9 +32,7 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// ================= 2. 钱包（见 useWallet.js，AppKit 按需加载） =================
-
-// ================= 4. 样式与图标 =================
+// ================= 2. 样式常量 =================
 const FONT_STYLE = {
   fontFamily: '"Lora", "Noto Serif SC", "Songti SC", Georgia, "Times New Roman", serif'
 };
@@ -59,7 +57,7 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// ================= 3. 核心读取逻辑 =================
+// ================= 3. 读链逻辑 =================
 async function fetchVaultPrice(tokenAddress) {
   let lastError = null;
 
@@ -112,7 +110,7 @@ async function fetchStablecoinPrices() {
   return result;
 }
 
-// ================= 6. 主应用 =================
+// ================= 4. 主应用 =================
 function App() {
   // 注入式优先，没有注入才按需加载 AppKit —— 细节见 useWallet.js
   const {
