@@ -22,26 +22,74 @@ const CONFIG = {
   NAV_WARNING_THRESHOLD: 0.99,
 };
 
-// 币种图标：内联 SVG，不依赖外部图床。
-// 原来用的是 assets.coingecko.com，国内网络经常 20 秒超时，白白占住浏览器连接。
-const stableIcon = (bg, shapes) => 'data:image/svg+xml,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="${bg}"/>${shapes}</svg>`
-);
+// 币种图标：Tether / Circle 官方 logo 的矢量路径，内联成 data URI。
+// 不引用外部图床（assets.coingecko.com 在国内实测 20 秒超时），
+// 也不用「字母 T / $」替代——这里就是官方标志本身的形状。
+const svgIcon = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg);
+
+// USDT（Tether 官方标志：绿底白色 T，含椭圆底座）
+const ICON_USDT = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none" fill-rule="evenodd"><circle cx="16" cy="16" r="16" fill="#26A17B"/><path fill="#FFF" d="M17.922 17.383v-.002c-.11.008-.677.042-1.942.042-1.01 0-1.721-.03-1.971-.042v.003c-3.888-.171-6.79-.848-6.79-1.658 0-.809 2.902-1.486 6.79-1.66v2.644c.254.018.982.061 1.988.061 1.207 0 1.812-.05 1.925-.06v-2.643c3.88.173 6.775.85 6.775 1.658 0 .81-2.895 1.485-6.775 1.657m0-3.59v-2.366h5.414V7.819H8.595v3.608h5.414v2.365c-4.4.202-7.709 1.074-7.709 2.118 0 1.044 3.309 1.915 7.709 2.118v7.582h3.913v-7.584c4.393-.202 7.694-1.073 7.694-2.116 0-1.043-3.301-1.914-7.694-2.117"/></g></svg>');
+
+// USDC（Circle 官方标志：蓝底白色 $ + 两侧弧线）
+const ICON_USDC = svgIcon('<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g fill="none"><circle fill="#2775CA" cx="16" cy="16" r="16"/><g fill="#FFF"><path d="M20.022 18.124c0-2.124-1.28-2.852-3.84-3.156-1.828-.243-2.193-.728-2.193-1.578 0-.85.61-1.396 1.828-1.396 1.097 0 1.707.364 2.011 1.275a.458.458 0 00.427.303h.975a.416.416 0 00.427-.425v-.06a3.04 3.04 0 00-2.743-2.489V9.142c0-.243-.183-.425-.487-.486h-.915c-.243 0-.426.182-.487.486v1.396c-1.829.242-2.986 1.456-2.986 2.974 0 2.002 1.218 2.791 3.778 3.095 1.707.303 2.255.668 2.255 1.639 0 .97-.853 1.638-2.011 1.638-1.585 0-2.133-.667-2.316-1.578-.06-.242-.244-.364-.427-.364h-1.036a.416.416 0 00-.426.425v.06c.243 1.518 1.219 2.61 3.23 2.914v1.457c0 .242.183.425.487.485h.915c.243 0 .426-.182.487-.485V21.34c1.829-.303 3.047-1.578 3.047-3.217z"/><path d="M12.892 24.497c-4.754-1.7-7.192-6.98-5.424-11.653.914-2.55 2.925-4.491 5.424-5.402.244-.121.365-.303.365-.607v-.85c0-.242-.121-.424-.365-.485-.061 0-.183 0-.244.06a10.895 10.895 0 00-7.13 13.717c1.096 3.4 3.717 6.01 7.13 7.102.244.121.488 0 .548-.243.061-.06.061-.122.061-.243v-.85c0-.182-.182-.424-.365-.546zm6.46-18.936c-.244-.122-.488 0-.548.242-.061.061-.061.122-.061.243v.85c0 .243.182.485.365.607 4.754 1.7 7.192 6.98 5.424 11.653-.914 2.55-2.925 4.491-5.424 5.402-.244.121-.365.303-.365.607v.85c0 .242.121.424.365.485.061 0 .183 0 .244-.06a10.895 10.895 0 007.13-13.717c-1.096-3.46-3.778-6.07-7.13-7.162z"/></g></g></svg>');
+
+// BNB（Binance 官方菱形标志）
+const ICON_BNB = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none"><circle cx="16" cy="16" r="16" fill="#F3BA2F"/><path fill="#FFF" d="M12.116 14.404L16 10.52l3.886 3.886 2.26-2.26L16 6l-6.144 6.144 2.26 2.26zM6 16l2.26-2.26L10.52 16l-2.26 2.26L6 16zm6.116 1.596L16 21.48l3.886-3.886 2.26 2.259L16 26l-6.144-6.144-.003-.003 2.263-2.257zM21.48 16l2.26-2.26L26 16l-2.26 2.26L21.48 16zm-3.188-.002h.002V16L16 18.294l-2.291-2.29-.004-.004.004-.003.401-.402.195-.195L16 13.706l2.293 2.293z"/></g></svg>');
 
 const STABLECOINS = [
-  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: stableIcon('#26A17B', '<text x="16" y="23" font-size="18" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#fff" text-anchor="middle">T</text>') },
-  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: stableIcon('#2775CA', '<text x="16" y="23" font-size="18" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#fff" text-anchor="middle">$</text>') }
+  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: ICON_USDT },
+  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC }
 ];
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 // 使用 Ankr RPC 节点
 // staticNetwork：跳过启动时的 eth_chainId 探测，省一个 RTT，首屏价格能早 100-300ms 出来
-const rpcProvider = new ethers.JsonRpcProvider(
-  'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749',
-  56,
-  { staticNetwork: true }
-);
+const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';
+const rpcProvider = new ethers.JsonRpcProvider(RPC_URL, 56, { staticNetwork: true });
+
+// 一次 JSON-RPC batch 取回钱包的全部余额：BNB + USDT + USDC + UFO + BNB 价格。
+// 原来要走 6 次往返（其中 BNB 还绕道钱包自己的 RPC，最慢），现在压成 1 次。
+async function fetchWalletSnapshot(owner) {
+  const pad = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+  const erc20 = (token) => ({ to: token, data: '0x70a08231' + pad(owner) });
+
+  const batch = [
+    { jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [owner, 'latest'] },
+    { jsonrpc: '2.0', id: 2, method: 'eth_call', params: [erc20(CONFIG.USDT_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 3, method: 'eth_call', params: [erc20(CONFIG.USDC_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 4, method: 'eth_call', params: [erc20(CONFIG.UFO_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 5, method: 'eth_call', params: [{ to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }, 'latest'] }
+  ];
+
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(batch)
+  });
+  const json = await res.json();
+  if (!Array.isArray(json)) throw new Error('RPC batch rejected');
+
+  const byId = {};
+  for (const item of json) byId[item.id] = item;
+  const resultOf = (id) => (byId[id] && byId[id].result ? byId[id].result : null);
+  const units = (hex) => (hex && hex !== '0x' ? parseFloat(ethers.formatUnits(BigInt(hex), 18)) : null);
+
+  const out = { bnb: null, USDT: null, USDC: null, UFO: null, bnbPrice: null };
+
+  const bnbHex = resultOf(1);
+  if (bnbHex) out.bnb = parseFloat(ethers.formatEther(BigInt(bnbHex)));
+  out.USDT = units(resultOf(2));
+  out.USDC = units(resultOf(3));
+  out.UFO = units(resultOf(4));
+
+  const lrd = resultOf(5);
+  if (lrd && lrd.length >= 2 + 128) {
+    const answer = BigInt('0x' + lrd.slice(2 + 64, 2 + 128));
+    out.bnbPrice = parseFloat(ethers.formatUnits(answer, 8));
+  }
+  return out;
+}
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
@@ -383,36 +431,23 @@ function App() {
   }, []);
 
   const fetchUserBalances = useCallback(async () => {
-    if (!address || !walletProvider) return;
+    if (!address) return;
     try {
-      const browserProvider = new ethers.BrowserProvider(walletProvider);
-      const bnbBalanceWei = await browserProvider.getBalance(address);
-      setBnbBal(parseFloat(ethers.formatEther(bnbBalanceWei)).toFixed(6));
+      const snap = await fetchWalletSnapshot(address);
 
-      const oracleContract = new ethers.Contract(CONFIG.BNB_ORACLE, BNB_ORACLE_ABI, rpcProvider);
-      const priceData = await oracleContract.latestRoundData();
-      setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
+      if (snap.bnb !== null) setBnbBal(snap.bnb.toFixed(6));
+      if (snap.bnbPrice !== null) setBnbPrice(snap.bnbPrice);
 
-      const allTokens = [...STABLECOINS, UFO_TOKEN];
-      const results = await Promise.allSettled(
-        allTokens.map(token => {
-          const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
-          return contract.balanceOf(address);
-        })
-      );
-
-      const newBalances = {};
-      results.forEach((res, index) => {
-        const token = allTokens[index];
-        newBalances[token.symbol] = res.status === 'fulfilled'
-          ? parseFloat(ethers.formatUnits(res.value, 18)).toFixed(6)
-          : '0.000000';
-      });
-      setTokenBalances(newBalances);
+      const next = {};
+      for (const token of [...STABLECOINS, UFO_TOKEN]) {
+        const v = snap[token.symbol];
+        next[token.symbol] = v === null ? '0.000000' : v.toFixed(6);
+      }
+      setTokenBalances(next);
     } catch (error) {
       console.error('User balances fetch failed:', error);
     }
-  }, [address, walletProvider]);
+  }, [address]);
 
   useEffect(() => {
     refreshPrices();
@@ -433,7 +468,8 @@ function App() {
     fetchUserBalances();
     const interval = setInterval(fetchUserBalances, 10000);
     return () => clearInterval(interval);
-  }, [isConnected, address, fetchUserBalances]);
+    // activeTab 一起进依赖：每次切到 Wallet / History 都立刻拉一次，不用等下一个 10 秒
+  }, [isConnected, address, fetchUserBalances, activeTab]);
 
   const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
   const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
@@ -851,7 +887,7 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
+                <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                     <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
