@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
@@ -7,9 +7,46 @@ import { bsc } from '@reown/appkit/networks';
 // 引入抽离出来的文案组件
 import RulesTab from './components/RulesTab';
 
+// ================= 0. 生产环境加固 =================
+// AppKit 把 INITIALIZE / CONNECT_SUCCESS 硬编码为强制上报事件，
+// features.analytics:false 只对自定义事件生效，因此在受限网络下每次打开
+// 弹窗都会向 pulse.walletconnect.org 发一次注定失败的请求。这里在初始化前
+// 短路该域名：不再向第三方发送用户行为数据，控制台也不再出现这条网络错误。
+// 只影响遥测上报，钱包连接走 relay WebSocket，不受影响。
+(() => {
+  if (typeof window === 'undefined' || window.__ufoHardened) return;
+  window.__ufoHardened = true;
+
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.indexOf('pulse.walletconnect.org') !== -1) {
+      return Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return nativeFetch(input, init);
+  };
+
+  // AppKit 的批量事件走 navigator.sendBeacon（EventsController._submitPendingEvents），
+  // 不经过 fetch，必须单独拦一次。返回 true = 已排队，它不会重试。
+  const nativeBeacon = navigator.sendBeacon && navigator.sendBeacon.bind(navigator);
+  if (nativeBeacon) {
+    navigator.sendBeacon = function (url, data) {
+      if (String(url).indexOf('pulse.walletconnect.org') !== -1) return true;
+      return nativeBeacon(url, data);
+    };
+  }
+
+  // 中继/网络类失败已经由界面提示（提示条 + 弹窗兜底），
+  // 不再把未捕获的 rejection 抛进控制台
+  window.addEventListener('unhandledrejection', (e) => {
+    e.preventDefault();
+    const r = e.reason;
+    console.warn('[ufo] suppressed:', (r && (r.message || r)) || 'unknown');
+  });
+})();
+
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🚨 正确的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -22,26 +59,74 @@ const CONFIG = {
   NAV_WARNING_THRESHOLD: 0.99,
 };
 
-// 币种图标：内联 SVG，不依赖外部图床。
-// 原来用的是 assets.coingecko.com，国内网络经常 20 秒超时，白白占住浏览器连接。
-const stableIcon = (bg, shapes) => 'data:image/svg+xml,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="${bg}"/>${shapes}</svg>`
-);
+// 币种图标：Tether / Circle 官方 logo 的矢量路径，内联成 data URI。
+// 不引用外部图床（assets.coingecko.com 在国内实测 20 秒超时），
+// 也不用「字母 T / $」替代——这里就是官方标志本身的形状。
+const svgIcon = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg);
+
+// USDT（Tether 官方标志：绿底白色 T，含椭圆底座）
+const ICON_USDT = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none" fill-rule="evenodd"><circle cx="16" cy="16" r="16" fill="#26A17B"/><path fill="#FFF" d="M17.922 17.383v-.002c-.11.008-.677.042-1.942.042-1.01 0-1.721-.03-1.971-.042v.003c-3.888-.171-6.79-.848-6.79-1.658 0-.809 2.902-1.486 6.79-1.66v2.644c.254.018.982.061 1.988.061 1.207 0 1.812-.05 1.925-.06v-2.643c3.88.173 6.775.85 6.775 1.658 0 .81-2.895 1.485-6.775 1.657m0-3.59v-2.366h5.414V7.819H8.595v3.608h5.414v2.365c-4.4.202-7.709 1.074-7.709 2.118 0 1.044 3.309 1.915 7.709 2.118v7.582h3.913v-7.584c4.393-.202 7.694-1.073 7.694-2.116 0-1.043-3.301-1.914-7.694-2.117"/></g></svg>');
+
+// USDC（Circle 官方标志：蓝底白色 $ + 两侧弧线）
+const ICON_USDC = svgIcon('<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g fill="none"><circle fill="#2775CA" cx="16" cy="16" r="16"/><g fill="#FFF"><path d="M20.022 18.124c0-2.124-1.28-2.852-3.84-3.156-1.828-.243-2.193-.728-2.193-1.578 0-.85.61-1.396 1.828-1.396 1.097 0 1.707.364 2.011 1.275a.458.458 0 00.427.303h.975a.416.416 0 00.427-.425v-.06a3.04 3.04 0 00-2.743-2.489V9.142c0-.243-.183-.425-.487-.486h-.915c-.243 0-.426.182-.487.486v1.396c-1.829.242-2.986 1.456-2.986 2.974 0 2.002 1.218 2.791 3.778 3.095 1.707.303 2.255.668 2.255 1.639 0 .97-.853 1.638-2.011 1.638-1.585 0-2.133-.667-2.316-1.578-.06-.242-.244-.364-.427-.364h-1.036a.416.416 0 00-.426.425v.06c.243 1.518 1.219 2.61 3.23 2.914v1.457c0 .242.183.425.487.485h.915c.243 0 .426-.182.487-.485V21.34c1.829-.303 3.047-1.578 3.047-3.217z"/><path d="M12.892 24.497c-4.754-1.7-7.192-6.98-5.424-11.653.914-2.55 2.925-4.491 5.424-5.402.244-.121.365-.303.365-.607v-.85c0-.242-.121-.424-.365-.485-.061 0-.183 0-.244.06a10.895 10.895 0 00-7.13 13.717c1.096 3.4 3.717 6.01 7.13 7.102.244.121.488 0 .548-.243.061-.06.061-.122.061-.243v-.85c0-.182-.182-.424-.365-.546zm6.46-18.936c-.244-.122-.488 0-.548.242-.061.061-.061.122-.061.243v.85c0 .243.182.485.365.607 4.754 1.7 7.192 6.98 5.424 11.653-.914 2.55-2.925 4.491-5.424 5.402-.244.121-.365.303-.365.607v.85c0 .242.121.424.365.485.061 0 .183 0 .244-.06a10.895 10.895 0 007.13-13.717c-1.096-3.46-3.778-6.07-7.13-7.162z"/></g></g></svg>');
+
+// BNB（Binance 官方菱形标志）
+const ICON_BNB = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none"><circle cx="16" cy="16" r="16" fill="#F3BA2F"/><path fill="#FFF" d="M12.116 14.404L16 10.52l3.886 3.886 2.26-2.26L16 6l-6.144 6.144 2.26 2.26zM6 16l2.26-2.26L10.52 16l-2.26 2.26L6 16zm6.116 1.596L16 21.48l3.886-3.886 2.26 2.259L16 26l-6.144-6.144-.003-.003 2.263-2.257zM21.48 16l2.26-2.26L26 16l-2.26 2.26L21.48 16zm-3.188-.002h.002V16L16 18.294l-2.291-2.29-.004-.004.004-.003.401-.402.195-.195L16 13.706l2.293 2.293z"/></g></svg>');
 
 const STABLECOINS = [
-  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: stableIcon('#26A17B', '<text x="16" y="23" font-size="18" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#fff" text-anchor="middle">T</text>') },
-  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: stableIcon('#2775CA', '<text x="16" y="23" font-size="18" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#fff" text-anchor="middle">$</text>') }
+  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: ICON_USDT },
+  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC }
 ];
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
 // 使用 Ankr RPC 节点
 // staticNetwork：跳过启动时的 eth_chainId 探测，省一个 RTT，首屏价格能早 100-300ms 出来
-const rpcProvider = new ethers.JsonRpcProvider(
-  'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749',
-  56,
-  { staticNetwork: true }
-);
+const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';
+const rpcProvider = new ethers.JsonRpcProvider(RPC_URL, 56, { staticNetwork: true });
+
+// 一次 JSON-RPC batch 取回钱包的全部余额：BNB + USDT + USDC + UFO + BNB 价格。
+// 原来要走 6 次往返（其中 BNB 还绕道钱包自己的 RPC，最慢），现在压成 1 次。
+async function fetchWalletSnapshot(owner) {
+  const pad = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+  const erc20 = (token) => ({ to: token, data: '0x70a08231' + pad(owner) });
+
+  const batch = [
+    { jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [owner, 'latest'] },
+    { jsonrpc: '2.0', id: 2, method: 'eth_call', params: [erc20(CONFIG.USDT_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 3, method: 'eth_call', params: [erc20(CONFIG.USDC_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 4, method: 'eth_call', params: [erc20(CONFIG.UFO_ADDRESS), 'latest'] },
+    { jsonrpc: '2.0', id: 5, method: 'eth_call', params: [{ to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }, 'latest'] }
+  ];
+
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(batch)
+  });
+  const json = await res.json();
+  if (!Array.isArray(json)) throw new Error('RPC batch rejected');
+
+  const byId = {};
+  for (const item of json) byId[item.id] = item;
+  const resultOf = (id) => (byId[id] && byId[id].result ? byId[id].result : null);
+  const units = (hex) => (hex && hex !== '0x' ? parseFloat(ethers.formatUnits(BigInt(hex), 18)) : null);
+
+  const out = { bnb: null, USDT: null, USDC: null, UFO: null, bnbPrice: null };
+
+  const bnbHex = resultOf(1);
+  if (bnbHex) out.bnb = parseFloat(ethers.formatEther(BigInt(bnbHex)));
+  out.USDT = units(resultOf(2));
+  out.USDC = units(resultOf(3));
+  out.UFO = units(resultOf(4));
+
+  const lrd = resultOf(5);
+  if (lrd && lrd.length >= 2 + 128) {
+    const answer = BigInt('0x' + lrd.slice(2 + 64, 2 + 128));
+    out.bnbPrice = parseFloat(ethers.formatUnits(answer, 8));
+  }
+  return out;
+}
 
 // ================= 2. ABIs =================
 const ERC20_ABI = [
@@ -60,10 +145,6 @@ const VAULT_ABI = [
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
 ];
 
-const BNB_ORACLE_ABI = [
-  'function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)'
-];
-
 // ================= 3. Reown AppKit 初始化 =================
 try {
   createAppKit({
@@ -73,7 +154,7 @@ try {
       name: 'UFO Dollar',
       description: 'Value-Invisible Settlement Stablecoin',
       url: window.location.origin,
-      icons: ['https://ufo-eea.pages.dev/favicon.ico'],
+      icons: ['https://ufo-eea.pages.dev/icon-512.png'],
       redirect: { native: 'https://ufo-eea.pages.dev', universal: 'https://ufo-eea.pages.dev', linkMode: true },
     },
     projectId: 'd6431212399f6c487b364387859983ea',
@@ -82,7 +163,7 @@ try {
     enableWalletConnect: true,
     enableInjected: true,
   });
-} catch (e) { console.error('AppKit Init Error:', e); }
+} catch (e) { window.__ufoAppKitFailed = true; console.warn('[ufo] AppKit init failed:', e && e.message); }
 
 // ================= 4. 样式与图标 =================
 const FONT_STYLE = {
@@ -216,7 +297,7 @@ function useInjectedWallet() {
 
 // ================= 6. 主应用 =================
 function App() {
-  const { open } = useAppKit();
+  const { open, close } = useAppKit();
   const { address: appkitAddress, isConnected: appkitConnected, status: appkitStatus } = useAppKitAccount();
   const { walletProvider: appkitProvider } = useAppKitProvider('eip155');
 
@@ -238,6 +319,45 @@ function App() {
       resetInjected();
     }
   }, [appkitConnected, appkitStatus, resetInjected]);
+
+  // 提示条内容（钱包连接被中断时显示）
+  const [notice, setNotice] = useState('');
+
+  // 「整页点不动」的兜底。
+  // AppKit 的钱包弹窗是 <w3m-modal>，宿主元素铺满全屏、z-index 9999。
+  // 连接失败（例如 WalletConnect 连不上中继）之后，它可能停在 class="open"
+  // 但内部卡片已被清空的状态：宿主仍是 pointer-events:auto，于是页面上每一次
+  // 点击都被这个看不见的空壳吃掉，表现就是「页面好好的，但哪里都点不动」。
+  // 正常弹窗一定有可见的 wui-card，据此识别空壳并强制解封。
+  useEffect(() => {
+    let emptyTicks = 0;
+    const timer = setInterval(() => {
+      const host = document.querySelector('w3m-modal');
+      if (!host || !host.shadowRoot) { emptyTicks = 0; return; }
+      const cs = getComputedStyle(host);
+      if (cs.pointerEvents === 'none' || Number(cs.opacity) < 0.05) { emptyTicks = 0; return; }
+
+      const hasSheet = Array.from(host.shadowRoot.querySelectorAll('wui-card'))
+        .some(el => el.getBoundingClientRect().height > 40);
+      if (hasSheet) { emptyTicks = 0; return; }
+
+      // 连续 3 秒都是空壳才动手：弹窗刚打开的瞬间还没渲染出卡片，不能误杀
+      if (++emptyTicks < 3) return;
+      emptyTicks = 0;
+      host.style.pointerEvents = 'none';
+      host.classList.remove('open');
+      try { close(); } catch (e) { /* 已经关掉了，忽略 */ }
+      setNotice('Wallet connection was interrupted. Please retry, or open this page inside your wallet app.');
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [close]);
+
+  // 提示条 8 秒后自动消失，pointer-events:none 保证它永远不会挡住点击
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
@@ -282,10 +402,14 @@ function App() {
     }
   }, []);
 
+  // 用函数式更新：这里曾经读的是渲染时闭包里的 history，
+  // 连续两笔交易时后一笔会把前一笔覆盖掉。
   const saveTxToHistory = (txRecord) => {
-    const newHistory = [txRecord, ...history].slice(0, 50);
-    setHistory(newHistory);
-    localStorage.setItem('ufo_tx_history', JSON.stringify(newHistory));
+    setHistory(prev => {
+      const next = [txRecord, ...prev].slice(0, 50);
+      try { localStorage.setItem('ufo_tx_history', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
   };
 
   const ensureBscNetwork = useCallback(async () => {
@@ -376,43 +500,30 @@ function App() {
         USDC: parseFloat(ethers.formatUnits(vUsdc, 18))
       });
     } catch (error) {
-      console.error('Vault balances fetch failed:', error);
+      console.warn('[ufo] vault balances unavailable:', error && error.message);
     } finally {
       balanceRefreshingRef.current = false;
     }
   }, []);
 
   const fetchUserBalances = useCallback(async () => {
-    if (!address || !walletProvider) return;
+    if (!address) return;
     try {
-      const browserProvider = new ethers.BrowserProvider(walletProvider);
-      const bnbBalanceWei = await browserProvider.getBalance(address);
-      setBnbBal(parseFloat(ethers.formatEther(bnbBalanceWei)).toFixed(6));
+      const snap = await fetchWalletSnapshot(address);
 
-      const oracleContract = new ethers.Contract(CONFIG.BNB_ORACLE, BNB_ORACLE_ABI, rpcProvider);
-      const priceData = await oracleContract.latestRoundData();
-      setBnbPrice(parseFloat(ethers.formatUnits(priceData.answer, 8)));
+      if (snap.bnb !== null) setBnbBal(snap.bnb.toFixed(6));
+      if (snap.bnbPrice !== null) setBnbPrice(snap.bnbPrice);
 
-      const allTokens = [...STABLECOINS, UFO_TOKEN];
-      const results = await Promise.allSettled(
-        allTokens.map(token => {
-          const contract = new ethers.Contract(token.address, ERC20_ABI, rpcProvider);
-          return contract.balanceOf(address);
-        })
-      );
-
-      const newBalances = {};
-      results.forEach((res, index) => {
-        const token = allTokens[index];
-        newBalances[token.symbol] = res.status === 'fulfilled'
-          ? parseFloat(ethers.formatUnits(res.value, 18)).toFixed(6)
-          : '0.000000';
-      });
-      setTokenBalances(newBalances);
+      const next = {};
+      for (const token of [...STABLECOINS, UFO_TOKEN]) {
+        const v = snap[token.symbol];
+        next[token.symbol] = v === null ? '0.000000' : v.toFixed(6);
+      }
+      setTokenBalances(next);
     } catch (error) {
-      console.error('User balances fetch failed:', error);
+      console.warn('[ufo] wallet balances unavailable:', error && error.message);
     }
-  }, [address, walletProvider]);
+  }, [address]);
 
   useEffect(() => {
     refreshPrices();
@@ -433,7 +544,8 @@ function App() {
     fetchUserBalances();
     const interval = setInterval(fetchUserBalances, 10000);
     return () => clearInterval(interval);
-  }, [isConnected, address, fetchUserBalances]);
+    // activeTab 一起进依赖：每次切到 Wallet / History 都立刻拉一次，不用等下一个 10 秒
+  }, [isConnected, address, fetchUserBalances, activeTab]);
 
   const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
   const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
@@ -465,9 +577,19 @@ function App() {
       return;
     }
 
-    // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+    // 输入金额清洗：末尾小数点（"1."）会让 parseUnits 报错；
+    // 科学计数法（"1e5"，number 输入框允许）同样会抛异常 —— 一旦在 effect 里抛出，
+    // 整棵 React 树会被卸载，页面直接变成不可交互的白屏。这里兜住并提示。
     const cleanInput = inputAmount.toString().replace(/\.$/, '');
-    const inputWei = ethers.parseUnits(cleanInput || '0', 18);
+    let inputWei;
+    try {
+      inputWei = ethers.parseUnits(cleanInput || '0', 18);
+    } catch (err) {
+      setErrorMsg('Invalid amount');
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
+      return;
+    }
 
     if (isBuyingUFO) {
       const usdValue = (inputWei * price18) / 10n ** 18n;
@@ -558,7 +680,7 @@ function App() {
 
       let receipt;
 
-      // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+      // 与预览口径一致：清洗末尾小数点，避免 parseUnits 抛错
       const cleanAmount = inputAmount.toString().replace(/\.$/, '');
       const rawAmount = ethers.parseUnits(cleanAmount || '0', 18);
 
@@ -567,7 +689,7 @@ function App() {
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
           setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
-          // 🚨 修复：精确授权当前交易额度，取消无限授权
+          // 按本次交易额度精确授权，不申请无限授权
           const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
           await txApprove.wait();
         }
@@ -622,7 +744,7 @@ function App() {
       fetchNav();
 
     } catch (error) {
-      console.error(error);
+      console.warn('[ufo] transaction failed:', error && error.message);
       setErrorMsg(error.reason || error.shortMessage || error.message || 'Transaction failed');
       txRecord.status = 'Failed';
       txRecord.txHash = '-';
@@ -661,10 +783,19 @@ function App() {
   const navWarning = navStatus === 'ready' && currentNav < CONFIG.NAV_WARNING_THRESHOLD;
 
   return (
-    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
+    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
 
-      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
-      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
+      {/* 装饰光斑：纯视觉，必须让点击穿透，否则会盖在内容上吞掉点击 */}
+      <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
+      <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
+
+      {notice && (
+        <div style={{ position: 'fixed', top: '12px', left: '12px', right: '12px', zIndex: 10001, pointerEvents: 'none',
+                      background: '#1e293b', color: '#fff', fontSize: '12.5px', lineHeight: 1.5, padding: '10px 14px',
+                      borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
+          {notice}
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
@@ -692,7 +823,7 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
 
         {activeTab === 'swap' && (
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
@@ -728,6 +859,9 @@ function App() {
                     <><UfoIcon size={28} /><span>UFO</span></>
                   )}
                   {showTokenMenu && isBuyingUFO && (
+                    <>
+                    {/* 全屏透明层：点页面任意位置关闭菜单，避免菜单挡住下方区域后无法操作 */}
+                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => {
                         const coinPrice = coin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
@@ -743,6 +877,7 @@ function App() {
                         );
                       })}
                     </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -775,6 +910,8 @@ function App() {
                     <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
                   )}
                   {showTokenMenu && !isBuyingUFO && (
+                    <>
+                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
                       {STABLECOINS.map(coin => (
                         <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
@@ -784,6 +921,7 @@ function App() {
                         </div>
                       ))}
                     </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -844,7 +982,7 @@ function App() {
           <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" style={{ width: 40, height: 40 }} alt="BNB" />
+                <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                     <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
@@ -1000,9 +1138,10 @@ function App() {
         )}
       </div>
 
-      {/* Bottom Nav */}
+      {/* Bottom Nav：absolute 而非 fixed —— 相对 #root 停靠，
+          桌面宽屏下不会横跨整个视口（#root 有 max-width 480px） */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
+        position: 'absolute', bottom: 0, left: 0, right: 0,
         display: 'flex', justifyContent: 'space-around', alignItems: 'center',
         background: '#ffffff', borderTop: '1px solid #e2e8f0',
         padding: '8px 0 16px 0', zIndex: 20
@@ -1029,4 +1168,55 @@ function App() {
   );
 }
 
-export default App;
+// 渲染期异常兜底：任何组件抛错都不会让整页变成白屏，
+// 而是给出可点击的重新加载入口（生产环境必须有这一层）
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    console.warn('[ufo] render error:', error && error.message);
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div style={{
+        minHeight: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: '14px',
+        padding: '40px 24px', textAlign: 'center',
+        background: '#f8fafc', color: '#1e293b'
+      }}>
+        <div style={{ fontSize: '15px', fontWeight: 700 }}>Something went wrong</div>
+        <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, maxWidth: '320px' }}>
+          Please reload the page. If it keeps happening, open this page inside your wallet app.
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            marginTop: '4px', padding: '10px 24px', borderRadius: '22px', border: 'none',
+            background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+          }}
+        >
+          Reload
+        </button>
+      </div>
+    );
+  }
+}
+
+function Root() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+export default Root;
