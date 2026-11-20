@@ -152,11 +152,81 @@ async function fetchStablecoinPrices() {
   return result;
 }
 
+// ================= 5.5 注入式钱包自动连接 =================
+// 场景：用户从钱包 App（MetaMask / Trust Wallet / SafePal / Phantom）的「内置浏览器」
+// 打开本站，页面里已经有注入的 window.ethereum。只要此前授权过一次，eth_accounts
+// 就会直接返回地址 —— 此时无需用户再点「连接」，页面一打开就显示已连接。
+// 注意：普通手机浏览器里没有注入，这段逻辑不会生效，仍走 WalletConnect 弹窗。
+function useInjectedWallet() {
+  const [state, setState] = useState({ address: null, provider: null });
+
+  const read = useCallback(async (eth) => {
+    try {
+      const accounts = await eth.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length) {
+        setState({ address: ethers.getAddress(accounts[0]), provider: eth });
+        return;
+      }
+    } catch (e) {
+      // 未授权或钱包拒绝，保持未连接
+    }
+    setState({ address: null, provider: null });
+  }, []);
+
+  useEffect(() => {
+    const eth = typeof window !== 'undefined' ? window.ethereum : null;
+    if (!eth) return;
+    // 用户在本次会话里主动断开过，就不要自动连回去
+    let optedOut = false;
+    try { optedOut = sessionStorage.getItem('ufo_inj_off') === '1'; } catch (e) {}
+    if (optedOut) return;
+
+    read(eth);
+
+    const onAccounts = (accounts) => {
+      if (accounts && accounts.length) {
+        setState({ address: ethers.getAddress(accounts[0]), provider: eth });
+      } else {
+        setState({ address: null, provider: null });
+      }
+    };
+
+    try { eth.on?.('accountsChanged', onAccounts); } catch (e) {}
+    return () => { try { eth.removeListener?.('accountsChanged', onAccounts); } catch (e) {} };
+  }, [read]);
+
+  const reset = useCallback(() => {
+    try { sessionStorage.setItem('ufo_inj_off', '1'); } catch (e) {}
+    setState({ address: null, provider: null });
+  }, []);
+
+  return { address: state.address, provider: state.provider, reset };
+}
+
 // ================= 6. 主应用 =================
 function App() {
   const { open } = useAppKit();
-  const { address, isConnected } = useAppKitAccount();
-  const { walletProvider } = useAppKitProvider('eip155');
+  const { address: appkitAddress, isConnected: appkitConnected, status: appkitStatus } = useAppKitAccount();
+  const { walletProvider: appkitProvider } = useAppKitProvider('eip155');
+
+  // 钱包内置浏览器里的注入式连接（打开即已连接）
+  const { address: injectedAddress, provider: injectedProvider, reset: resetInjected } = useInjectedWallet();
+
+  // 统一出口：AppKit 优先，注入式兜底。下面所有代码都不用改，仍然是 address / isConnected / walletProvider
+  const address = appkitAddress || injectedAddress;
+  const walletProvider = appkitProvider || injectedProvider;
+  const isConnected = appkitConnected || !!injectedAddress;
+
+  // 用户在 AppKit 弹窗里主动断开后，本会话不再用注入式兜底，避免"断开后还显示已连接"
+  const hadAppKitSession = useRef(false);
+  useEffect(() => {
+    if (appkitConnected) {
+      hadAppKitSession.current = true;
+    } else if (hadAppKitSession.current && appkitStatus === 'disconnected') {
+      hadAppKitSession.current = false;
+      resetInjected();
+    }
+  }, [appkitConnected, appkitStatus, resetInjected]);
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
@@ -584,7 +654,12 @@ function App() {
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
         <div>
-          {isConnected ? <AppKitButton balance="hide" /> : (
+          {appkitConnected ? <AppKitButton balance="hide" /> : injectedAddress ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
+              {injectedAddress.slice(0, 6)}…{injectedAddress.slice(-4)}
+            </div>
+          ) : (
             <button onClick={() => open({ view: 'AllWallets' })} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
               Connect Wallet
             </button>
