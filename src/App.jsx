@@ -603,7 +603,7 @@ function App() {
               disabled={walletBusy}
               style={{ background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: walletBusy ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
-              {walletBusy ? 'Connecting…' : 'Connect Wallet'}
+              {walletBusy ? 'Loading wallet…' : 'Connect Wallet'}
             </button>
           )}
         </div>
