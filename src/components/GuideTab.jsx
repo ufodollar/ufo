@@ -70,9 +70,9 @@ export default function GuideTab() {
         <h4 style={cardTitle}>We never hold your funds.</h4>
         <p style={cardText}>
           UFO sits in your own address at all times. The protocol holds no key
-          to your wallet and cannot move your balance. Contract rules are
-          fixed at deployment; this page only builds a transaction and hands
-          it to your wallet to sign — it never takes custody.
+          to your wallet and cannot move your balance. This page only builds a
+          transaction and hands it to your wallet to sign — it never takes
+          custody of anything.
         </p>
         <Panel>
           <b>What that means in practice:</b> closing this tab, losing the

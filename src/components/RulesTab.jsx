@@ -124,10 +124,10 @@ export default function RulesTab() {
         <h4 style={cardTitle}>One fee, stated up front.</h4>
 
         <Panel style={{ marginTop: '10px', padding: '6px 16px' }}>
-          <Row label="Exchange fee" value="0.5% per exchange" />
+          <Row label="Exchange fee" value="0.5% per transaction" />
           <Row label="Approval cost" value="Network gas only" />
           <Row label="Withdrawal fee" value="None" />
-          <Row label="Hidden spread" value="None" last />
+          <Row label="Additional spread" value="None" last />
         </Panel>
 
         <Section>What the rate reflects</Section>
@@ -139,7 +139,8 @@ export default function RulesTab() {
         </p>
 
         <div style={divider}>
-          Fees stay in the pool. They are not transferred to a company wallet.
+          The 0.5% is charged once per transaction and is shown in your wallet
+          before you sign. No other deduction is applied to the amount.
         </div>
       </Card>
 
