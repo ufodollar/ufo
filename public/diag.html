@@ -71,7 +71,7 @@ const sto = row('sto', 'HTTPS 与本地存储');
 
 // 3. api.web3modal.org
 const api = row('api', '钱包列表接口 api.web3modal.org');
-fetch('https://api.web3modal.org/appkit/v1/config?projectId=' + PROJECT_ID, { mode: 'cors' })
+fetch('https://api.web3modal.org/appkit/v1/config?projectId=' + PROJECT_ID + '&st=appkit&sv=diag-1', { mode: 'cors' })
   .then(r => set('api', 'HTTP ' + r.status + '（' + (r.ok ? '可达' : '异常') + '）', r.ok ? 'ok' : 'bad'))
   .catch(e => set('api', '失败：' + (e.message || e.name), 'bad'));
 
