@@ -39,6 +39,14 @@
         position: relative;
       }
 
+      /* AppKit 弹窗（w3m-modal）关闭时不得拦截点击。
+         注意判定条件必须是 class="open"：AppKit 用 classList 开关弹窗，
+         宿主元素上从来没有 open 属性，写成 :not([open]) 会命中所有状态
+         （包括已打开），导致弹窗里每个钱包按钮都点不动。 */
+      w3m-modal:not(.open) {
+        pointer-events: none !important;
+      }
+
       /* 首屏骨架：内联在 HTML 里，不依赖 JS，脚本下来之前就能看到 */
       .boot {
         height: 100%;
