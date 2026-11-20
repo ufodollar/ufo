@@ -9,7 +9,6 @@ import RulesTab from './components/RulesTab';
 
 // ================= 1. 配置 =================
 const CONFIG = {
-  // 🚨 正确的 Vault 合约地址
   VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
   UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
   USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
@@ -106,10 +105,6 @@ const VAULT_ABI = [
   'function paused() view returns (bool)',
   'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
   'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
-];
-
-const BNB_ORACLE_ABI = [
-  'function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)'
 ];
 
 // ================= 3. Reown AppKit 初始化 =================
@@ -264,7 +259,7 @@ function useInjectedWallet() {
 
 // ================= 6. 主应用 =================
 function App() {
-  const { open } = useAppKit();
+  const { open, close } = useAppKit();
   const { address: appkitAddress, isConnected: appkitConnected, status: appkitStatus } = useAppKitAccount();
   const { walletProvider: appkitProvider } = useAppKitProvider('eip155');
 
@@ -286,6 +281,34 @@ function App() {
       resetInjected();
     }
   }, [appkitConnected, appkitStatus, resetInjected]);
+
+  // 「整页点不动」的兜底。
+  // AppKit 的钱包弹窗是 <w3m-modal>，宿主元素铺满全屏、z-index 9999。
+  // 连接失败（例如 WalletConnect 连不上中继）之后，它可能停在 class="open"
+  // 但内部卡片已被清空的状态：宿主仍是 pointer-events:auto，于是页面上每一次
+  // 点击都被这个看不见的空壳吃掉，表现就是「页面好好的，但哪里都点不动」。
+  // 正常弹窗一定有可见的 wui-card，据此识别空壳并强制解封。
+  useEffect(() => {
+    let emptyTicks = 0;
+    const timer = setInterval(() => {
+      const host = document.querySelector('w3m-modal');
+      if (!host || !host.shadowRoot) { emptyTicks = 0; return; }
+      const cs = getComputedStyle(host);
+      if (cs.pointerEvents === 'none' || Number(cs.opacity) < 0.05) { emptyTicks = 0; return; }
+
+      const hasSheet = Array.from(host.shadowRoot.querySelectorAll('wui-card'))
+        .some(el => el.getBoundingClientRect().height > 40);
+      if (hasSheet) { emptyTicks = 0; return; }
+
+      // 连续 3 秒都是空壳才动手：弹窗刚打开的瞬间还没渲染出卡片，不能误杀
+      if (++emptyTicks < 3) return;
+      emptyTicks = 0;
+      host.style.pointerEvents = 'none';
+      host.classList.remove('open');
+      try { close(); } catch (e) { /* 已经关掉了，忽略 */ }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [close]);
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
@@ -330,10 +353,14 @@ function App() {
     }
   }, []);
 
+  // 用函数式更新：这里曾经读的是渲染时闭包里的 history，
+  // 连续两笔交易时后一笔会把前一笔覆盖掉。
   const saveTxToHistory = (txRecord) => {
-    const newHistory = [txRecord, ...history].slice(0, 50);
-    setHistory(newHistory);
-    localStorage.setItem('ufo_tx_history', JSON.stringify(newHistory));
+    setHistory(prev => {
+      const next = [txRecord, ...prev].slice(0, 50);
+      try { localStorage.setItem('ufo_tx_history', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
   };
 
   const ensureBscNetwork = useCallback(async () => {
@@ -501,9 +528,19 @@ function App() {
       return;
     }
 
-    // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+    // 输入金额清洗：末尾小数点（"1."）会让 parseUnits 报错；
+    // 科学计数法（"1e5"，number 输入框允许）同样会抛异常 —— 一旦在 effect 里抛出，
+    // 整棵 React 树会被卸载，页面直接变成不可交互的白屏。这里兜住并提示。
     const cleanInput = inputAmount.toString().replace(/\.$/, '');
-    const inputWei = ethers.parseUnits(cleanInput || '0', 18);
+    let inputWei;
+    try {
+      inputWei = ethers.parseUnits(cleanInput || '0', 18);
+    } catch (err) {
+      setErrorMsg('Invalid amount');
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
+      return;
+    }
 
     if (isBuyingUFO) {
       const usdValue = (inputWei * price18) / 10n ** 18n;
@@ -594,7 +631,7 @@ function App() {
 
       let receipt;
 
-      // 🚨 修复：输入金额清洗，防止 parseUnits 崩溃
+      // 与预览口径一致：清洗末尾小数点，避免 parseUnits 抛错
       const cleanAmount = inputAmount.toString().replace(/\.$/, '');
       const rawAmount = ethers.parseUnits(cleanAmount || '0', 18);
 
@@ -603,7 +640,7 @@ function App() {
         const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
         if (allowance < rawAmount) {
           setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
-          // 🚨 修复：精确授权当前交易额度，取消无限授权
+          // 按本次交易额度精确授权，不申请无限授权
           const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
           await txApprove.wait();
         }
@@ -697,7 +734,7 @@ function App() {
   const navWarning = navStatus === 'ready' && currentNav < CONFIG.NAV_WARNING_THRESHOLD;
 
   return (
-    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
+    <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
 
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
