@@ -67,6 +67,10 @@ export function walletList() {
   const bare = target.replace(/^https?:\/\//, '');
   const enc = encodeURIComponent(target);
 
+  // 纯主机名，无协议、无尾斜杠。Coin98 的 :link 段要求这个形态，
+  // 而且它不解码 —— 见下面 coin98 的注释。
+  const host = bare.replace(/[?#].*$/, '').replace(/\/$/, '');
+
   // Bitget 要在 dapp 链接上追加 _needChain 才会预选网络，否则进 App 后
   // 先弹一层「选择网络」让用户手点。官方文档 Switch Network 一节：
   //   BSC → {DAppLink}?_needChain=bnb
@@ -105,7 +109,13 @@ export function walletList() {
       // 真机验证（Android / BitKeep 9.70.1，2026-11-20）：只有纯 scheme 能进。
       // https://bkcode.vip?action=dapp&url= 是 Branch 中转，未收录站点不被解析，
       // 直接落下载页；换成 scheme 后一次即通，落地链已是 BNB Smart Chain。
-      url: `bitkeep://bkconnect?action=dapp&url=${encBitget}&version=1`,
+      // 文档只写了「在 url 上追加 _needChain」，但三种位置真机都还弹选网面板：
+      //   1. ?c=1&_needChain=bnb    → 匹配不上，忽略
+      //   2. ?_needChain=bnb&c=1    → 打头也不认
+      //   3. 现在：内层保留，同时把 chain / _needChain 提到 deeplink 顶层
+      // 说明这个参数大概只对已在 Bitget DApp 库里的站点生效 —— 未收录的域名
+      // 它仍要问用户一次。真正的解法是 DApp Listing 收录，参数层面到此为止。
+      url: `bitkeep://bkconnect?action=dapp&url=${encBitget}&chain=bnb&_needChain=bnb&version=1`,
       fallback: 'https://web3.bitget.com/',
       scheme: true
     },
@@ -130,16 +140,19 @@ export function walletList() {
     },
     {
       id: 'coin98', name: 'Coin98', direct: true,
-      // 官方文档（docs.coin98.com/developer-guide/deeplink）给的是 https 路径，
-      // 不是 scheme：
+      // 官方文档（docs.coin98.com/developer-guide/deeplink）给的是 https 路径：
       //   https://coin98.com/dapp/:link/:chainId
-      // 之前用第三方资料里的 coin98://browser?url= 是错的 —— App 被拉起来，
-      // 但停在首页，不会加载页面，和 SafePal 的表现一样。
       //
-      // :link 不带协议头（官方示例是 uniswap.com），钱包自己补 https://；
-      // ?c=1 必须一起编码进这一段，否则会被当成 coin98.com 自己的 query 丢掉。
+      // 两次真机排错得到的结论：
+      //   1. coin98://browser?url= 是第三方资料的错误格式 —— App 被拉起但停在首页
+      //   2. :link 段会被【原样拼接】，App 不做 URL 解码。之前传
+      //      ufo-eea.pages.dev%2F%3Fc%3D1，内置浏览器地址栏里显示的就是这串
+      //      字面量，DNS 解析不出来，页面一直转圈。
+      //
+      // 所以这一条只能放裸主机名，任何编码都会坏。代价是带不进 ?c=1，
+      // 自动授权改由 useWallet 里「移动端有注入就自动请求」兜住。
       // 56 = BNB Smart Chain 的 chainId，钱包据此预选网络。
-      url: `https://coin98.com/dapp/${encodeURIComponent(bare)}/56`,
+      url: `https://coin98.com/dapp/${host}/56`,
       fallback: 'https://coin98.com/'
     },
     {

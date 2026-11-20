@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { watchInjectedWallets, AUTOCONNECT_PARAM } from './wallets';
+import { watchInjectedWallets, isMobile, AUTOCONNECT_PARAM } from './wallets';
 
 // 本会话主动断开后，不要再用注入式自动连回去
 const OPTOUT_KEY = 'ufo_inj_off';
@@ -157,8 +157,14 @@ export function useWallet() {
     const seenBefore = readFlag(localStorage, SEEN_KEY);
     let cancelled = false;
 
+    // 移动端 + 有注入 = 一定在某个钱包的内置浏览器里（手机普通浏览器没有 provider）。
+    // 有了这个判据，就算 deeplink 带不进 ?c=1（Coin98 就带不进，它不解码），
+    // 进来后依然能自动走一次授权，不用用户自己去页面上找按钮。
+    // 桌面扩展不在此列 —— 那种情况自动弹框会打扰人。
+    const inWalletBrowser = isMobile();
+
     (async () => {
-      const eth = await waitForProvider(fromWallet ? 3000 : 1200);
+      const eth = await waitForProvider(fromWallet || inWalletBrowser ? 3000 : 1200);
       if (cancelled || !eth) return;
 
       // 1) 已授权：静默恢复，不弹任何东西
@@ -168,7 +174,7 @@ export function useWallet() {
         if (accounts && accounts.length) { accept(accounts, eth); return; }
       } catch (e) { /* 未授权，继续往下判断 */ }
 
-      if (cancelled || (!fromWallet && !seenBefore)) return;
+      if (cancelled || (!fromWallet && !seenBefore && !inWalletBrowser)) return;
 
       // 2) 主动请求授权。部分钱包要求这一步由用户手势触发，
       //    被拒绝就安静收场 —— 页面上那个 Connect 按钮仍然在。
