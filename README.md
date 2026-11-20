@@ -22,7 +22,7 @@
 <hr />
 
 <h2>⚙️ Core Configuration</h2>
-<p>All smart contract addresses and parameters are centralized in the <code>CONFIG</code> object at the top of <code>src/App.jsx</code>. <b>Ensure you are on BSC Mainnet.</b></p>
+<p>All smart contract addresses and parameters are centralized in <code>src/config.js</code>. <b>Ensure you are on BSC Mainnet.</b></p>
 
 <table>
   <tr>
@@ -46,6 +46,21 @@
   BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   FEE_RATE: 0.005, // 0.5% Settlement Fee
 };</code></pre>
+
+<h2>⚡ 首屏加载策略（为什么它这么快）</h2>
+<p>这个页面刻意只让「打开就要用」的东西进主包，其余全部按需下载。</p>
+<table>
+  <tr><th>模块</th><th>何时加载</th><th>大小（min / gzip）</th></tr>
+  <tr><td>React + UI + 读链层</td><td>首屏必需</td><td>≈200KB / 63KB</td></tr>
+  <tr><td>WalletConnect（AppKit）</td><td>点「Connect」且浏览器里没有注入钱包时</td><td>≈1.5MB / 460KB</td></tr>
+  <tr><td>Ethers.js</td><td>点「Swap」第一次签名前（输入金额时即预取）</td><td>≈180KB / 72KB</td></tr>
+</table>
+<p>三个设计决定值得记住，改代码时不要退回去：</p>
+<ol>
+  <li><b>读链不用 ethers。</b> 所有读取都是 <code>eth_call</code>，参数只有 <code>address</code> / <code>uint256</code> 两种，<code>src/chain.js</code> 里手写了编码，省下 270KB。</li>
+  <li><b>AppKit 不能静态 import。</b> 一旦写在文件顶部，1.5MB 就会跟着首屏一起下载，这是之前「网页变慢」的真正原因。</li>
+  <li><b>有钱包注入时永远不加载 AppKit。</b> 钱包 App 内置浏览器、装了扩展的桌面浏览器都走 EIP-1193 直连，零下载、几十毫秒连上。</li>
+</ol>
 
 <h2>🚀 Local Development</h2>
 <blockquote>

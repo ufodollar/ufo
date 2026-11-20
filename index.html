@@ -9,12 +9,11 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-512.png" />
 
-    <!-- 首屏要用到的三个后端，提前建好连接，省掉 3 次 TLS 握手（约 200-400ms） -->
+    <!-- 首屏唯一的后端依赖：RPC。提前建连，省一次 TLS 握手（约 100-200ms）。
+         AppKit / WalletConnect 的域名首屏用不到，等真正要加载钱包弹窗时再预热
+         （见 src/wallet.js 的 warmup），首屏白拿 2 个多余连接没有意义。 -->
     <link rel="preconnect" href="https://rpc.ankr.com" crossorigin />
-    <link rel="preconnect" href="https://api.web3modal.org" crossorigin />
-    <link rel="preconnect" href="https://relay.walletconnect.org" crossorigin />
     <link rel="dns-prefetch" href="https://rpc.ankr.com" />
-    <link rel="dns-prefetch" href="https://api.web3modal.org" />
 
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }

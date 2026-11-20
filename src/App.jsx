@@ -1,64 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ethers } from 'ethers';
-import { useAppKit, useAppKitAccount, useAppKitProvider, createAppKit, AppKitButton } from '@reown/appkit/react';
-import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { bsc } from '@reown/appkit/networks';
+// 首屏不引入 ethers：读链走 chain.js 的裸 JSON-RPC，
+// 只有真正签名时才按需下载 ethers（见 tx.js）。体积对比见 README。
+import { CONFIG } from './config';
+import { formatUnits, parseUnits } from './units';
+import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot } from './chain';
+import { submitSwap, toWei, prefetchTxLibs } from './tx';
+import { useWallet } from './useWallet';
 
 // 引入抽离出来的文案组件
 import RulesTab from './components/RulesTab';
 
-// ================= 0. 生产环境加固 =================
-// AppKit 把 INITIALIZE / CONNECT_SUCCESS 硬编码为强制上报事件，
-// features.analytics:false 只对自定义事件生效，因此在受限网络下每次打开
-// 弹窗都会向 pulse.walletconnect.org 发一次注定失败的请求。这里在初始化前
-// 短路该域名：不再向第三方发送用户行为数据，控制台也不再出现这条网络错误。
-// 只影响遥测上报，钱包连接走 relay WebSocket，不受影响。
-(() => {
-  if (typeof window === 'undefined' || window.__ufoHardened) return;
-  window.__ufoHardened = true;
-
-  const nativeFetch = window.fetch.bind(window);
-  window.fetch = function (input, init) {
-    const url = typeof input === 'string' ? input : (input && input.url) || '';
-    if (url.indexOf('pulse.walletconnect.org') !== -1) {
-      return Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    }
-    return nativeFetch(input, init);
-  };
-
-  // AppKit 的批量事件走 navigator.sendBeacon（EventsController._submitPendingEvents），
-  // 不经过 fetch，必须单独拦一次。返回 true = 已排队，它不会重试。
-  const nativeBeacon = navigator.sendBeacon && navigator.sendBeacon.bind(navigator);
-  if (nativeBeacon) {
-    navigator.sendBeacon = function (url, data) {
-      if (String(url).indexOf('pulse.walletconnect.org') !== -1) return true;
-      return nativeBeacon(url, data);
-    };
-  }
-
-  // 中继/网络类失败已经由界面提示（提示条 + 弹窗兜底），
-  // 不再把未捕获的 rejection 抛进控制台
-  window.addEventListener('unhandledrejection', (e) => {
-    e.preventDefault();
-    const r = e.reason;
-    console.warn('[ufo] suppressed:', (r && (r.message || r)) || 'unknown');
-  });
-})();
-
-// ================= 1. 配置 =================
-const CONFIG = {
-  VAULT_ADDRESS: '0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2',
-  UFO_ADDRESS: '0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB',
-  USDT_ADDRESS: '0x55d398326f99059fF775485246999027B3197955',
-  USDC_ADDRESS: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-  BNB_ORACLE: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
-
-  FEE_RATE: 0.005,
-  PRICE_DECIMALS: 18,
-  MAX_PRICE_DEVIATION: 0.02,
-  NAV_WARNING_THRESHOLD: 0.99,
-};
-
+// ================= 1. 币种图标 =================
 // 币种图标：Tether / Circle 官方 logo 的矢量路径，内联成 data URI。
 // 不引用外部图床（assets.coingecko.com 在国内实测 20 秒超时），
 // 也不用「字母 T / $」替代——这里就是官方标志本身的形状。
@@ -80,90 +32,7 @@ const STABLECOINS = [
 
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
 
-// 使用 Ankr RPC 节点
-// staticNetwork：跳过启动时的 eth_chainId 探测，省一个 RTT，首屏价格能早 100-300ms 出来
-const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';
-const rpcProvider = new ethers.JsonRpcProvider(RPC_URL, 56, { staticNetwork: true });
-
-// 一次 JSON-RPC batch 取回钱包的全部余额：BNB + USDT + USDC + UFO + BNB 价格。
-// 原来要走 6 次往返（其中 BNB 还绕道钱包自己的 RPC，最慢），现在压成 1 次。
-async function fetchWalletSnapshot(owner) {
-  const pad = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
-  const erc20 = (token) => ({ to: token, data: '0x70a08231' + pad(owner) });
-
-  const batch = [
-    { jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [owner, 'latest'] },
-    { jsonrpc: '2.0', id: 2, method: 'eth_call', params: [erc20(CONFIG.USDT_ADDRESS), 'latest'] },
-    { jsonrpc: '2.0', id: 3, method: 'eth_call', params: [erc20(CONFIG.USDC_ADDRESS), 'latest'] },
-    { jsonrpc: '2.0', id: 4, method: 'eth_call', params: [erc20(CONFIG.UFO_ADDRESS), 'latest'] },
-    { jsonrpc: '2.0', id: 5, method: 'eth_call', params: [{ to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }, 'latest'] }
-  ];
-
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batch)
-  });
-  const json = await res.json();
-  if (!Array.isArray(json)) throw new Error('RPC batch rejected');
-
-  const byId = {};
-  for (const item of json) byId[item.id] = item;
-  const resultOf = (id) => (byId[id] && byId[id].result ? byId[id].result : null);
-  const units = (hex) => (hex && hex !== '0x' ? parseFloat(ethers.formatUnits(BigInt(hex), 18)) : null);
-
-  const out = { bnb: null, USDT: null, USDC: null, UFO: null, bnbPrice: null };
-
-  const bnbHex = resultOf(1);
-  if (bnbHex) out.bnb = parseFloat(ethers.formatEther(BigInt(bnbHex)));
-  out.USDT = units(resultOf(2));
-  out.USDC = units(resultOf(3));
-  out.UFO = units(resultOf(4));
-
-  const lrd = resultOf(5);
-  if (lrd && lrd.length >= 2 + 128) {
-    const answer = BigInt('0x' + lrd.slice(2 + 64, 2 + 128));
-    out.bnbPrice = parseFloat(ethers.formatUnits(answer, 8));
-  }
-  return out;
-}
-
-// ================= 2. ABIs =================
-const ERC20_ABI = [
-  'function balanceOf(address) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)'
-];
-
-const VAULT_ABI = [
-  'function deposit(address tokenAddress, uint256 amount)',
-  'function withdraw(address tokenAddress, uint256 ufoAmount)',
-  'function getExchangeRate() view returns (uint256)',
-  'function getPrice(address tokenAddress) view returns (uint256)',
-  'function paused() view returns (bool)',
-  'event Deposited(address indexed user, address indexed token, uint256 amount, uint256 ufoAmount, uint256 feeAmount)',
-  'event Withdrawn(address indexed user, address indexed token, uint256 ufoAmount, uint256 amount, uint256 feeAmount)'
-];
-
-// ================= 3. Reown AppKit 初始化 =================
-try {
-  createAppKit({
-    adapters: [new EthersAdapter()],
-    networks: [bsc],
-    metadata: {
-      name: 'UFO Dollar',
-      description: 'Value-Invisible Settlement Stablecoin',
-      url: window.location.origin,
-      icons: ['https://ufo-eea.pages.dev/icon-512.png'],
-      redirect: { native: 'https://ufo-eea.pages.dev', universal: 'https://ufo-eea.pages.dev', linkMode: true },
-    },
-    projectId: 'd6431212399f6c487b364387859983ea',
-    features: { analytics: false, allWallets: { showWallets: true } },
-    featuredWalletIds: ['a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393'],
-    enableWalletConnect: true,
-    enableInjected: true,
-  });
-} catch (e) { window.__ufoAppKitFailed = true; console.warn('[ufo] AppKit init failed:', e && e.message); }
+// ================= 2. 钱包（见 useWallet.js，AppKit 按需加载） =================
 
 // ================= 4. 样式与图标 =================
 const FONT_STYLE = {
@@ -190,14 +59,13 @@ const UfoIcon = ({ size = 36 }) => (
   </svg>
 );
 
-// ================= 5. 核心读取逻辑 =================
+// ================= 3. 核心读取逻辑 =================
 async function fetchVaultPrice(tokenAddress) {
-  const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
   let lastError = null;
 
   for (let i = 0; i < 3; i++) {
     try {
-      const price18 = await vault.getPrice(tokenAddress);
+      const price18 = await readPrice(tokenAddress);
       return {
         price18,
         priceFloat: Number(price18) / 1e18,
@@ -244,81 +112,14 @@ async function fetchStablecoinPrices() {
   return result;
 }
 
-// ================= 5.5 注入式钱包自动连接 =================
-// 场景：用户从钱包 App（MetaMask / Trust Wallet / SafePal / Phantom）的「内置浏览器」
-// 打开本站，页面里已经有注入的 window.ethereum。只要此前授权过一次，eth_accounts
-// 就会直接返回地址 —— 此时无需用户再点「连接」，页面一打开就显示已连接。
-// 注意：普通手机浏览器里没有注入，这段逻辑不会生效，仍走 WalletConnect 弹窗。
-function useInjectedWallet() {
-  const [state, setState] = useState({ address: null, provider: null });
-
-  const read = useCallback(async (eth) => {
-    try {
-      const accounts = await eth.request({ method: 'eth_accounts' });
-      if (accounts && accounts.length) {
-        setState({ address: ethers.getAddress(accounts[0]), provider: eth });
-        return;
-      }
-    } catch (e) {
-      // 未授权或钱包拒绝，保持未连接
-    }
-    setState({ address: null, provider: null });
-  }, []);
-
-  useEffect(() => {
-    const eth = typeof window !== 'undefined' ? window.ethereum : null;
-    if (!eth) return;
-    // 用户在本次会话里主动断开过，就不要自动连回去
-    let optedOut = false;
-    try { optedOut = sessionStorage.getItem('ufo_inj_off') === '1'; } catch (e) {}
-    if (optedOut) return;
-
-    read(eth);
-
-    const onAccounts = (accounts) => {
-      if (accounts && accounts.length) {
-        setState({ address: ethers.getAddress(accounts[0]), provider: eth });
-      } else {
-        setState({ address: null, provider: null });
-      }
-    };
-
-    try { eth.on?.('accountsChanged', onAccounts); } catch (e) {}
-    return () => { try { eth.removeListener?.('accountsChanged', onAccounts); } catch (e) {} };
-  }, [read]);
-
-  const reset = useCallback(() => {
-    try { sessionStorage.setItem('ufo_inj_off', '1'); } catch (e) {}
-    setState({ address: null, provider: null });
-  }, []);
-
-  return { address: state.address, provider: state.provider, reset };
-}
-
 // ================= 6. 主应用 =================
 function App() {
-  const { open, close } = useAppKit();
-  const { address: appkitAddress, isConnected: appkitConnected, status: appkitStatus } = useAppKitAccount();
-  const { walletProvider: appkitProvider } = useAppKitProvider('eip155');
-
-  // 钱包内置浏览器里的注入式连接（打开即已连接）
-  const { address: injectedAddress, provider: injectedProvider, reset: resetInjected } = useInjectedWallet();
-
-  // 统一出口：AppKit 优先，注入式兜底。下面所有代码都不用改，仍然是 address / isConnected / walletProvider
-  const address = appkitAddress || injectedAddress;
-  const walletProvider = appkitProvider || injectedProvider;
-  const isConnected = appkitConnected || !!injectedAddress;
-
-  // 用户在 AppKit 弹窗里主动断开后，本会话不再用注入式兜底，避免"断开后还显示已连接"
-  const hadAppKitSession = useRef(false);
-  useEffect(() => {
-    if (appkitConnected) {
-      hadAppKitSession.current = true;
-    } else if (hadAppKitSession.current && appkitStatus === 'disconnected') {
-      hadAppKitSession.current = false;
-      resetInjected();
-    }
-  }, [appkitConnected, appkitStatus, resetInjected]);
+  // 注入式优先，没有注入才按需加载 AppKit —— 细节见 useWallet.js
+  const {
+    address, provider: walletProvider, isConnected,
+    busy: walletBusy, error: walletError,
+    connect, close: closeWallets, disconnect
+  } = useWallet();
 
   // 提示条内容（钱包连接被中断时显示）
   const [notice, setNotice] = useState('');
@@ -346,11 +147,11 @@ function App() {
       emptyTicks = 0;
       host.style.pointerEvents = 'none';
       host.classList.remove('open');
-      try { close(); } catch (e) { /* 已经关掉了，忽略 */ }
+      try { closeWallets(); } catch (e) { /* 已经关掉了，忽略 */ }
       setNotice('Wallet connection was interrupted. Please retry, or open this page inside your wallet app.');
     }, 1000);
     return () => clearInterval(timer);
-  }, [close]);
+  }, [closeWallets]);
 
   // 提示条 8 秒后自动消失，pointer-events:none 保证它永远不会挡住点击
   useEffect(() => {
@@ -359,8 +160,14 @@ function App() {
     return () => clearTimeout(t);
   }, [notice]);
 
+  // 连接器自身报错（例如 AppKit chunk 拉不下来）也走同一条提示条
+  useEffect(() => {
+    if (walletError) setNotice(walletError);
+  }, [walletError]);
+
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
@@ -382,11 +189,8 @@ function App() {
     let alive = true;
     (async () => {
       try {
-        const raw = await rpcProvider.send('eth_call', [
-          { to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }, 'latest'
-        ]);
-        const answer = BigInt('0x' + raw.slice(66, 130)); // 第 2 个字 = answer(int256)
-        if (alive && answer > 0n) setBnbPrice(parseFloat(ethers.formatUnits(answer, 8)));
+        const price = await readBnbPrice();
+        if (alive) setBnbPrice(price);
       } catch (e) {
         // 预言机不可达时保持占位符，不编造价格
       }
@@ -464,11 +268,9 @@ function App() {
   }, [isConnected, walletProvider, ensureBscNetwork]);
 
   const fetchNav = useCallback(async () => {
-    const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, rpcProvider);
     for (let i = 0; i < 3; i++) {
       try {
-        const rate = await vault.getExchangeRate();
-        const nav = parseFloat(ethers.formatUnits(rate, 18));
+        const nav = await readNav();
         if (!isFinite(nav) || nav <= 0) throw new Error("Invalid NAV");
         setCurrentNav(nav);
         setNavStatus('ready');
@@ -507,16 +309,7 @@ function App() {
     if (balanceRefreshingRef.current) return;
     balanceRefreshingRef.current = true;
     try {
-      const vaultUsdt = new ethers.Contract(CONFIG.USDT_ADDRESS, ERC20_ABI, rpcProvider);
-      const vaultUsdc = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, rpcProvider);
-      const [vUsdt, vUsdc] = await Promise.all([
-        vaultUsdt.balanceOf(CONFIG.VAULT_ADDRESS),
-        vaultUsdc.balanceOf(CONFIG.VAULT_ADDRESS)
-      ]);
-      setVaultBalances({
-        USDT: parseFloat(ethers.formatUnits(vUsdt, 18)),
-        USDC: parseFloat(ethers.formatUnits(vUsdc, 18))
-      });
+      setVaultBalances(await readVaultBalances());
     } catch (error) {
       console.warn('[ufo] vault balances unavailable:', error && error.message);
     } finally {
@@ -527,7 +320,7 @@ function App() {
   const fetchUserBalances = useCallback(async () => {
     if (!address) return;
     try {
-      const snap = await fetchWalletSnapshot(address);
+      const snap = await readWalletSnapshot(address);
 
       if (snap.bnb !== null) setBnbBal(snap.bnb.toFixed(6));
       if (snap.bnbPrice !== null) setBnbPrice(snap.bnbPrice);
@@ -572,6 +365,9 @@ function App() {
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
+    // 已经开始输金额，就说明下一秒可能要签交易了 —— 此刻把 ethers 拉下来，
+    // 等真正点按钮时不必再等 100KB 的下载
+    if (isConnected && input > 0) prefetchTxLibs();
     if (isNaN(input) || input <= 0 || !isFinite(input)) {
       setOutputAmount('0.000000');
       setFeeAmount('0.000000');
@@ -601,7 +397,7 @@ function App() {
     const cleanInput = inputAmount.toString().replace(/\.$/, '');
     let inputWei;
     try {
-      inputWei = ethers.parseUnits(cleanInput || '0', 18);
+      inputWei = parseUnits(cleanInput || '0', 18);
     } catch (err) {
       setErrorMsg('Invalid amount');
       setOutputAmount('0.000000');
@@ -622,8 +418,8 @@ function App() {
         setErrorMsg('');
       }
 
-      setFeeAmount(parseFloat(ethers.formatUnits(feeUsd, 18)).toFixed(6));
-      setOutputAmount(parseFloat(ethers.formatUnits(ufoAmount, 18)).toFixed(6));
+      setFeeAmount(parseFloat(formatUnits(feeUsd, 18)).toFixed(6));
+      setOutputAmount(parseFloat(formatUnits(ufoAmount, 18)).toFixed(6));
     } else {
       const feeUfo = (inputWei * 50n) / 10000n;
       // 1 UFO = 1 USD 面值，因此 UFO 计价的费用数值上等于 USD 金额
@@ -635,7 +431,7 @@ function App() {
       const totalOut = tokenOut + feeTokens;
 
       const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
-      const tokenOutFloat = parseFloat(ethers.formatUnits(totalOut, 18));
+      const tokenOutFloat = parseFloat(formatUnits(totalOut, 18));
       if (tokenOutFloat > currentVaultBal) {
         setErrorMsg(`Insufficient ${selectedStablecoin.symbol} in Vault. Available: ${currentVaultBal.toFixed(2)}`);
       } else {
@@ -647,14 +443,14 @@ function App() {
         }
       }
 
-      setFeeAmount(parseFloat(ethers.formatUnits(feeUsd, 18)).toFixed(6));
-      setOutputAmount(parseFloat(ethers.formatUnits(tokenOut, 18)).toFixed(6));
+      setFeeAmount(parseFloat(formatUnits(feeUsd, 18)).toFixed(6));
+      setOutputAmount(parseFloat(formatUnits(tokenOut, 18)).toFixed(6));
     }
   }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
 
   const handleAction = async () => {
     if (isProcessing) return;
-    if (!isConnected || !walletProvider) return open({ view: 'AllWallets' });
+    if (!isConnected || !walletProvider) return connect();
 
     const isNetworkOk = await ensureBscNetwork();
     if (!isNetworkOk) return;
@@ -684,74 +480,21 @@ function App() {
     };
 
     try {
-      const provider = new ethers.BrowserProvider(walletProvider);
-      const bnbBalance = await provider.getBalance(address);
-      if (parseFloat(ethers.formatEther(bnbBalance)) < 0.0005) {
-        throw new Error('Insufficient BNB for gas.');
-      }
+      // ethers 在这一刻才被下载，且只在第一次点按钮时发生
+      const result = await submitSwap({
+        walletProvider,
+        owner: address,
+        tokenAddress: selectedStablecoin.address,
+        amountWei: toWei(inputAmount),
+        isBuy: isBuyingUFO,
+        onStage: setTxMsg
+      });
 
-      const signer = await provider.getSigner();
-      const vault = new ethers.Contract(CONFIG.VAULT_ADDRESS, VAULT_ABI, signer);
-
-      const isPaused = await vault.paused();
-      if (isPaused) throw new Error('The vault is currently paused for maintenance. Please try again later.');
-
-      let receipt;
-
-      // 与预览口径一致：清洗末尾小数点，避免 parseUnits 抛错
-      const cleanAmount = inputAmount.toString().replace(/\.$/, '');
-      const rawAmount = ethers.parseUnits(cleanAmount || '0', 18);
-
-      if (isBuyingUFO) {
-        const tokenContract = new ethers.Contract(selectedStablecoin.address, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(address, CONFIG.VAULT_ADDRESS);
-        if (allowance < rawAmount) {
-          setTxMsg(`Approving ${selectedStablecoin.symbol}...`);
-          // 按本次交易额度精确授权，不申请无限授权
-          const txApprove = await tokenContract.approve(CONFIG.VAULT_ADDRESS, rawAmount);
-          await txApprove.wait();
-        }
-        setTxMsg('Swapping...');
-        const tx = await vault.deposit(selectedStablecoin.address, rawAmount);
-        receipt = await tx.wait();
-        txRecord.txHash = tx.hash;
-
-        for (const log of receipt.logs) {
-          try {
-            const parsed = vault.interface.parseLog(log);
-            if (parsed && parsed.name === 'Deposited') {
-              const args = parsed.args;
-              txRecord.receiveAmount = parseFloat(ethers.formatUnits(args.ufoAmount, 18)).toFixed(6);
-              txRecord.payAmount = parseFloat(ethers.formatUnits(args.amount, 18)).toFixed(6);
-              break;
-            }
-          } catch (_) {}
-        }
-
-        txRecord.status = 'Success';
-        setTxMsg('Swap Successful!');
-
-      } else {
-        setTxMsg('Redeeming...');
-        const tx = await vault.withdraw(selectedStablecoin.address, rawAmount);
-        receipt = await tx.wait();
-        txRecord.txHash = tx.hash;
-
-        for (const log of receipt.logs) {
-          try {
-            const parsed = vault.interface.parseLog(log);
-            if (parsed && parsed.name === 'Withdrawn') {
-              const args = parsed.args;
-              txRecord.receiveAmount = parseFloat(ethers.formatUnits(args.amount, 18)).toFixed(6);
-              txRecord.payAmount = parseFloat(ethers.formatUnits(args.ufoAmount, 18)).toFixed(6);
-              break;
-            }
-          } catch (_) {}
-        }
-
-        txRecord.status = 'Success';
-        setTxMsg('Redeem Successful!');
-      }
+      txRecord.txHash = result.hash;
+      txRecord.payAmount = result.paid;
+      if (result.received) txRecord.receiveAmount = result.received;
+      txRecord.status = 'Success';
+      setTxMsg(isBuyingUFO ? 'Swap Successful!' : 'Redeem Successful!');
 
       saveTxToHistory(txRecord);
       setInputAmount('');
@@ -823,18 +566,46 @@ function App() {
           </div>
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
-        <div>
-          {appkitConnected ? <AppKitButton balance="hide" /> : injectedAddress ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
-              {injectedAddress.slice(0, 6)}…{injectedAddress.slice(-4)}
-            </div>
+        <div style={{ position: 'relative' }}>
+          {isConnected ? (
+            <>
+              <button
+                onClick={() => setShowAccountMenu(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}
+              >
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
+                {address.slice(0, 6)}…{address.slice(-4)}
+              </button>
+              {showAccountMenu && (
+                <>
+                  <div onClick={() => setShowAccountMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '190px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
+                    <a
+                      href={`https://bscscan.com/address/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowAccountMenu(false)}
+                      style={{ display: 'block', padding: '12px 16px', fontSize: '13px', color: '#1e293b', textDecoration: 'none', borderBottom: '1px solid #f1f5f9' }}
+                    >
+                      View on BscScan
+                    </a>
+                    <button
+                      onClick={() => { setShowAccountMenu(false); disconnect(); }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 16px', fontSize: '13px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <button
-              onClick={() => open({ view: 'AllWallets' })}
-              style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+              onClick={connect}
+              disabled={walletBusy}
+              style={{ background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px', cursor: walletBusy ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
-              Connect Wallet
+              {walletBusy ? 'Connecting…' : 'Connect Wallet'}
             </button>
           )}
         </div>
