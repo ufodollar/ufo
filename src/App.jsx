@@ -306,9 +306,17 @@ function App() {
       host.style.pointerEvents = 'none';
       host.classList.remove('open');
       try { close(); } catch (e) { /* 已经关掉了，忽略 */ }
+      setNotice('Wallet connection was interrupted. Please retry, or open this page inside your wallet app.');
     }, 1000);
     return () => clearInterval(timer);
   }, [close]);
+
+  // 提示条 8 秒后自动消失，pointer-events:none 保证它永远不会挡住点击
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
@@ -340,6 +348,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [notice, setNotice] = useState('');
 
   const [history, setHistory] = useState([]);
 
@@ -738,6 +747,14 @@ function App() {
 
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0 }}></div>
+
+      {notice && (
+        <div style={{ position: 'fixed', top: '12px', left: '12px', right: '12px', zIndex: 10001, pointerEvents: 'none',
+                      background: '#1e293b', color: '#fff', fontSize: '12.5px', lineHeight: 1.5, padding: '10px 14px',
+                      borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
+          {notice}
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 10, flexShrink: 0 }}>
