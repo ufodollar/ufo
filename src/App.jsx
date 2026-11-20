@@ -282,6 +282,9 @@ function App() {
     }
   }, [appkitConnected, appkitStatus, resetInjected]);
 
+  // 提示条内容（钱包连接被中断时显示）
+  const [notice, setNotice] = useState('');
+
   // 「整页点不动」的兜底。
   // AppKit 的钱包弹窗是 <w3m-modal>，宿主元素铺满全屏、z-index 9999。
   // 连接失败（例如 WalletConnect 连不上中继）之后，它可能停在 class="open"
@@ -348,7 +351,6 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [notice, setNotice] = useState('');
 
   const [history, setHistory] = useState([]);
 
