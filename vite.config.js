@@ -11,20 +11,11 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
-    chunkSizeWarningLimit: 1500,
-    rollupOptions: {
-      output: {
-        // 把体积最大的两个依赖拆成独立文件：
-        // 1) 浏览器可以并行下载（走 modulepreload）
-        // 2) 以后只改业务代码时，用户不必重新下载这几百 KB 的第三方库
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('@reown') || id.includes('walletconnect') || id.includes('viem')) return 'wallet'
-          if (id.includes('ethers') || id.includes('@noble') || id.includes('@adraffy')) return 'ethers'
-          if (id.includes('react')) return 'react'
-          return 'vendor'
-        }
-      }
-    }
+    // 单包在 2MB 上下（AppKit + WalletConnect 占大头），是该技术栈的常态，放宽告警阈值
+    chunkSizeWarningLimit: 2500
+    // 这里刻意不做 manualChunks：
+    // 按 @reown / ethers / viem 分包实测，viem 被整包纳入且模块在 chunk 间重复，
+    // 总体积从 1.98MB 涨到 4.58MB（gzip 570KB -> 1.27MB）。
+    // 单包 + _headers 长缓存（immutable）比拆包更划算。
   }
 })
