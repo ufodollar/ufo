@@ -81,19 +81,8 @@ export function walletList() {
   const bitgetTarget = `${currentUrl()}?_needChain=bnb&${AUTOCONNECT_PARAM}=1`;
   const encBitget = encodeURIComponent(bitgetTarget);
 
-  // Trust 的 open_url 在官方文档里是【裸 URL】，不做 percent-encoding：
-  //   trust://open_url?coin_id=60&url=https://compound.finance
-  //
-  // 2026-11-22 真机结论（Android）：
-  //   · coin_id=714（BNB 的 SLIP-44）→ 浏览器根本不拉起，点了没反应
-  //   · coin_id=60  → 进浏览器，但传 encodeURIComponent 过的 url 会白屏：
-  //     App 不 decode，拿到的是字面量 "https%3A%2F%2F…"，解析不出地址，
-  //     于是停在一个空白页。地址栏空、页面全白，正是这个表现。
-  //
-  // 因此这里裸拼。URL 里只能有 "?" 不能有 "&"，否则会被外层 query 截断；
-  // 我们的落地参数是 ?c=1，正好没有 &。进站后 useWallet 的 ensureBSC 会把
-  // 网络从 Ethereum 切到 0x38，coin_id 用 60 不影响最终链。
-  const trustTarget = `${currentUrl()}?${AUTOCONNECT_PARAM}=1`;
+  // Trust 无法用 deep link 带 URL 进站（见该条目注释），改为复制 + 粘贴，
+  // 因此这里不再需要单独拼它的落地地址 —— target 就是 autoconnectUrl()。
 
   return [
     {
@@ -105,21 +94,24 @@ export function walletList() {
     },
     {
       id: 'trust', name: 'Trust Wallet', direct: true,
-      // 三次真机排查的完整结论（Android，2026-11-22）：
-      //   1. https://link.trustwallet.com/open_url —— 会先被浏览器当网页加载，
-      //      落地页再引导「Open in app」，那一步参数已丢，App 只收到「启动」，
-      //      停在首页。
-      //   2. switch 到 trust:// + encodeURIComponent(url) —— 浏览器拉起来了，
-      //      但白屏、地址栏空白。原因是 App 不 decode，拿到字面量
-      //      "https%3A%2F%2F…" 解析不出地址。
-      //   3. intent:// + package —— 部分 ROM 上被系统静默拦截，点了没反应。
+      // 四次真机排查的最终结论（Android，2026-11-22）：
+      //   1. https://link.trustwallet.com/open_url —— 落地页中转，参数丢失，停首页
+      //   2. trust:// + encodeURIComponent(url) —— 浏览器打开，白屏
+      //   3. intent:// + package —— 部分 ROM 被拦，点了没反应
+      //   4. trust:// + 裸 url（官方文档形态，coin_id 60/714/20000714 全试）
+      //      —— 浏览器都打开了，但一律白屏
       //
-      // 最终形态：trust:// + coin_id=60 + 裸 URL，见上方 trustTarget 注释。
-      // iOS 端无解：Trust Wallet 自 2025-06 起按 App Store 4.7 移除了内置
-      // DApp 浏览器，deep link 只能拉起 App。标 noBrowser，点击时直接说明。
-      url: `trust://open_url?coin_id=60&url=${trustTarget}`,
+      // 决定性对照：用 app.uniswap.org 走同一条链接，同样白屏。所以不是
+      // 我们的域名、不是参数编码、不是链 ID —— 是这个 build 收到 open_url
+      // 后只切到浏览器面板，不消费 url。参数层面到此为止。
+      //
+      // 退化为可用的路径：direct:false —— 点击时把链接写进剪贴板，再拉起
+      // App，用户在地址栏粘贴一次。浏览器已经会打开，只差一次粘贴。
+      id: 'trust', name: 'Trust Wallet', direct: false, manual: true,
+      url: 'trust://',
+      fallback: 'https://trustwallet.com/download',
       scheme: true,
-      fallback: `https://link.trustwallet.com/open_url?coin_id=60&url=${trustTarget}`,
+      pasteHint: 'Link copied. In Trust Wallet, tap the address bar and paste.',
       noBrowser: platform() === 'ios'
     },
     {
@@ -199,6 +191,10 @@ export function openInWallet(wallet) {
   // intent:// 自带 browser_fallback_url，系统会处理「没装」的情况，
   // 不需要我们再计时判断
   if (wallet.intent) { location.href = wallet.url; return; }
+
+  // 只能拉起 App、不能自带 URL 的类型（Trust）：直接跳，不设兜底计时。
+  // 否则 1.8 秒后会把已经进 App 的用户甩到下载站。
+  if (wallet.manual) { location.href = wallet.url; return; }
 
   if (!wallet.scheme) {
     // https：装了 App 由系统接管，没装就是下载页
