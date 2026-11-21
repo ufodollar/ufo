@@ -81,23 +81,23 @@ export default function GuideTab() {
         </Panel>
       </Card>
 
-      {/* ================= 4. 链上汇率 · 天平 ================= */}
+      {/* ================= 4. 定价 · 天平 ================= */}
       <Card
-        title="On-Chain Rates"
+        title="Pricing"
         icon="scale"
         gradient="linear-gradient(145deg, #8b5cf6 0%, #7c3aed 55%, #5b21b6 100%)"
         glow="rgba(124,58,237,0.50)"
       >
-        <h4 style={cardTitle}>Every quote is computed by the contract.</h4>
+        <h4 style={cardTitle}>Priced in dollars. Quoted on-chain.</h4>
         <p style={cardText}>
-          The exchange rate is read and calculated on-chain, never on a
-          private server. USDT and USDC are valued at their live market price
-          rather than assumed to be exactly $1.00, so a quote reflects what
-          the pool actually holds at that moment.
+          UFO uses the US dollar as its unit of account, and 1 UFO equals
+          1 USD. The rate is not set by a private server — every quote is
+          computed by the contract itself, so what you see here is what the
+          chain will execute.
         </p>
         <div style={divider}>
-          You can verify any quote yourself by calling the Vault's read
-          functions on BscScan.
+          Any quote can be verified independently by calling the Vault's
+          read functions on BscScan.
         </div>
       </Card>
 
@@ -165,14 +165,18 @@ export default function GuideTab() {
       >
         <h4 style={cardTitle}>A settlement instrument, not an investment.</h4>
         <p style={cardText}>
-          UFO offers no yield and no speculative return. It is not a deposit
-          and carries no guarantee of redemption at any particular price or
-          time. Users are solely responsible for ensuring their use of the
-          protocol complies with local law. UFO is not offered to persons in
-          restricted jurisdictions including <b>Afghanistan, Algeria,
-          Bangladesh, Belarus, Bolivia, China, Cuba, Egypt, Iran, Iraq,
-          Morocco, Nepal, North Korea, Qatar, Russia, Syria, Tunisia, and
-          Venezuela</b>.
+          UFO offers no yield and no speculative return. It is not a deposit.
+          Redemption is settled at 1 UFO = 1 USD and is subject to pool
+          liquidity, so processing may be delayed or limited. Users are solely
+          responsible for ensuring their use of the protocol complies with
+          local law.
+        </p>
+        <p style={{ ...cardText, marginTop: '10px' }}>
+          UFO is not offered to persons in restricted jurisdictions including{' '}
+          <b>Afghanistan, Algeria, Bangladesh, Belarus, Bolivia, China, Cuba,
+          Egypt, Iran, Iraq, Morocco, Nepal, North Korea, Qatar, Russia, Syria,
+          Tunisia, and Venezuela</b>, nor to residents of any jurisdiction that
+          has established a stablecoin issuance licensing regime.
         </p>
       </Card>
     </div>
