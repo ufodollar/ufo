@@ -9,8 +9,7 @@ export const CONFIG = {
 
   FEE_RATE: 0.005,
   PRICE_DECIMALS: 18,
-  MAX_PRICE_DEVIATION: 0.02,
-  NAV_WARNING_THRESHOLD: 0.99
+  MAX_PRICE_DEVIATION: 0.02
 };
 
 export const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';

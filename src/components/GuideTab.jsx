@@ -46,12 +46,12 @@ export default function GuideTab() {
         </h4>
 
         <p style={cardText}>
-          Every transfer is written to BNB Chain — sender, recipient, amount
-          and time. What the ledger never carries is a dollar figure: UFO has
-          no public price feed, so wallets and explorers read it as <b>$0.00</b>.
-          Automated drainers rank addresses by visible balance and skip the
-          ones that do not look worth the gas. A <b>$0.00</b> balance never
-          reaches the front of that queue.
+          Every transfer is written to BNB Chain: sender, recipient, amount,
+          timestamp. What the ledger never carries is a dollar figure. UFO has
+          no public price feed, so wallets and explorers print <b>$0.00</b>.
+          Drainers sweep addresses, rank them by visible balance, and spend gas
+          only on the ones worth draining. A wallet that reads <b>$0.00</b> is
+          ranked last and skipped.
         </p>
 
         <Panel>
@@ -74,9 +74,9 @@ export default function GuideTab() {
         </h4>
 
         <p style={cardText}>
-          The dollar serves as the unit of account, and every quote is computed
-          by the contract itself rather than by a private server — so what this
-          page shows is what the chain will execute.
+          The dollar is the unit of account. Every quote is read from the
+          contract on each load; this page prints the number and cannot set it.
+          What you read here is what the chain executes.
         </p>
 
         <div style={divider}>
@@ -102,9 +102,9 @@ export default function GuideTab() {
         </p>
 
         <Panel>
-          <b>Every address is on the page.</b> The Vault and token addresses
-          are printed where you can compare them against BscScan before you
-          sign.
+          <b>Both contract addresses are printed on every page.</b> Compare
+          them against BscScan before you sign. A mismatch means you are on a
+          copy of this site.
         </Panel>
       </Card>
 
@@ -118,8 +118,9 @@ export default function GuideTab() {
         <h4 style={cardTitle}>Send value like a message.</h4>
 
         <p style={cardText}>
-          Settlement lands in the recipient's wallet in seconds. No banking
-          hours, and no intermediary holding the payment while it clears.
+          A transfer clears in one BNB Chain block. No banking hours, no
+          cut-off time, and no intermediary holding the payment while it
+          clears.
         </p>
       </Card>
 
@@ -178,8 +179,8 @@ export default function GuideTab() {
         <h4 style={cardTitle}>A settlement instrument, not an investment.</h4>
 
         <p style={cardText}>
-          UFO offers no yield and no speculative return. It is not a deposit.
-          Redemption is settled at 1 UFO = 1 USD and is paid from the
+          UFO pays no yield and returns no speculative profit. It is not a
+          deposit. Redemption settles at 1 UFO = 1 USD and is paid from the
           stablecoins the pool holds. Users are solely responsible for
           ensuring their use of the protocol complies with local law.
         </p>

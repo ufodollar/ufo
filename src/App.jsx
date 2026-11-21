@@ -7,6 +7,7 @@ import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot
 import { submitSwap, toWei, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
 import WalletPicker from './components/WalletPicker';
+import TokenMenu from './components/TokenMenu';
 
 // 引入抽离出来的文案组件
 // Guide = 产品说明（原 Rules 内容，已去除锚定/稳定币叙事）
@@ -42,6 +43,15 @@ const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRE
 // ================= 2. 样式常量 =================
 const FONT_STYLE = {
   fontFamily: '"Lora", "Noto Serif SC", "Songti SC", Georgia, "Times New Roman", serif'
+};
+
+/* Swap / Wallet / History 三个页面共用的白色容器，样式只在这里写一次 */
+const SUB_CARD = {
+  background: '#fff',
+  borderRadius: '24px',
+  padding: '20px',
+  boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)',
+  border: '1px solid #f1f5f9'
 };
 
 const UfoIcon = ({ size = 36 }) => (
@@ -522,8 +532,6 @@ function App() {
     ? (currentPriceData?.priceFloat ?? null)
     : currentNav;
 
-  const navWarning = navStatus === 'ready' && currentNav < CONFIG.NAV_WARNING_THRESHOLD;
-
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
 
@@ -616,7 +624,7 @@ function App() {
       <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
 
         {activeTab === 'swap' && (
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+          <div style={{ ...SUB_CARD, marginTop: '10px' }}>
             <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
 
             {currentPriceError && (
@@ -649,25 +657,14 @@ function App() {
                     <><UfoIcon size={28} /><span>UFO</span></>
                   )}
                   {showTokenMenu && isBuyingUFO && (
-                    <>
-                    {/* 全屏透明层：点页面任意位置关闭菜单，避免菜单挡住下方区域后无法操作 */}
-                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
-                      {STABLECOINS.map(coin => {
-                        const coinPrice = coin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
-                        const coinErr = stablecoinPrices.errors.find(e => e.token === coin.symbol);
-                        return (
-                          <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
-                            <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
-                            <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-                            <span style={{ fontSize: '11px', color: coinErr ? '#ef4444' : '#94a3b8', marginLeft: 'auto' }}>
-                              {coinErr ? 'Fallback $1.00' : (coinPrice ? `≈ $${coinPrice.priceFloat.toFixed(4)}` : '—')}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    </>
+                    <TokenMenu
+                      mode="buy"
+                      coins={STABLECOINS}
+                      prices={stablecoinPrices}
+                      vaultBalances={vaultBalances}
+                      onClose={() => setShowTokenMenu(false)}
+                      onSelect={(coin) => { setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }}
+                    />
                   )}
                 </div>
               </div>
@@ -700,18 +697,14 @@ function App() {
                     <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
                   )}
                   {showTokenMenu && !isBuyingUFO && (
-                    <>
-                    <div onClick={(e) => { e.stopPropagation(); setShowTokenMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '180px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden' }}>
-                      {STABLECOINS.map(coin => (
-                        <div key={coin.symbol} onClick={(e) => { e.stopPropagation(); setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
-                          <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
-                          <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>Pool: {vaultBalances[coin.symbol].toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    </>
+                    <TokenMenu
+                      mode="sell"
+                      coins={STABLECOINS}
+                      prices={stablecoinPrices}
+                      vaultBalances={vaultBalances}
+                      onClose={() => setShowTokenMenu(false)}
+                      onSelect={(coin) => { setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }}
+                    />
                   )}
                 </div>
               </div>
@@ -736,8 +729,8 @@ function App() {
                 <span>1 {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'} USD</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
-                <span>UFO NAV (on-chain)</span>
-                <span style={{ color: navWarning ? '#ef4444' : '#64748b' }}>
+                <span>UFO Price (on-chain)</span>
+                <span>
                   1 UFO = ${currentNav.toFixed(4)} USD
                   {navStatus === 'error' && <span style={{ marginLeft: 6 }}>(read failed)</span>}
                 </span>
@@ -746,11 +739,6 @@ function App() {
                 <span>Protocol Fee (0.5%)</span>
                 <span>-{feeAmount} USD</span>
               </div>
-              {navWarning && (
-                <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: '600' }}>
-                  ⚠️ On-chain NAV is below $1.00 ({currentNav.toFixed(4)}). Vault reserves may be insufficient. Proceed with caution.
-                </div>
-              )}
 
             </div>
 
@@ -771,7 +759,7 @@ function App() {
         )}
 
         {activeTab === 'assets' && (
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', marginTop: '10px' }}>
+          <div style={{ ...SUB_CARD, marginTop: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
@@ -841,7 +829,7 @@ function App() {
               </p>
             </div>
 
-            <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+            <div style={SUB_CARD}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#334155' }}>Local Ledger</h3>
                 {history.length > 0 && (
@@ -954,9 +942,9 @@ function App() {
         {[
           { id: 'swap', label: 'Swap', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg> },
           { id: 'assets', label: 'Wallet', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
-          { id: 'history', label: 'History', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5h16" /><path d="M4 12h16" /><path d="M4 18.5h10" /><circle cx="18.5" cy="18.5" r="1.6" /></svg> },
           { id: 'guide', label: 'Guide', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /></svg> },
           { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><polyline points="8.5 14.5 10.8 16.8 15.5 12" /></svg> },
+          { id: 'history', label: 'History', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3.2 1.9" /></svg> },
           { id: 'contact', label: 'Contact', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg> }
         ].map((tab) => (
           <div
