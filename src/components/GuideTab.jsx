@@ -3,55 +3,80 @@ import { Card, Panel, cardTitle, cardText, divider, tabWrap } from './Card';
 
 /* ============================================================
    📘 GuideTab — 产品说明
-   定位：防盗 + 结算隐私的稳定币，1 UFO 恒等于 1 USD
+   定位：防盗 + 结算的稳定币，1 UFO 恒等于 1 USD
    原则：
-   1. 价格说清（1:1），流动性风险说清（池内实际持有）
-   2. 「隐私」只讲显示层，同时主动说明链上公开
-   3. 不做任何监管状态、审计、储备的陈述
-   4. 不写无法验证的绝对化承诺（如「资金永远安全」）
+   1. 价格说清（1:1），报价由合约给出
+   2. 「隐私」只讲显示层，同时说明链上记录公开
+   3. 不做监管状态、审计、储备的陈述
+   4. 只描述能做的事，不写无法验证的绝对化承诺
    ============================================================ */
+
+/* 地址块：完整地址比正文长，独占一行、缩小字号、等宽字体，
+   避免在窄屏上把句子撑成三四行 */
+const Addr = ({ label, value }) => (
+  <div style={{ marginTop: '8px' }}>
+    <span style={{ opacity: 0.72, fontSize: '11.5px' }}>{label}</span>
+    <div
+      style={{
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: '10.5px',
+        lineHeight: 1.5,
+        wordBreak: 'break-all',
+        opacity: 0.92,
+      }}
+    >
+      {value}
+    </div>
+  </div>
+);
+
 export default function GuideTab() {
   return (
     <div style={tabWrap}>
-      {/* ================= 1. 防盗结算 · 盾牌 ================= */}
+      {/* ================= 1. 防盗结算 · 天平 ================= */}
       <Card
         title="Anti-Theft Settlement Stablecoin"
-        icon="shield"
+        icon="scale"
         gradient="linear-gradient(145deg, #10b981 0%, #059669 55%, #065f46 100%)"
         glow="rgba(5,150,105,0.50)"
       >
-        <h4 style={cardTitle}>A balance thieves scroll past.</h4>
+        <h4 style={cardTitle}>
+          Hack-resistant. Zero value on the public chain, full records of every
+          send and receive.
+        </h4>
 
         <p style={cardText}>
-          Automated drainers sweep wallet addresses and rank them by visible
-          balance. A wallet that reads <b>$0.00</b> gets skipped — not because
-          it is empty, but because it does not look worth the gas. The same
-          holds for a glance over your shoulder, a shared screen, or a
-          screenshot that travels through a group chat.
+          Every transfer is written to BNB Chain — sender, recipient, amount
+          and time. What the ledger never carries is a dollar figure: UFO has
+          no public price feed, so wallets and explorers read it as <b>$0.00</b>.
+          Automated drainers rank addresses by visible balance and skip the
+          ones that do not look worth the gas. A <b>$0.00</b> balance never
+          reaches the front of that queue.
         </p>
 
         <Panel>
-          <b>Where it stops:</b> a leaked seed phrase still loses the tokens,
-          and no token design can prevent that. What UFO removes is the
-          visible target — the balance that makes an address worth attacking
-          in the first place.
+          <b>Settlement only.</b> The reserve vault takes stablecoins in and
+          pays them out at the published rate. Nothing on this site can move
+          pool funds, change the rate or redirect a payout — there is no admin
+          panel and no hidden switch here.
         </Panel>
       </Card>
 
-      {/* ================= 2. 定价 · 天平 ================= */}
+      {/* ================= 2. 定价 · 盾牌 ================= */}
       <Card
         title="Pricing"
-        icon="scale"
+        icon="shield"
         gradient="linear-gradient(145deg, #8b5cf6 0%, #7c3aed 55%, #5b21b6 100%)"
         glow="rgba(124,58,237,0.50)"
       >
-        <h4 style={cardTitle}>One UFO, one dollar.</h4>
+        <h4 style={cardTitle}>
+          The unit price of 1 UFO is always equal to 1 US dollar.
+        </h4>
 
         <p style={cardText}>
-          The unit price of 1 UFO is always equal to 1 US dollar. The dollar
-          serves as the unit of account, and every quote is computed by the
-          contract itself rather than by a private server — so what this page
-          shows is what the chain will execute.
+          The dollar serves as the unit of account, and every quote is computed
+          by the contract itself rather than by a private server — so what this
+          page shows is what the chain will execute.
         </p>
 
         <div style={divider}>
@@ -60,28 +85,7 @@ export default function GuideTab() {
         </div>
       </Card>
 
-      {/* ================= 3. 旁人看到什么 · 锁 ================= */}
-      <Card
-        title="What Others See"
-        icon="lock"
-        gradient="linear-gradient(145deg, #475569 0%, #334155 55%, #1e293b 100%)"
-        glow="rgba(51,65,85,0.50)"
-      >
-        <h4 style={cardTitle}>Screens are private. Ledgers are not.</h4>
-
-        <p style={cardText}>
-          When someone glances at your phone, borrows your device, or a
-          screenshot circulates, the amount is not visible. What stays public
-          is the transaction itself: any address can be looked up on BscScan,
-          and every movement can be verified by anyone who cares to check.
-        </p>
-
-        <div style={divider}>
-          We protect the screen, not the record. That line is deliberate.
-        </div>
-      </Card>
-
-      {/* ================= 4. 自持 · 地球 ================= */}
+      {/* ================= 3. 自持 · 地球 ================= */}
       <Card
         title="Self-Custody"
         icon="globe"
@@ -98,12 +102,13 @@ export default function GuideTab() {
         </p>
 
         <Panel>
-          <b>Check before you sign:</b> the Vault and token addresses are
-          printed on every page. If they differ from the ones on BscScan, stop.
+          <b>Every address is on the page.</b> The Vault and token addresses
+          are printed where you can compare them against BscScan before you
+          sign.
         </Panel>
       </Card>
 
-      {/* ================= 5. 即时结算 · 闪电 ================= */}
+      {/* ================= 4. 即时结算 · 闪电 ================= */}
       <Card
         title="Instant Settlement"
         icon="zap"
@@ -118,7 +123,7 @@ export default function GuideTab() {
         </p>
       </Card>
 
-      {/* ================= 6. 公开账本 · 分层 ================= */}
+      {/* ================= 5. 公开账本 · 分层 ================= */}
       <Card
         title="Open Ledger"
         icon="layers"
@@ -134,13 +139,13 @@ export default function GuideTab() {
           product.
         </p>
 
-        <div style={divider}>
-          Vault <span style={{ opacity: 0.8 }}>0xa8A3…b3a2</span> · Token{' '}
-          <span style={{ opacity: 0.8 }}>0x9CB5…3eaB</span>
+        <div style={{ ...divider, opacity: 0.9 }}>
+          <Addr label="Vault" value="0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2" />
+          <Addr label="Token" value="0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB" />
         </div>
       </Card>
 
-      {/* ================= 7. 钱包直达 · 连接 ================= */}
+      {/* ================= 6. 钱包直达 · 连接 ================= */}
       <Card
         title="Nine Wallets, One Tap"
         icon="plug"
@@ -153,7 +158,8 @@ export default function GuideTab() {
           MetaMask, Trust Wallet, Coinbase Wallet, Bitget Wallet, Phantom,
           TokenPocket, imToken, Coin98 and ONTO are supported through their
           own in-app browsers. Tap an icon, the wallet opens, and this page
-          loads inside it — already connected, no approval round-trip.
+          loads inside it with the wallet already injected — no QR code and no
+          relay round-trip.
         </p>
 
         <Panel>
@@ -162,9 +168,9 @@ export default function GuideTab() {
         </Panel>
       </Card>
 
-      {/* ================= 8. 免责声明 · 警告 ================= */}
+      {/* ================= 7. 法律声明 · 警告 ================= */}
       <Card
-        title="Disclaimer"
+        title="Legal Notice"
         icon="alert"
         gradient="linear-gradient(145deg, #fb7185 0%, #ec4899 52%, #be185d 100%)"
         glow="rgba(236,72,153,0.50)"
@@ -173,10 +179,9 @@ export default function GuideTab() {
 
         <p style={cardText}>
           UFO offers no yield and no speculative return. It is not a deposit.
-          Redemption is settled at 1 UFO = 1 USD and is subject to pool
-          liquidity, so processing may be delayed or limited. Users are solely
-          responsible for ensuring their use of the protocol complies with
-          local law.
+          Redemption is settled at 1 UFO = 1 USD and is paid from the
+          stablecoins the pool holds. Users are solely responsible for
+          ensuring their use of the protocol complies with local law.
         </p>
 
         <p style={{ ...cardText, marginTop: '10px' }}>

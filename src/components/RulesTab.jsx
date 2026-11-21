@@ -89,10 +89,10 @@ export default function RulesTab() {
 
         <Section>How redemption is paid</Section>
         <p style={{ ...cardText, marginTop: '6px' }}>
-          Redemption is paid from the tokens actually held in the pool. If the
-          USDT side is temporarily thin, redeem in USDC instead, or reduce the
-          amount. The page shows available capacity before you sign, so you
-          know in advance instead of finding out from a failed transaction.
+          Redemption is paid from the stablecoins actually held in the pool,
+          and you can take the payout in either USDT or USDC. Available
+          capacity for each side is shown on the page before you sign, so the
+          amount is confirmed up front.
         </p>
 
         <Panel>
@@ -271,9 +271,24 @@ export default function RulesTab() {
         </Step>
 
         <Step title="Match the contract address">
-          Vault <b>0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2</b>, token{' '}
-          <b>0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB</b>. If either
-          differs, stop.
+          <span style={{ display: 'block', marginBottom: '6px' }}>
+            Both addresses are printed here and on every other page. Match them
+            before you sign.
+          </span>
+          <span
+            style={{
+              display: 'block',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: '10.5px',
+              lineHeight: 1.55,
+              wordBreak: 'break-all',
+              opacity: 0.92,
+            }}
+          >
+            Vault 0xa8A312b008F3EE819C535EB3cAD754B2e5B8b3a2
+            <br />
+            Token 0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB
+          </span>
         </Step>
 
         <Step title="Never share your seed phrase">
@@ -287,21 +302,21 @@ export default function RulesTab() {
         </Step>
       </Card>
 
-      {/* ================= 7. 出问题怎么办 · 青色 ================= */}
+      {/* ================= 7. 常见操作 · 青色 ================= */}
       <Card
-        title="If Something Goes Wrong"
+        title="Quick Fixes"
         icon="info"
         gradient="linear-gradient(145deg, #06b6d4 0%, #0891b2 55%, #0e7490 100%)"
         glow="rgba(8,145,178,0.50)"
       >
-        <h4 style={cardTitle}>Most issues are one of these five.</h4>
+        <h4 style={cardTitle}>Five taps that cover most questions.</h4>
 
         <Panel style={{ marginTop: '10px', padding: '6px 16px' }}>
-          <Row label="Transaction pending" value="Wait, or speed it up in wallet" />
-          <Row label="Nothing happens on tap" value="Wallet app not installed" />
-          <Row label="Connect does nothing" value="Wrong network — switch to BSC" />
-          <Row label="Balance shows $0.00" value="Expected — read it here" />
-          <Row label="Redeem reverts" value="Pool short on that token" last />
+          <Row label="Transaction pending" value="Wait or speed up" />
+          <Row label="Icon does not open" value="Open the app, retry" />
+          <Row label="Connect does nothing" value="Switch to BSC" />
+          <Row label="Balance reads $0.00" value="Expected — see here" />
+          <Row label="Capacity reached" value="Lower the amount" last />
         </Panel>
 
         <div style={divider}>
