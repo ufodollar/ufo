@@ -21,11 +21,11 @@ export default function RulesTab() {
         gradient="linear-gradient(145deg, #38bdf8 0%, #3b82f6 50%, #1d4ed8 100%)"
         glow="rgba(59,130,246,0.50)"
       >
-        <SecTitle n="01">Execution and fee schedule</SecTitle>
+        <SecTitle n="01">Issuance, burning and fee schedule</SecTitle>
 
         <Cl n="1.1">
-          Subscription is charged 0.50% of notional. Redemption is charged 0.50%
-          of notional. Fees are charged at execution and are non-refundable.
+          Issuance is charged 0.50% of notional. Burning is charged 0.50% of
+          notional. Fees are charged at execution and are non-refundable.
         </Cl>
 
         <Cl n="1.2">
@@ -34,9 +34,9 @@ export default function RulesTab() {
         </Cl>
 
         <Cl n="1.3">
-          Redemption is paid in the currency the Vault holds. Where USDT
-          capacity is insufficient for the instruction, redemption is paid in
-          USDC; where USDC capacity is insufficient, it is paid in USDT.
+          Proceeds of a burn are paid in the currency the Vault holds. Where USDT
+          capacity is insufficient for the instruction, payment is made in
+          USDC; where USDC capacity is insufficient, payment is made in USDT.
         </Cl>
 
         <Cl n="1.4">
@@ -53,8 +53,8 @@ export default function RulesTab() {
 
         <DefTable
           rows={[
-            ['Subscription fee', '0.50% of notional'],
-            ['Redemption fee', '0.50% of notional'],
+            ['Issuance fee', '0.50% of notional'],
+            ['Burn fee', '0.50% of notional'],
             ['Bid / offer spread', 'Nil'],
             ['Network gas', 'Payable to BNB Chain'],
             ['Settlement venue', 'BNB Chain only'],
@@ -73,20 +73,20 @@ export default function RulesTab() {
         <SecTitle n="02">Transaction sequence</SecTitle>
 
         <Cl n="2.1">
-          <b>Authorisation.</b> The first exchange of a token requires one
+          <b>Authorisation.</b> The first issuance of a token requires one
           allowance, scoped to that token and that amount. It grants no other
           permission.
         </Cl>
 
         <Cl n="2.2">
-          <b>Subscription.</b> Enter the notional. The rate is read from the
+          <b>Issuance.</b> Enter the notional. The rate is read from the
           contract and the unit amount is computed on-chain. No server performs
           this calculation.
         </Cl>
 
         <Cl n="2.3">
-          <b>Redemption.</b> Tender UFO to the Vault and receive the stablecoin
-          at 1 UFO = 1 USD, subject to available capacity under §1.3.
+          <b>Burn.</b> Tender UFO to the Vault for burning and receive the
+          stablecoin at 1 UFO = 1 USD, subject to available capacity under §1.3.
         </Cl>
 
         <Cl n="2.4">

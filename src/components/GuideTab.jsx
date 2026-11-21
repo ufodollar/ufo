@@ -6,10 +6,10 @@ import { SecTitle, Cl, DefTable, Note } from './Doc';
    📘 GuideTab — 产品条款
    格式：分节 + 编号条款 + 口径表，可按条引用
    口径（不得偏离）：
-   1. 1 UFO 恒等于 1 USD，美元为计价单位
-   2. 链上不产生美元估值，估值只在赎回环节形成
-   3. 不做监管状态、审计、储备的陈述
-   4. 只写可核验的事实，不写绝对化承诺
+   1. 1 UFO 永久等于 1 USD，美元为计价单位
+   2. 用户自助发行，合约只接受稳定币铸币
+   3. 不写无法核验的绝对化承诺
+   术语：issuance = 发行 / burn = 销毁（全站统一）
    ============================================================ */
 
 const Addr = ({ label, value }) => (
@@ -32,30 +32,35 @@ const Addr = ({ label, value }) => (
 export default function GuideTab() {
   return (
     <div style={tabWrap}>
-      {/* ============ 01 工具与计价单位 ============ */}
+      {/* ============ 01 发行 ============ */}
       <Card
-        title="Section 01 · Instrument"
+        title="Section 01 · Issuance"
         icon="scale"
         gradient="linear-gradient(145deg, #10b981 0%, #059669 55%, #065f46 100%)"
         glow="rgba(5,150,105,0.50)"
       >
-        <SecTitle n="01">Instrument and unit of account</SecTitle>
+        <SecTitle n="01">Issuance</SecTitle>
 
         <Cl n="1.1">
-          UFO is a settlement token issued on BNB Chain and held at the
-          holder's own address. It is not a deposit and carries no claim on a
-          managed portfolio.
+          UFO is a zero-value settlement token issued on BNB Chain. On the UFO
+          Dollar platform it is priced in US dollars, and 1 UFO is permanently
+          equal to 1 USD. It can replace USDT and USDC as a commercial
+          settlement instrument, and, by virtue of the advantages of an
+          ordinary wallet and of zero on-chain value, it holds the advantages
+          of anti-theft and of resistance to hacker tracking.
         </Cl>
 
         <Cl n="1.2">
-          The unit of account is the US dollar. One unit is issued at USD 1.00
-          and redeemed at USD 1.00. Issuance and redemption are executed by the
-          Vault contract.
+          <b>Statement.</b> UFO is issued by users themselves. The procedure:
+          enter USDT or USDC in the self-service issuance machine, click the{' '}
+          <b>Issuance</b> button, and the token is minted to your own wallet
+          address. USDT or USDC is obtained by burning UFO.
         </Cl>
 
         <Cl n="1.3">
-          The platform assembles the transaction and submits it for signature.
-          Execution, and the resulting change in balances, occur on-chain.
+          The maker of the UFO Dollar platform will not create UFO out of thin
+          air. The contract code allows only stablecoins to be used for minting
+          UFO. The code is the law, and it does not change.
         </Cl>
 
         <DefTable
@@ -63,13 +68,18 @@ export default function GuideTab() {
             ['Instrument', 'UFO · BEP-20'],
             ['Network', 'BNB Chain'],
             ['Unit of account', 'USD'],
-            ['Subscription price', '1.00 USD / unit'],
-            ['Redemption value', '1.00 USD / unit'],
-            ['Fees', '0.50% subscription · 0.50% redemption'],
+            ['Issuance price', '1.00 USD / unit'],
+            ['Burn value', '1.00 USD / unit'],
+            ['Fees', '0.50% issuance · 0.50% burn'],
             ['Settlement', 'Single block, atomic'],
             ['Payout currency', 'USDT or USDC held by the Vault'],
           ]}
         />
+
+        <Note>
+          <b>Note:</b> both issuance and burning require a 0.5% issuance / burn
+          fee, paid to the self-service issuance machine.
+        </Note>
       </Card>
 
       {/* ============ 02 估值 ============ */}
@@ -87,9 +97,9 @@ export default function GuideTab() {
         </Cl>
 
         <Cl n="2.2">
-          The USD amount is determined at redemption. The holder tenders UFO to
-          the Vault and receives USDT or USDC; that instruction is the only
-          point at which a USD figure is recognised.
+          The USD amount is determined at burn. The holder tenders UFO to the
+          Vault and receives USDT or USDC; that instruction is the only point
+          at which a USD figure is recognised.
         </Cl>
 
         <Cl n="2.3">
@@ -146,7 +156,7 @@ export default function GuideTab() {
 
         <Cl n="4.2">
           No correspondent bank, settlement agent or intermediary is involved.
-          The Vault is the sole counterparty on redemption.
+          The Vault is the sole counterparty on burn.
         </Cl>
 
         <Cl n="4.3">
@@ -191,9 +201,9 @@ export default function GuideTab() {
         <SecTitle n="06">Legal notice</SecTitle>
 
         <Cl n="6.1">
-          UFO pays no yield and confers no profit participation. Redemption
-          settles at 1 UFO = 1 USD and is funded from the USDT and USDC
-          balances held by the Vault.
+          UFO pays no yield and confers no profit participation. Burning settles
+          at 1 UFO = 1 USD and is funded from the USDT and USDC balances held by
+          the Vault.
         </Cl>
 
         <Cl n="6.2">

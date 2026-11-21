@@ -459,7 +459,7 @@ function App() {
     const currentTime = new Date().toLocaleString();
     const txRecord = {
       time: currentTime,
-      type: isBuyingUFO ? 'Swap' : 'Redeem',
+      type: isBuyingUFO ? 'Issuance' : 'Burn',
       payAmount: inputAmount,
       paySymbol: isBuyingUFO ? selectedStablecoin.symbol : 'UFO',
       receiveAmount: outputAmount,
@@ -483,7 +483,7 @@ function App() {
       txRecord.payAmount = result.paid;
       if (result.received) txRecord.receiveAmount = result.received;
       txRecord.status = 'Success';
-      setTxMsg(isBuyingUFO ? 'Swap cleared.' : 'Redemption cleared.');
+      setTxMsg(isBuyingUFO ? 'Issuance cleared.' : 'Burn cleared.');
 
       saveTxToHistory(txRecord);
       setInputAmount('');
@@ -625,7 +625,7 @@ function App() {
 
         {activeTab === 'swap' && (
           <div style={{ ...SUB_CARD, marginTop: '10px' }}>
-            <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Swap</h3>
+            <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '18px', lineHeight: 1.35 }}>Self-service issuance machine</h3>
 
             {currentPriceError && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
@@ -736,7 +736,7 @@ function App() {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
-                <span>Protocol Fee (0.5%)</span>
+                <span>{isBuyingUFO ? 'Issuance fee (0.5%)' : 'Burn fee (0.5%)'}</span>
                 <span>-{feeAmount} USD</span>
               </div>
 
@@ -753,7 +753,7 @@ function App() {
             >
               {isProcessing ? 'Processing...'
                 : !isConnected ? (autoConnecting ? 'Approve in wallet…' : 'Connect Wallet')
-                : (isBuyingUFO ? 'Swap Now' : 'Redeem Now')}
+                : (isBuyingUFO ? 'Issuance' : 'Burn')}
             </button>
           </div>
         )}
@@ -842,7 +842,7 @@ function App() {
             {history.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px auto' }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p style={{ fontSize: '14px' }}>Nothing yet. Each swap you make will be written here.</p>
+                <p style={{ fontSize: '14px' }}>Nothing yet. Each issuance you make will be written here.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -850,7 +850,7 @@ function App() {
                   <div key={idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: '700', color: tx.type === 'Swap' ? '#3b82f6' : '#8b5cf6' }}>{tx.type}</span>
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: (tx.type === 'Issuance' || tx.type === 'Swap') ? '#3b82f6' : '#8b5cf6' }}>{tx.type}</span>
                         <span style={{ fontSize: '12px', color: '#94a3b8' }}>{tx.time}</span>
                       </div>
                       <span style={{
@@ -940,7 +940,7 @@ function App() {
         padding: '8px 0 16px 0', zIndex: 20
       }}>
         {[
-          { id: 'swap', label: 'Swap', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg> },
+          { id: 'swap', label: 'Issuance', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg> },
           { id: 'assets', label: 'Wallet', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
           { id: 'guide', label: 'Guide', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /></svg> },
           { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><polyline points="8.5 14.5 10.8 16.8 15.5 12" /></svg> },
