@@ -4,57 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Trust Wallet link test</title>
+<title>Trust Wallet link test v2</title>
 <style>
   body{margin:0;padding:20px;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:#0f172a}
   h1{font-size:18px;margin:0 0 6px}
-  p.lead{font-size:13px;color:#64748b;margin:0 0 20px}
+  p.lead{font-size:13px;color:#64748b;margin:0 0 18px}
   .item{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px;margin-bottom:10px}
   a.btn{display:block;padding:14px;border-radius:10px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;text-align:center;font-size:15px}
+  .item.ctrl a.btn{background:#0f766e}
+  .item.ctrl{border-color:#99f6e4}
   code{display:block;margin-top:8px;font-size:10px;line-height:1.45;color:#94a3b8;word-break:break-all;font-family:ui-monospace,Menlo,monospace}
   .tag{font-size:11px;color:#94a3b8;margin-bottom:6px}
+  .res{font-size:12px;color:#0f172a;margin-top:8px;padding:8px;border-radius:8px;background:#fef3c7;display:none}
 </style>
 </head>
 <body>
-<h1>Trust Wallet link test</h1>
-<p class="lead">Tap each button once. Before tapping, make sure Trust Wallet is fully closed (swipe it away from recents). Tell me which number opens the page inside Trust Wallet's browser.</p>
+<h1>Trust Wallet link test v2</h1>
+<p class="lead">Four buttons, one minute. Close Trust Wallet from recents before each tap. Tell me the number that actually loads a page, or if all of them land on a blank browser.</p>
 
-<div class="item">
-  <div class="tag">1 · intent + coin_id 714</div>
-  <a class="btn" href="intent://open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end">Try 1</a>
-  <code>intent://open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end</code>
+<div class="item ctrl">
+  <div class="tag">7 · control — Uniswap with RAW url (no percent-encoding)</div>
+  <a class="btn" href="trust://open_url?coin_id=60&url=https://app.uniswap.org">Try 7</a>
+  <code>trust://open_url?coin_id=60&amp;url=https://app.uniswap.org</code>
 </div>
 
 <div class="item">
-  <div class="tag">2 · intent + coin_id 20000714</div>
-  <a class="btn" href="intent://open_url?coin_id=20000714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end">Try 2</a>
-  <code>intent://open_url?coin_id=20000714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end</code>
+  <div class="tag">8 · our site, RAW url</div>
+  <a class="btn" href="trust://open_url?coin_id=60&url=https://ufo-eea.pages.dev/">Try 8</a>
+  <code>trust://open_url?coin_id=60&amp;url=https://ufo-eea.pages.dev/</code>
 </div>
 
 <div class="item">
-  <div class="tag">3 · https open_url + coin_id 714</div>
-  <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1">Try 3</a>
-  <code>https://link.trustwallet.com/open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1</code>
+  <div class="tag">9 · our site, RAW url, coin_id 20000714 (Trust chain id for BSC)</div>
+  <a class="btn" href="trust://open_url?coin_id=20000714&url=https://ufo-eea.pages.dev/">Try 9</a>
+  <code>trust://open_url?coin_id=20000714&amp;url=https://ufo-eea.pages.dev/</code>
 </div>
 
 <div class="item">
-  <div class="tag">4 · https open_url + coin_id 20000714</div>
-  <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=20000714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1">Try 4</a>
-  <code>https://link.trustwallet.com/open_url?coin_id=20000714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1</code>
+  <div class="tag">10 · our site, RAW url, coin_id 714 (BNB slip44)</div>
+  <a class="btn" href="trust://open_url?coin_id=714&url=https://ufo-eea.pages.dev/">Try 10</a>
+  <code>trust://open_url?coin_id=714&amp;url=https://ufo-eea.pages.dev/</code>
 </div>
 
-<div class="item">
-  <div class="tag">5 · trust:// + coin_id 714, no query</div>
-  <a class="btn" href="trust://open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F">Try 5</a>
-  <code>trust://open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F</code>
-</div>
-
-<div class="item">
-  <div class="tag">6 · trust:// + coin_id 60 (Ethereum baseline)</div>
-  <a class="btn" href="trust://open_url?coin_id=60&url=https%3A%2F%2Fufo-eea.pages.dev%2F">Try 6</a>
-  <code>trust://open_url?coin_id=60&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F</code>
-</div>
-
-<p class="lead" style="margin-top:18px">If every number lands on Trust Wallet's home screen, the app is dropping the open_url intent on this build — the fallback is WalletConnect.</p>
+<p class="lead" style="margin-top:18px">
+  Reading the result:<br>
+  · 7 loads but 8 is blank → the URL is fine, the domain is being filtered.<br>
+  · 7 and 8 both load → raw URL is the fix, encoding was the bug.<br>
+  · 7 and 8 both blank → this build ignores the url parameter; only manual paste works.
+</p>
 </body>
 </html>

@@ -81,6 +81,20 @@ export function walletList() {
   const bitgetTarget = `${currentUrl()}?_needChain=bnb&${AUTOCONNECT_PARAM}=1`;
   const encBitget = encodeURIComponent(bitgetTarget);
 
+  // Trust 的 open_url 在官方文档里是【裸 URL】，不做 percent-encoding：
+  //   trust://open_url?coin_id=60&url=https://compound.finance
+  //
+  // 2026-11-22 真机结论（Android）：
+  //   · coin_id=714（BNB 的 SLIP-44）→ 浏览器根本不拉起，点了没反应
+  //   · coin_id=60  → 进浏览器，但传 encodeURIComponent 过的 url 会白屏：
+  //     App 不 decode，拿到的是字面量 "https%3A%2F%2F…"，解析不出地址，
+  //     于是停在一个空白页。地址栏空、页面全白，正是这个表现。
+  //
+  // 因此这里裸拼。URL 里只能有 "?" 不能有 "&"，否则会被外层 query 截断；
+  // 我们的落地参数是 ?c=1，正好没有 &。进站后 useWallet 的 ensureBSC 会把
+  // 网络从 Ethereum 切到 0x38，coin_id 用 60 不影响最终链。
+  const trustTarget = `${currentUrl()}?${AUTOCONNECT_PARAM}=1`;
+
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
@@ -91,31 +105,21 @@ export function walletList() {
     },
     {
       id: 'trust', name: 'Trust Wallet', direct: true,
-      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。
+      // 三次真机排查的完整结论（Android，2026-11-22）：
+      //   1. https://link.trustwallet.com/open_url —— 会先被浏览器当网页加载，
+      //      落地页再引导「Open in app」，那一步参数已丢，App 只收到「启动」，
+      //      停在首页。
+      //   2. switch 到 trust:// + encodeURIComponent(url) —— 浏览器拉起来了，
+      //      但白屏、地址栏空白。原因是 App 不 decode，拿到字面量
+      //      "https%3A%2F%2F…" 解析不出地址。
+      //   3. intent:// + package —— 部分 ROM 上被系统静默拦截，点了没反应。
       //
-      // 2026-11 反馈：universal link 把 App 拉起来了，但停在首页，没有进
-      // 内置浏览器。原因是 https 那一条会先被浏览器当普通网页加载，
-      // link.trustwallet.com 的落地页再引导「Open in app」，走到那一步
-      // open_url 的 intent 已经丢了，App 只收到「启动」这一个动作。
-      //
-      // 改用 trust:// scheme，App 直接拿到 open_url 参数，不经过中转页。
-      // fallback 保留 https 版本：没装 App 时 1.8 秒后落到 Trust 的落地页，
-      // 用户仍能下载，不会像跳到下载站那样突兀。
-      //
+      // 最终形态：trust:// + coin_id=60 + 裸 URL，见上方 trustTarget 注释。
       // iOS 端无解：Trust Wallet 自 2025-06 起按 App Store 4.7 移除了内置
-      // DApp 浏览器，任何 deep link 都只能拉起 App。标 noBrowser，点击时
-      // 直接说明，不做一次注定失败的跳转。
-      //
-      // 2026-11-22 二次排查：Android 上 trust:// 也被拦，App 起来仍停首页。
-      // Chrome 对 JS 赋值的自定义 scheme 会静默丢弃，只有明确指定包名的
-      // intent 才稳定投递。改成 intent:// + package，并把 https 版本塞进
-      // browser_fallback_url，未装 App 时由系统接管，不会白屏。
-      url: platform() === 'android'
-        ? `intent://open_url?coin_id=714&url=${enc}#Intent;scheme=trust;package=com.wallet.crypto.trustapp;S.browser_fallback_url=${encodeURIComponent(`https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`)};end`
-        : `trust://open_url?coin_id=714&url=${enc}`,
-      intent: platform() === 'android',
-      scheme: platform() !== 'android',
-      fallback: `https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`,
+      // DApp 浏览器，deep link 只能拉起 App。标 noBrowser，点击时直接说明。
+      url: `trust://open_url?coin_id=60&url=${trustTarget}`,
+      scheme: true,
+      fallback: `https://link.trustwallet.com/open_url?coin_id=60&url=${trustTarget}`,
       noBrowser: platform() === 'ios'
     },
     {
