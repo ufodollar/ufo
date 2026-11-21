@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Trust Wallet link test</title>
+<style>
+  body{margin:0;padding:20px;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:#0f172a}
+  h1{font-size:18px;margin:0 0 6px}
+  p.lead{font-size:13px;color:#64748b;margin:0 0 20px}
+  .item{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px;margin-bottom:10px}
+  a.btn{display:block;padding:14px;border-radius:10px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;text-align:center;font-size:15px}
+  code{display:block;margin-top:8px;font-size:10px;line-height:1.45;color:#94a3b8;word-break:break-all;font-family:ui-monospace,Menlo,monospace}
+  .tag{font-size:11px;color:#94a3b8;margin-bottom:6px}
+</style>
+</head>
+<body>
+<h1>Trust Wallet link test</h1>
+<p class="lead">Tap each button once. Before tapping, make sure Trust Wallet is fully closed (swipe it away from recents). Tell me which number opens the page inside Trust Wallet's browser.</p>
+
+<div class="item">
+  <div class="tag">1 · intent + coin_id 714</div>
+  <a class="btn" href="intent://open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end">Try 1</a>
+  <code>intent://open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end</code>
+</div>
+
+<div class="item">
+  <div class="tag">2 · intent + coin_id 20000714</div>
+  <a class="btn" href="intent://open_url?coin_id=20000714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end">Try 2</a>
+  <code>intent://open_url?coin_id=20000714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end</code>
+</div>
+
+<div class="item">
+  <div class="tag">3 · https open_url + coin_id 714</div>
+  <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1">Try 3</a>
+  <code>https://link.trustwallet.com/open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1</code>
+</div>
+
+<div class="item">
+  <div class="tag">4 · https open_url + coin_id 20000714</div>
+  <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=20000714&url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1">Try 4</a>
+  <code>https://link.trustwallet.com/open_url?coin_id=20000714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1</code>
+</div>
+
+<div class="item">
+  <div class="tag">5 · trust:// + coin_id 714, no query</div>
+  <a class="btn" href="trust://open_url?coin_id=714&url=https%3A%2F%2Fufo-eea.pages.dev%2F">Try 5</a>
+  <code>trust://open_url?coin_id=714&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F</code>
+</div>
+
+<div class="item">
+  <div class="tag">6 · trust:// + coin_id 60 (Ethereum baseline)</div>
+  <a class="btn" href="trust://open_url?coin_id=60&url=https%3A%2F%2Fufo-eea.pages.dev%2F">Try 6</a>
+  <code>trust://open_url?coin_id=60&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2F</code>
+</div>
+
+<p class="lead" style="margin-top:18px">If every number lands on Trust Wallet's home screen, the app is dropping the open_url intent on this build — the fallback is WalletConnect.</p>
+</body>
+</html>

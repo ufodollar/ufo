@@ -105,9 +105,17 @@ export function walletList() {
       // iOS 端无解：Trust Wallet 自 2025-06 起按 App Store 4.7 移除了内置
       // DApp 浏览器，任何 deep link 都只能拉起 App。标 noBrowser，点击时
       // 直接说明，不做一次注定失败的跳转。
-      url: `trust://open_url?coin_id=714&url=${enc}`,
+      //
+      // 2026-11-22 二次排查：Android 上 trust:// 也被拦，App 起来仍停首页。
+      // Chrome 对 JS 赋值的自定义 scheme 会静默丢弃，只有明确指定包名的
+      // intent 才稳定投递。改成 intent:// + package，并把 https 版本塞进
+      // browser_fallback_url，未装 App 时由系统接管，不会白屏。
+      url: platform() === 'android'
+        ? `intent://open_url?coin_id=714&url=${enc}#Intent;scheme=trust;package=com.wallet.crypto.trustapp;S.browser_fallback_url=${encodeURIComponent(`https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`)};end`
+        : `trust://open_url?coin_id=714&url=${enc}`,
+      intent: platform() === 'android',
+      scheme: platform() !== 'android',
       fallback: `https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`,
-      scheme: true,
       noBrowser: platform() === 'ios'
     },
     {
