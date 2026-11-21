@@ -41,8 +41,8 @@ export default function GuideTab() {
         glow="rgba(5,150,105,0.50)"
       >
         <h4 style={cardTitle}>
-          Hack-resistant. Zero value on the public chain, full records of every
-          send and receive.
+          One token, two jobs: hold value out of a thief's reach, and settle
+          commercial payments that carry no on-chain dollar figure.
         </h4>
 
         <p style={cardText}>
@@ -55,10 +55,32 @@ export default function GuideTab() {
         </p>
 
         <Panel>
+          <div>
+            <b>Function 1 — anti-theft holding.</b> A balance held in UFO
+            reads as zero dollars to every wallet, explorer and drainer that
+            looks at it. Theft goes after what can be priced.
+          </div>
+          <div style={{ marginTop: '11px' }}>
+            <b>Function 2 — zero-value commercial settlement.</b> Supplier
+            bills, contractor payouts and cross-border invoices settle in a
+            token the public chain prices at <b>$0.00</b>. Sender, recipient,
+            amount and block time stay on the record; the dollar figure does
+            not. The figure exists on this site only, and only at the moment
+            someone asks for a quote.
+          </div>
+        </Panel>
+
+        <Panel>
           <b>Settlement only.</b> The reserve vault takes stablecoins in and
-          pays them out at the published rate. Nothing on this site can move
-          pool funds, change the rate or redirect a payout — there is no admin
-          panel and no hidden switch here.
+          pays them out at the published rate. Nothing more.
+          <div style={{ marginTop: '11px' }}>
+            <b>Fixed by code, not by policy.</b> The price of 1 UFO and the
+            0.5% fee are constants in the bytecode — no function exists that
+            can change either. The contract is not upgradeable and runs behind
+            no proxy, so the rules that shipped are the rules that execute. The
+            interface is a static page: it builds a transaction, and it cannot
+            move pool funds, change the rate or redirect a payout.
+          </div>
         </Panel>
       </Card>
 
