@@ -91,10 +91,24 @@ export function walletList() {
     },
     {
       id: 'trust', name: 'Trust Wallet', direct: true,
-      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。之前用 60 进站后
-      // 还要手动切到 BSC，改成 714 让钱包进来就停在 BNB Chain。
-      url: `https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`,
-      fallback: 'https://trustwallet.com/download'
+      // coin_id 走 SLIP-44：60 是 Ethereum，714 才是 BNB。
+      //
+      // 2026-11 反馈：universal link 把 App 拉起来了，但停在首页，没有进
+      // 内置浏览器。原因是 https 那一条会先被浏览器当普通网页加载，
+      // link.trustwallet.com 的落地页再引导「Open in app」，走到那一步
+      // open_url 的 intent 已经丢了，App 只收到「启动」这一个动作。
+      //
+      // 改用 trust:// scheme，App 直接拿到 open_url 参数，不经过中转页。
+      // fallback 保留 https 版本：没装 App 时 1.8 秒后落到 Trust 的落地页，
+      // 用户仍能下载，不会像跳到下载站那样突兀。
+      //
+      // iOS 端无解：Trust Wallet 自 2025-06 起按 App Store 4.7 移除了内置
+      // DApp 浏览器，任何 deep link 都只能拉起 App。标 noBrowser，点击时
+      // 直接说明，不做一次注定失败的跳转。
+      url: `trust://open_url?coin_id=714&url=${enc}`,
+      fallback: `https://link.trustwallet.com/open_url?coin_id=714&url=${enc}`,
+      scheme: true,
+      noBrowser: platform() === 'ios'
     },
     {
       id: 'coinbase', name: 'Coinbase Wallet', direct: true,

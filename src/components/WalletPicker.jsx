@@ -14,11 +14,12 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 export default function WalletPicker({ open, onClose, injectedWallets, onPick, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState('');
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -27,6 +28,16 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
   if (!open) return null;
 
   const handleApp = (wallet) => {
+    // iOS 上 Trust Wallet 已经没有内置浏览器，跳转只会把 App 拉到首页，
+    // 用户回来时看到的是「什么都没发生」。与其演一次失败的跳转，不如直接说清。
+    if (wallet.noBrowser) {
+      setOpening('');
+      setCopied(false);
+      setNotice(`${wallet.name} removed its in-app browser on iOS in June 2025. Open this page in another wallet, or copy the link below and paste it into a DApp browser.`);
+      return;
+    }
+
+    setNotice('');
     setOpening(wallet.name);
     setCopied(false);
 
@@ -103,6 +114,13 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
           </div>
         )}
 
+        {notice && (
+          <div style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px', background: '#fffbeb',
+                        border: '1px solid #fde68a', color: '#92400e', fontSize: '12px', lineHeight: 1.6 }}>
+            {notice}
+          </div>
+        )}
+
         {(opening || copied) && (
           <div style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px',
                         background: copied ? '#f0fdf4' : '#eff6ff',
@@ -150,7 +168,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px',
                          width: 'calc(33.333% - 6px)', maxWidth: '104px', padding: '12px 4px 10px',
                          background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '16px',
-                         cursor: 'pointer', color: 'inherit' }}
+                         cursor: 'pointer', color: 'inherit', opacity: w.noBrowser ? 0.55 : 1 }}
               >
                 <span style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fff',
                                display: 'flex', alignItems: 'center', justifyContent: 'center',
