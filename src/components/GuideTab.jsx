@@ -51,10 +51,16 @@ export default function GuideTab() {
         </Cl>
 
         <Cl n="1.2">
-          <b>Statement.</b> UFO is issued by users themselves. The procedure:
-          enter USDT or USDC in the self-service issuance machine, click the{' '}
-          <b>Issuance</b> button, and the token is minted to your own wallet
-          address. USDT or USDC is obtained by burning UFO.
+          <b>Statement.</b> UFO is issued by users themselves.
+          <div style={{ marginTop: '7px' }}>
+            <b>Issuance.</b> You deposit USDT or USDC into the self-service
+            issuance machine, click the “Issuance” button, and the tokens are
+            minted to your wallet address.
+          </div>
+          <div style={{ marginTop: '7px' }}>
+            <b>Burn.</b> After you burn UFO with the self-service issuance
+            machine, you obtain USDT or USDC.
+          </div>
         </Cl>
 
         <Cl n="1.3">
@@ -77,8 +83,9 @@ export default function GuideTab() {
         />
 
         <Note>
-          <b>Note:</b> both issuance and burning require a 0.5% issuance / burn
-          fee, paid to the self-service issuance machine.
+          <b>Note:</b> whoever holds UFO can burn it, and the contract has no
+          power to freeze any UFO. Both issuance and burning require a 0.5%
+          issuance / burn fee, paid to the self-service issuance machine.
         </Note>
       </Card>
 
