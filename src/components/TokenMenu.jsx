@@ -41,11 +41,11 @@ export default function TokenMenu({ coins, prices, vaultBalances, mode, onSelect
           const meta =
             mode === 'buy'
               ? failed
-                ? 'Fallback $1.00'
+                ? 'Feed down · $1.00'
                 : price
                   ? `≈ $${price.priceFloat.toFixed(4)}`
                   : '—'
-              : `Pool ${pool.toFixed(2)}`;
+              : `Vault ${pool.toFixed(2)}`;
 
           return (
             <div

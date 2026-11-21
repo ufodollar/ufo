@@ -7,6 +7,7 @@ import { Card, Panel, cardTitle, cardText, divider, tabWrap } from './Card';
    1. 每句给确定结论，不写「可能」「通常」「建议」
    2. 费率只在一张卡里出现，避免两处数字互相打架
    3. 样式与 GuideTab 完全一致（共用 Card / Panel / 文字样式）
+   4. 文风：短句、实词、具体动作，不堆营销形容词
    ============================================================ */
 
 /* 无编号步骤：左侧细线 + 加粗标题 */
@@ -101,9 +102,9 @@ export default function RulesTab() {
         </h4>
 
         <p style={cardText}>
-          Purchase charges 0.5%. Redemption charges 0.5%. The confirmation
-          screen prints the fee and the net amount before you sign, and no
-          second deduction follows the signature.
+          Buying costs 0.5%. Redeeming costs 0.5%. The screen prints the fee
+          and the net amount before you sign; after you sign, nothing else is
+          taken.
         </p>
 
         <Panel style={{ marginTop: '10px', padding: '6px 16px' }}>
@@ -116,16 +117,17 @@ export default function RulesTab() {
 
         <Section>How redemption is paid</Section>
         <p style={{ ...cardText, marginTop: '6px' }}>
-          The vault pays out in the stablecoin it actually holds. If the USDT
-          side does not cover your amount, redeem in USDC instead. If the USDC
-          side does not cover it, redeem in USDT. The swap page prints the
-          capacity of both sides before you sign, so the payout side is picked
-          from numbers instead of from a failed transaction.
+          The vault pays in the coin it actually holds. If the USDT side cannot
+          cover your amount, redeem into USDC. If the USDC side cannot cover
+          it, redeem into USDT. The page prints the size of both sides before
+          you sign, so you choose from numbers and not from a failed
+          transaction.
         </p>
 
         <Panel>
-          <b>Before you start:</b> UFO runs on BNB Chain only. In Bitget
-          Wallet, pick <b>BNB Chain</b> (shown as BSC) at the network prompt.
+          <b>Before you begin:</b> UFO lives on BNB Chain only. In Bitget
+          Wallet, when it asks for a network, choose <b>BNB Chain</b> — it is
+          written BSC there.
         </Panel>
       </Card>
 
@@ -136,25 +138,25 @@ export default function RulesTab() {
         gradient="linear-gradient(145deg, #8b5cf6 0%, #7c3aed 55%, #5b21b6 100%)"
         glow="rgba(124,58,237,0.50)"
       >
-        <h4 style={cardTitle}>Three steps, one signature each.</h4>
+        <h4 style={cardTitle}>Three steps. One signature each.</h4>
 
         <Step title="Approve once">
-          The first exchange of a token needs one approval. It covers that
-          token and that amount. It grants nothing else.
+          The first exchange of a coin needs one approval. It covers that coin
+          and that amount. It gives away nothing else.
         </Step>
 
         <Step title="Exchange">
-          Enter an amount. The page reads the rate from the contract and
-          prints the exact amount you receive. No server computes it.
+          Type an amount. The page reads the rate from the contract and prints
+          exactly what you will get. No server does this arithmetic.
         </Step>
 
         <Step title="Redeem back">
           Send UFO to the vault and take stablecoins at 1 UFO = 1 USD. The
-          payout comes from the token the vault holds.
+          payout comes from the coin the vault holds at that hour.
         </Step>
 
         <div style={divider}>
-          Each step is a separate transaction. Nothing moves without your
+          Each step is its own transaction. Nothing moves without your
           signature.
         </div>
       </Card>
@@ -169,35 +171,34 @@ export default function RulesTab() {
         <h4 style={cardTitle}>Five taps from icon to connected.</h4>
 
         <Step title="Tap the Bitget Wallet icon">
-          On mobile the deep link opens the Bitget app. If the app is not
-          installed, the button falls back to the download page after two
-          seconds.
+          On a phone the link opens the Bitget app. If the app is not there,
+          the button falls back to the download page after two seconds.
         </Step>
 
-        <Step title="If a network prompt appears, choose BNB Chain">
-          Bitget asks which chain to use before it loads the page. Select{' '}
-          <b>BNB Chain</b> (also shown as BSC). The prompt comes from the
+        <Step title="If it asks for a network, choose BNB Chain">
+          Bitget asks which chain to use before it loads the page. Pick{' '}
+          <b>BNB Chain</b> (also written BSC). The question comes from the
           wallet, not from this site.
         </Step>
 
         <Step title="The page opens inside the app">
-          The address bar shows this domain. The wallet is already injected,
-          so there is no QR code and no WalletConnect step.
+          The address bar shows this domain. The wallet is already in the page,
+          so there is no code to scan and no WalletConnect step.
         </Step>
 
         <Step title="Tap Connect, approve once">
-          Your wallet shows its own confirmation sheet. Approving connects the
-          address. It moves no funds and costs no gas.
+          Your wallet shows its own sheet. Approving joins the address to the
+          page. It moves no funds and costs no gas.
         </Step>
 
         <Step title="Exchange or redeem">
-          Enter an amount and sign. Later visits restore the connection
-          without a second prompt.
+          Type an amount and sign. Next time the connection is already there,
+          and it will not ask twice.
         </Step>
 
         <Panel>
           <b>Stuck on the Bitget home screen?</b> Tap <b>Discover</b> at the
-          bottom, then reopen this site from history.
+          bottom, then open this site again from history.
         </Panel>
       </Card>
 
@@ -211,34 +212,33 @@ export default function RulesTab() {
         <h4 style={cardTitle}>Unknown is not the same as unsafe.</h4>
 
         <p style={cardText}>
-          MetaMask, Trust Wallet and Bitget run automated risk scanners. A new
-          domain and a newly deployed contract carry no history to score, so
-          the scanner marks them <b>unrated</b>. That verdict describes the
-          scanner's database. It describes nothing about this contract.
+          MetaMask, Trust Wallet and Bitget all run scanners. A new domain and
+          a new contract have no history to score, so the scanner writes{' '}
+          <b>unrated</b>. That word describes the scanner's book, not this
+          contract.
         </p>
 
         <Section>The three warnings you may see</Section>
 
         <Step title="“Suspicious site” / “Unverified domain”">
-          The domain is not on the wallet's allowlist. Blocklist scanners flag
-          anything they have not seen before. The flag is not a malware
-          verdict.
+          The domain is not on the wallet's allowlist. A blocklist flags what
+          it has never seen before. The flag is not a verdict on malware.
         </Step>
 
         <Step title="“Unverified contract”">
-          The vault has no prior interaction with your address. Every contract
-          carries this flag on its first day.
+          The vault has no earlier interaction with your address. Every
+          contract carries this flag on its first day.
         </Step>
 
         <Step title="“Token has no price”">
-          Expected. UFO has no public price feed. That is why the wallet
-          prints <b>$0.00</b>.
+          Expected. UFO has no public price feed. That is why the wallet prints{' '}
+          <b>$0.00</b>.
         </Step>
 
         <Panel>
-          <b>Check without trusting us:</b> match the vault address below
-          against BscScan, then open the contract's transaction list. Matching
-          addresses plus live transactions mean the flag is about novelty.
+          <b>Check us without trusting us:</b> match the vault address below
+          against BscScan, then open its transaction list. The right address
+          and live transactions mean the flag is only about newness.
         </Panel>
       </Card>
 
@@ -249,11 +249,11 @@ export default function RulesTab() {
         gradient="linear-gradient(145deg, #10b981 0%, #059669 55%, #065f46 100%)"
         glow="rgba(5,150,105,0.50)"
       >
-        <h4 style={cardTitle}>Four checks before every signature.</h4>
+        <h4 style={cardTitle}>Four checks before you sign anything.</h4>
 
         <Step title="Enter only through this domain">
-          Bookmark it. Links in direct messages, group chats and search ads
-          are the standard route to a copycat site.
+          Bookmark it. Links in direct messages, group chats and search ads are
+          the usual road to a copycat site.
         </Step>
 
         <Step title="Match the contract address">
@@ -263,13 +263,13 @@ export default function RulesTab() {
           <Addr label="Token" value="0x9CB5e78F88EFfb5315A7B445aFa64790C8e53eaB" />
         </Step>
 
-        <Step title="Never share your seed phrase">
-          No support channel asks for it. No one can recover a wallet. Anyone
-          who says otherwise is lying.
+        <Step title="Never give up your seed phrase">
+          No support channel asks for it. Nobody can restore a wallet. Whoever
+          says otherwise is lying.
         </Step>
 
-        <Step title="Check the approval scope">
-          The approval covers one token and one amount. Reject any request for
+        <Step title="Read the approval">
+          The approval covers one coin and one amount. Refuse any request for
           unlimited access.
         </Step>
       </Card>
@@ -281,20 +281,20 @@ export default function RulesTab() {
         gradient="linear-gradient(145deg, #06b6d4 0%, #0891b2 55%, #0e7490 100%)"
         glow="rgba(8,145,178,0.50)"
       >
-        <h4 style={cardTitle}>Five taps that cover most questions.</h4>
+        <h4 style={cardTitle}>Five taps that answer most questions.</h4>
 
         <Panel style={{ marginTop: '10px', padding: '6px 16px' }}>
-          <Row label="Transaction pending" value="Wait or speed up" />
-          <Row label="Icon does not open" value="Open the app, retry" />
+          <Row label="Transaction pending" value="Wait or speed it up" />
+          <Row label="Icon does not open" value="Open the app, then retry" />
           <Row label="Connect does nothing" value="Switch to BSC" />
           <Row label="Balance reads $0.00" value="Expected — see here" />
           <Row label="Capacity reached" value="Lower the amount" last />
         </Panel>
 
         <div style={divider}>
-          Still stuck? Email <b>ufodollar6@gmail.com</b> with your address and
-          the transaction hash. Never send funds to anyone offering to “fix”
-          it for you.
+          Still stuck? Write to <b>ufodollar6@gmail.com</b> with your address
+          and the transaction hash. Never send money to anyone who offers to
+          “fix” it for you.
         </div>
       </Card>
     </div>

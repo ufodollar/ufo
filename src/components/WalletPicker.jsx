@@ -53,10 +53,10 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
   const showQR = !mobile && !hasExt;  // 桌面什么都没有：扫码去手机
 
   const subtitle = mobile
-    ? 'Opens this page inside your wallet’s own browser.'
+    ? 'The page opens inside your wallet, not here.'
     : hasExt
-      ? 'Choose an installed browser wallet.'
-      : 'No browser wallet found on this device.';
+      ? 'Pick the wallet already in this browser.'
+      : 'No wallet in this browser. Scan below and open it on your phone.';
 
   return (
     <div
@@ -133,7 +133,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
                   ? <img src={info.icon} alt="" width="32" height="32" style={{ width: 32, height: 32, borderRadius: '8px', display: 'block' }} />
                   : <span style={{ width: 32, height: 32, borderRadius: '8px', background: '#e2e8f0', display: 'inline-block' }} />}
                 <span style={{ fontSize: '14px', fontWeight: '600', flex: 1 }}>{info.name}</span>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Installed</span>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>In this browser</span>
               </button>
             ))}
           </div>

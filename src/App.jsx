@@ -483,7 +483,7 @@ function App() {
       txRecord.payAmount = result.paid;
       if (result.received) txRecord.receiveAmount = result.received;
       txRecord.status = 'Success';
-      setTxMsg(isBuyingUFO ? 'Swap Successful!' : 'Redeem Successful!');
+      setTxMsg(isBuyingUFO ? 'Swap cleared.' : 'Redemption cleared.');
 
       saveTxToHistory(txRecord);
       setInputAmount('');
@@ -683,7 +683,7 @@ function App() {
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>You Receive (Estimated)</span>
+                <span>You Receive</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
@@ -743,7 +743,7 @@ function App() {
             </div>
 
             {txMsg && (
-              <div style={{ marginTop: '15px', padding: '10px', textAlign: 'center', background: txMsg.includes('Successful') ? '#ecfdf5' : '#eff6ff', color: txMsg.includes('Successful') ? '#10b981' : '#3b82f6', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold' }}>{txMsg}</div>
+              <div style={{ marginTop: '15px', padding: '10px', textAlign: 'center', background: txMsg.includes('cleared') ? '#ecfdf5' : '#eff6ff', color: txMsg.includes('cleared') ? '#10b981' : '#3b82f6', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold' }}>{txMsg}</div>
             )}
 
             <button
@@ -768,7 +768,7 @@ function App() {
                     <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
                     <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>{bnbPrice == null ? '—' : '$' + formatPrice(bnbPrice, true)}</span>
                   </div>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Gas Fee Token</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Pays the gas</span>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -825,7 +825,7 @@ function App() {
                 UFO Chain History
               </h2>
               <p style={{ fontSize: '12.5px', color: '#64748b', marginTop: '5px', lineHeight: 1.6 }}>
-                Every entry links to BNB Chain.
+                Every line below leads to the chain itself.
               </p>
             </div>
 
@@ -842,7 +842,7 @@ function App() {
             {history.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px auto' }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p style={{ fontSize: '14px' }}>No transaction history found.</p>
+                <p style={{ fontSize: '14px' }}>Nothing yet. Each swap you make will be written here.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -888,8 +888,8 @@ function App() {
 
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Connect with Us</h2>
-            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Follow our official channels for updates and institutional onboarding.</p>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>Write to us</h2>
+            <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '40px', maxWidth: '300px' }}>Our channels, and the address behind them. A person answers.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '40px' }}>
               <a href="https://x.com/ufodollar" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
@@ -996,9 +996,9 @@ class ErrorBoundary extends React.Component {
         padding: '40px 24px', textAlign: 'center',
         background: '#f8fafc', color: '#1e293b'
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 700 }}>Something went wrong</div>
+        <div style={{ fontSize: '15px', fontWeight: 700 }}>The page broke.</div>
         <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, maxWidth: '320px' }}>
-          Please reload the page. If it keeps happening, open this page inside your wallet app.
+          Reload it. If it breaks again, open the site inside your wallet app.
         </div>
         <button
           onClick={() => window.location.reload()}
