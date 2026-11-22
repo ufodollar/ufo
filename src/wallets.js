@@ -120,8 +120,12 @@ export function walletList() {
   // 「跳 Play 商店」，路径匹配结果完全一样，纯属多一次副作用。
   const OKX_PKG_GP = 'com.okinc.okex.gp';
   const OKX_PKG_OFFICIAL = 'com.okinc.okex';
+  // 失败兜底不能直接回首页：页面一刷新，钱包面板就关了，用户看到的是
+  // 「点了图标，面板自己消失」，完全不知道发生了什么。落到一个说明页，
+  // 把「打开 App → 点顶部搜索框 → 粘贴」写成三步走，链接一并带过去。
   const okxHome = encodeURIComponent(
-    (typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev') + '/'
+    (typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev')
+    + '/okx-help?t=' + encodeURIComponent(target)
   );
   const okxLaunch = (pkg) =>
     `intent://#Intent;package=${pkg};action=android.intent.action.MAIN;`
