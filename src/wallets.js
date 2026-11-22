@@ -114,10 +114,13 @@ export function walletList() {
       //
       // 不带 ?c=1：query 里出现第二个 ? 会让部分解析路径出错，而落地后
       // 用户本来就要点一次 Connect，不值得为省这一次点击牺牲拉起可靠性。
-      url: `trust://open_url?coin_id=60&url=${currentUrl()}`,
+      // 每次点击都换一个从未访问过的地址：Trust 会把这条 deep link 当作
+      // 标签页地址并缓存其内容，同一个地址反复点击永远拿到旧的那份 HTML，
+      // 线上已经换过包也不会生效。只加一个 ?v=，不出现 &，避免参数被截断。
+      url: `trust://open_url?coin_id=60&url=${currentUrl()}?v=${Date.now()}`,
       fallback: 'https://trustwallet.com/download',
       scheme: true,
-      pasteHint: 'Link copied. In Trust Wallet, tap the address bar and paste.',
+      pasteHint: 'Link copied. Trust opens on a blank page — tap the address bar at the top, paste, then press Go.',
       noBrowser: platform() === 'ios'
     },
     {

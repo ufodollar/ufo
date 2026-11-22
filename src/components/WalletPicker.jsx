@@ -16,6 +16,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
   const [hint, setHint] = useState('');
+  const [pasteUrl, setPasteUrl] = useState('');
   // 底部「复制链接」按钮自己的状态。它和点钱包图标触发的那次复制是两件事，
   // 共用一个 state 会让按钮在别处复制后也显示 Link copied。
   const [linkCopied, setLinkCopied] = useState(false);
@@ -23,7 +24,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
   const wallets = useMemo(() => walletList(), []);
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setLinkCopied(false); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -45,6 +46,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
     setOpening(wallet.name);
     setCopied(false);
     setHint('');
+    setPasteUrl('');
 
     // direct:false 的钱包只能拉起 App，不能自带 URL（Trust 属于这一类）。
     // 它需要用户粘贴一次，所以先把链接放进剪贴板。
@@ -52,6 +54,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
     // 不加 await：复制是异步的，但跳转不能等它 —— 用户点完要立刻有反应。
     // 复制必须在手势的同步调用栈里发起，浏览器才认为这是用户意图。
     if (!wallet.direct) {
+      setPasteUrl(wallet.target);
       try {
         navigator.clipboard.writeText(wallet.target)
           .then(() => {
@@ -134,9 +137,23 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
                         border: `1px solid ${copied ? '#bbf7d0' : '#bfdbfe'}`,
                         color: copied ? '#15803d' : '#1d4ed8', fontSize: '12px', lineHeight: 1.55, fontWeight: '600' }}>
             {copied
-              ? (hint || (opening
-                  ? `Link copied. In ${opening}, open its DApp browser and paste it.`
-                  : 'Link copied. Open your wallet’s DApp browser and paste it.'))
+              ? (hint
+                  ? (
+                    <div>
+                      <div>{hint}</div>
+                      {pasteUrl && (
+                        <div style={{ marginTop: '7px', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px',
+                                      fontWeight: 500, color: '#166534', background: '#fff',
+                                      border: '1px solid #bbf7d0', borderRadius: '6px', padding: '6px 8px',
+                                      wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>
+                          {pasteUrl}
+                        </div>
+                      )}
+                    </div>
+                  )
+                  : (opening
+                      ? `Link copied. In ${opening}, open its DApp browser and paste it.`
+                      : 'Link copied. Open your wallet’s DApp browser and paste it.'))
               : `Opening ${opening}…`}
           </div>
         )}
