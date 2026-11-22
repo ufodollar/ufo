@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
+import { getWcUri } from '../wclink';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
 
@@ -20,6 +21,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   // 底部「复制链接」按钮自己的状态。它和点钱包图标触发的那次复制是两件事，
   // 共用一个 state 会让按钮在别处复制后也显示 Link copied。
   const [linkCopied, setLinkCopied] = useState(false);
+  // WalletConnect 的「手动打开」链接。只在自动跳转不可靠时出现 ——
+  // 用户点它是一个全新的用户手势，浏览器不会再拦。
+  const [manualOpen, setManualOpen] = useState(null);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
@@ -27,7 +31,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const wcBroken = useRef(new Set());
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -55,14 +59,55 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
     setCopied(false);
     setHint('');
     setPasteUrl('');
+    setManualOpen(null);
 
     // WalletConnect：页面留在 Chrome，App 只负责确认。
     // 和 OKX 那条是同一种体验，区别只是中继不同。
     if (useWc && onWcConnect) {
-      setHint(`Approve the request in ${wallet.name}. You will come back here to continue.`);
-      setPasteUrl(wallet.target);
+      const prefix = wallet.wcPrefix;
+
+      // ★ 必须在这一次点击的同步调用栈里完成跳转。
+      //
+      //   Chrome 只承认 5 秒内的用户手势发起的导航；而 WalletConnect 要先生成
+      //   pairing URI（首次还要下 400KB），在 await 之后导航会被静默丢弃 ——
+      //   表现就是「点了图标，卡在原地」。
+      //
+      //   URI 是钱包墙打开时 warmWc() 预生成的，这里只是同步读出来。
+      const uri = getWcUri();
+      if (uri) {
+        const href = prefix + encodeURIComponent(uri);
+        const at = Date.now();
+        try { location.href = href; } catch (e) { /* 交给下面的兜底按钮 */ }
+
+        // 跳过去后本页会进后台。1.5 秒还留在前台，说明系统没接住这条入口
+        // （App 没装 / App Links 未注册），把链接亮出来让用户再点一次 ——
+        // 那是一次全新的手势，一定会被放行。
+        //
+        // 两个条件缺一不可：页面离开过（计时器被后台挂起）时现在才执行，
+        // 差值会远大于 2.5 秒 —— 那说明跳转是成功的，不能拿按钮误导用户。
+        setTimeout(() => {
+          if (document.visibilityState !== 'visible') return;
+          if (Date.now() - at > 2500) return;
+          setManualOpen({ href, name: wallet.name });
+        }, 1500);
+      }
+
+      setHint(
+        uri
+          ? `Approve the request in ${wallet.name}. You will come back here to continue.`
+          : 'Preparing a secure connection to your wallet…'
+      );
+
       try {
-        await onWcConnect(wallet);
+        await onWcConnect(wallet, {
+          launched: !!uri,
+          // 预热还没完成就点了：URI 到位后已经不在手势里，只能给一个真链接
+          onUri: (value) => {
+            const href = prefix + encodeURIComponent(value);
+            setManualOpen({ href, name: wallet.name });
+            setHint(`Tap the button below to open ${wallet.name} and approve the request.`);
+          }
+        });
         // 成功后 useWallet 写入账户并关面板，这里不用再做什么
       } catch (e) {
         const code = e && e.code;
@@ -73,8 +118,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
           // 这条入口真机没接住（scheme 不对 / App 没注册）：
           // 记下它，同一个会话里不再重试，直接改用内置浏览器打开。
           wcBroken.current.add(wallet.id);
-          setNotice(`${wallet.name} did not accept the WalletConnect link. Opening its in-app browser instead.`);
-          setTimeout(() => { openInWallet(wallet); }, 700);
+          setManualOpen(null);
+          setNotice(`${wallet.name} could not complete the WalletConnect request. Opening its in-app browser instead.`);
+          setTimeout(() => { openInWallet(wallet); }, 900);
         }
       } finally {
         setOpening('');
@@ -219,6 +265,22 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
                   ? 'Link copied. Open your wallet’s DApp browser and paste it.'
                   : `Opening ${opening}…`)}
           </div>
+        )}
+
+        {/* WalletConnect 的手动入口。
+            只有在自动跳转没能把页面切走时才出现 —— 那说明系统没接住这条
+            入口（App 没装、或这个 build 没注册对应的 App Links）。
+            用户点它是一次全新的用户手势，不会被浏览器丢弃。 */}
+        {manualOpen && (
+          <a
+            href={manualOpen.href}
+            style={{ ...FONT, display: 'block', marginTop: '10px', padding: '13px 14px',
+                     background: '#1d4ed8', color: '#fff', borderRadius: '12px',
+                     fontSize: '13.5px', fontWeight: '700', textAlign: 'center',
+                     textDecoration: 'none', boxShadow: '0 2px 8px rgba(29,78,216,0.25)' }}
+          >
+            Open {manualOpen.name}
+          </a>
         )}
 
         {/* 桌面端：已安装的扩展优先，点一下直接连 */}

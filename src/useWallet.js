@@ -324,6 +324,12 @@ export function useWallet() {
     let timer = null;
     const start = () => {
       import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
+      // WalletConnect 那块 400KB+，比 OKX 还重。用户从打开页面到点 Connect，
+      // 通常有好几秒，趁这段时间把代码拿下来，打开钱包墙时就只剩中继握手。
+      // 只下载不配对 —— 真正的配对要等面板打开，否则每次访问都建一条会话。
+      if (WC_PROJECT_ID) {
+        import('./walletconnect').then((m) => m.prefetchWc()).catch(() => {});
+      }
     };
     if (typeof window.requestIdleCallback === 'function') {
       idleId = window.requestIdleCallback(start, { timeout: 3000 });
@@ -485,13 +491,13 @@ export function useWallet() {
    *
    * 只有配置了 Project ID 才会走到这里；没配置时钱包墙仍然走内置浏览器。
    */
-  const connectWcWallet = useCallback(async (wallet) => {
+  const connectWcWallet = useCallback(async (wallet, opts) => {
     if (busy) return false;
     setBusy(true);
     setError('');
     try {
       const { connectWc } = await import('./walletconnect');
-      const { accounts, provider } = await connectWc(wallet);
+      const { accounts, provider } = await connectWc(wallet, opts);
       if (accept(accounts, provider)) { setPickerOpen(false); return true; }
       return false;
     } catch (e) {
@@ -524,10 +530,15 @@ export function useWallet() {
   // 打开钱包墙就顺手开始下 SDK：从面板出现到用户点中某个图标，
   // 通常有 1~2 秒，这段空档正好用来下载。失败无所谓，点的时候还会再 import 一次。
   // WalletConnect 只在配置了 Project ID 时才预下 —— 没配置的人不该为这 300KB 付费。
+  // 打开钱包墙就顺手开始准备：从面板出现到用户点中某个图标，
+  // 通常有 1~2 秒，这段空档正好用来下载。
+  //
+  // OKX 那边只预热代码；WalletConnect 必须连「配对 URI」一起提前生成 ——
+  // 否则点击之后才开始生成，跳转落在用户手势窗口之外，浏览器会静默丢弃。
   const openPicker = useCallback(() => {
     import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
     if (WC_PROJECT_ID) {
-      import('./walletconnect').then((m) => m.prefetchWc()).catch(() => {});
+      import('./walletconnect').then((m) => m.warmWc()).catch(() => {});
     }
     setPickerOpen(true);
   }, []);

@@ -24,6 +24,7 @@
 
 import { RPC_URL, WC_PROJECT_ID } from './config';
 import { markWcPending, clearWcPending } from './wcpending';
+import { setWcUri, clearWcUri } from './wclink';
 
 // WalletConnect 的部分依赖（base64 编解码、签名工具）裸用 Buffer。
 // 浏览器没有这个全局，SDK 一跑到编码那一步就抛 "Buffer is not defined" ——
@@ -48,6 +49,13 @@ export const wcConfigured = () => !!WC_PROJECT_ID;
 
 let providerPromise = null;
 
+/**
+ * 预热状态。`uri` 一到位就同时写进 wclink.js，供点击时的同步跳转取用。
+ * 整条生命周期只在本次页面会话内有效；刷新后由 localStorage 里的会话接管。
+ */
+let warm = null;
+const WARM_TTL = 4 * 60 * 1000;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function loadProvider() {
@@ -56,20 +64,31 @@ function loadProvider() {
     // 动态 import：没配置 projectId 的人一分钱都不用付，配置了的人也只在
     // 真的点钱包时才下载。
     providerPromise = import('@walletconnect/ethereum-provider')
-      .then((m) => m.EthereumProvider.init({
-        projectId: WC_PROJECT_ID,
-        chains: [CHAIN_DECIMAL],
-        // 不用它自带的二维码弹窗：桌面走扩展、手机走 deeplink，
-        // 这个弹窗只会和我们的钱包墙抢注意力。
-        showQrModal: false,
-        rpcMap: { [CHAIN_DECIMAL]: RPC_URL },
-        metadata: {
-          name: 'UFO Ecosystem',
-          description: 'Self-service issuance for UFO Dollar on BNB Smart Chain',
-          url: ORIGIN,
-          icons: [ORIGIN + '/icon-512.png']
+      .then(async (m) => {
+        const p = await m.EthereumProvider.init({
+          projectId: WC_PROJECT_ID,
+          chains: [CHAIN_DECIMAL],
+          // 不用它自带的二维码弹窗：桌面走扩展、手机走 deeplink，
+          // 这个弹窗只会和我们的钱包墙抢注意力。
+          showQrModal: false,
+          rpcMap: { [CHAIN_DECIMAL]: RPC_URL },
+          metadata: {
+            name: 'UFO Ecosystem',
+            description: 'Self-service issuance for UFO Dollar on BNB Smart Chain',
+            url: ORIGIN,
+            icons: [ORIGIN + '/icon-512.png']
+          }
+        });
+
+        // init() 会把上次的会话从 localStorage 读回来（loadPersistedSession），
+        // 地址和 chainId 都能恢复 —— 但 rpcProviders 不会，那一步只有配对成功时
+        // 才在 onConnect 里建。少了它，恢复出来的会话读得到地址，一发起请求就抛
+        // "JSON-RPC provider for eip155 not found"，表现为「连上了但什么都干不了」。
+        if (p.session) {
+          try { p.signer.onConnect(); } catch (e) { /* SDK 换实现时降级为只有地址 */ }
         }
-      }))
+        return p;
+      })
       .catch((e) => { providerPromise = null; throw e; });
   }
   return providerPromise;
@@ -86,83 +105,231 @@ function snapshot(provider) {
 /**
  * 用中继建立连接。
  *
- * 流程：SDK 生成配对 URI → 我们立刻把它交给钱包 App 的 deeplink →
- * 用户在 App 里点确认 → 会话建立 → 本页 resolve（如果页面还在），
- * 或者用户回到本页时由 restoreWc 接上（如果页面被系统回收了）。
+ * 调用方（WalletPicker）负责在点击的同步栈里跳转 —— 这里只负责「等结果」。
+ * 为什么要把这两件事拆开：
  *
- * 这里必须监听 display_uri 而不是等 connect() 返回：URI 是本地生成的，
- * 拿到就要跳，等 connect() 的话页面会一直停在那里，用户什么也看不到。
+ *   WalletConnect 必须先跑起 SDK、连中继、生成 pairing URI，才有东西可以跳。
+ *   首次这一步要下 400KB+，耗时轻松超过 Chrome 认定的用户手势窗口（5 秒）。
+ *   在异步回调里导航会被静默丢弃，表现就是「点了图标，什么都没发生」。
+ *
+ *   所以 URI 由 warmWc() 在钱包墙打开时就预先生成，点击时同步取走并跳转。
+ *   这里收到的 launched 表示「已经跳过了」，只等会话回来。
+ *
+ * onUri 是兜底：预热还没完成时点了图标，URI 到位后把它交给 UI 渲染成一个
+ * 真链接 —— 那时已经在异步栈里，我们自己的导航不可靠，用户再点一次最稳。
  */
-export async function connectWc(wallet) {
-  const provider = await loadProvider();
-
-  // 重复点击 / 刷新后还有会话：直接复用，不再走一遍授权
-  const existing = snapshot(provider);
-  if (existing) return existing;
-
+export async function connectWc(wallet, { launched = false, onUri } = {}) {
   const prefix = wallet && wallet.wcPrefix;
   if (!prefix) throw new Error('This wallet has no WalletConnect entry.');
 
+  const st = warmWc();
+  if (!st) throw new Error('WalletConnect is not configured.');
+
+  // 预热可能才刚开始（面板打开后立刻点了图标）。等它把 provider 和
+  // connect() 都发起之后再往下走，否则 connectPromise 还是 null。
+  await st.started;
+
+  const provider = await loadProvider();
+
+  const existing = snapshot(provider);
+  if (existing) { clearWcPending(); clearWcUri(); warm = null; return existing; }
+
   markWcPending();
 
-  let launched = false;
-  let uriSeen = false;
-  const onUri = (uri) => {
-    if (!uri || launched) return;
-    launched = true;
-    uriSeen = true;
-    launch(`${prefix}${encodeURIComponent(uri)}`);
-  };
+  if (!launched) {
+    const uri = st.uri || await waitForUri(st, 15000);
+    if (!uri) {
+      clearWcPending();
+      warm = null;
+      const reason = st.error && st.error.message;
+      throw new Error(reason
+        ? `Could not reach the WalletConnect relay: ${reason}`
+        : 'Could not reach the WalletConnect relay. Check your connection and try again.');
+    }
+    // 已经不在用户手势里了。把 URI 交给 UI，由用户自己点那个链接。
+    // 注意这里必须无条件交出去：URI 可能是刚刚才到的（wclink 里刚有值），
+    // 但点击那一刻它是空的，页面并没有跳走。
+    if (onUri) onUri(uri);
+  }
 
-  try { provider.on('display_uri', onUri); } catch (e) { /* 老版本没有该事件 */ }
+  const pairing = st.connectPromise;
+  if (!pairing) {
+    clearWcPending();
+    warm = null;
+    throw new Error('WalletConnect could not start.');
+  }
 
   try {
-    const accounts = await provider.connect();
+    const result = await pairing;
+    const accounts = (Array.isArray(result) && result.length ? result : provider.accounts) || [];
     clearWcPending();
+    clearWcUri();
+    warm = null;
+    if (!accounts.length) throw new Error('The wallet approved the connection but returned no account.');
     return { accounts, provider };
   } catch (e) {
     clearWcPending();
-    if (!uriSeen) {
-      // 连 URI 都没拿到，说明是 relay / projectId 层面的问题，得说清楚，
-      // 否则用户只会看到「点了没反应」。
-      throw new Error(e && e.message ? e.message : 'WalletConnect could not start.');
-    }
+    clearWcUri();
+    warm = null;
     throw e;
-  } finally {
-    try { provider.removeListener('display_uri', onUri); } catch (e) { /* noop */ }
   }
 }
 
+// ---------------------------------------------------------------------------
+// 预热
+// ---------------------------------------------------------------------------
+
 /**
- * 跳到钱包 App。
+ * 提前把「SDK 就绪 + 中继握手 + 生成 pairing URI」这三步做完。
  *
- * 用临时 <a> 点击而不是 location.href：Chrome 对异步回调里的 location 跳转
- * 拦截得更凶，a.click() 至少能在部分版本上通过。仍然不能保证 —— 所以调用方
- * 要配合 visibilitychange 判断到底走没走（见 WalletPicker）。
+ * 钱包墙一打开就调用。用户从看到九个图标到点中其中一个，通常 1~3 秒，
+ * 通常够 URI 就位。这样点击时只剩一次同步跳转，落在手势窗口内。
+ *
+ * 同一个 URI 对任何 WalletConnect 钱包都有效 —— URI 描述的是「这一侧要发起
+ * 一次配对」，不描述对方是谁。所以预热一次就够所有图标共用。
+ *
+ * 已经连过（本地有会话）时不发起新的配对，直接把会话记在 state 上，
+ * 点图标零跳转直接进页面。
  */
-function launch(href) {
-  try {
-    const a = document.createElement('a');
-    a.href = href;
-    a.rel = 'noopener';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { try { a.remove(); } catch (e) {} }, 1000);
-  } catch (e) {
-    try { location.href = href; } catch (err) { /* 走到这里只能让用户手动打开 */ }
+export function warmWc() {
+  if (!WC_PROJECT_ID) return null;
+  if (warm) {
+    // 已就绪、已出错、或还在寿命内：直接复用。过期就重建。
+    if (warm.ready || warm.error || Date.now() - warm.since < WARM_TTL) return warm;
+    // 重建前先把旧监听摘掉：provider 是复用的单例，监听器会越积越多。
+    if (warm.provider && warm.onDisplay) {
+      try { warm.provider.removeListener('display_uri', warm.onDisplay); } catch (e) { /* noop */ }
+    }
+    warm = null;
   }
+
+  let markStarted;
+  const st = {
+    uri: null, since: Date.now(), provider: null, connectPromise: null,
+    error: null, ready: false, listeners: [],
+    // connectWc 可能在预热还没跑完时就被调用。等这个 Promise 再取 connectPromise，
+    // 否则会拿到 null，被误判成「WalletConnect 起不来」。
+    started: new Promise((resolve) => { markStarted = resolve; })
+  };
+  warm = st;
+
+  (async () => {
+    let provider;
+    try {
+      provider = await loadProvider();
+    } catch (e) {
+      if (warm === st) st.error = e;
+      markStarted();
+      return;
+    }
+    if (warm !== st) { markStarted(); return; }
+    st.provider = provider;
+
+    const existing = snapshot(provider);
+    if (existing) {
+      // 已经有会话：不需要新的配对，也别让上一次残留的 URI 把用户再跳一次。
+      st.ready = true;
+      clearWcUri();
+      markStarted();
+      return;
+    }
+
+    // provider 实例是复用的，监听器必须能摘掉，否则每重建一次就多一个。
+    const onDisplay = (value) => {
+      if (warm !== st || !value) return;
+      st.uri = value;
+      setWcUri(value);
+      st.listeners.splice(0).forEach((fn) => { try { fn(value); } catch (e) { /* noop */ } });
+    };
+    st.onDisplay = onDisplay;
+    provider.on('display_uri', onDisplay);
+
+    st.connectPromise = provider.connect();
+    st.connectPromise.catch((e) => {
+      if (warm !== st) return;
+      st.error = e;
+      st.listeners.splice(0).forEach((fn) => { try { fn(null); } catch (er) { /* noop */ } });
+    });
+    markStarted();
+  })();
+
+  return st;
+}
+
+function waitForUri(st, ms) {
+  if (st.uri) return Promise.resolve(st.uri);
+  if (st.error) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const done = (value) => {
+      clearTimeout(timer);
+      st.listeners = st.listeners.filter((f) => f !== onUri);
+      resolve(value || null);
+    };
+    const timer = setTimeout(() => done(null), ms);
+    const onUri = (value) => done(value);
+    st.listeners.push(onUri);
+  });
+}
+
+/**
+ * 同步跳转到钱包 App。
+ *
+ * 必须由调用方在点击的同步调用栈里调用 —— 这时候 Chrome 还认这是用户意图，
+ * https 的 universal link 会被正常导航，系统再把它交给对应 App。
+ * 一旦挪进 await 之后，部分浏览器会当作来路不明的导航直接丢掉。
+ */
+export function launchHref(href) {
+  if (!href) return;
+  try {
+    location.href = href;
+  } catch (e) { /* 少数 WebView 会把赋值抛出来，交给调用方的兜底提示 */ }
+}
+
+/** 从会话的命名空间里直接读地址，不依赖 provider 内部是否已经同步过。 */
+function accountsFromSession(provider) {
+  const session = provider && provider.session;
+  if (!session || !session.namespaces) return [];
+  const key = Object.keys(session.namespaces).find((k) => k.indexOf('eip155') === 0);
+  if (!key) return [];
+  const ns = session.namespaces[key];
+  if (!ns || !Array.isArray(ns.accounts)) return [];
+  return ns.accounts.map((a) => String(a).split(':').pop()).filter(Boolean);
+}
+
+/**
+ * 把「存储里有会话」补成「provider 处于可用状态」。
+ *
+ * init() 只管读一次本地会话；会话如果是在那之后才落盘（App 那边刚刚确认，
+ * 页面已经在加载了），provider 的 accounts / rpcProviders 都还是空的 ——
+ * 这时直接用它发请求会失败。这里补上，顺手把中继上的 provider 建起来。
+ */
+function revive(provider) {
+  const direct = snapshot(provider);
+  if (direct) return direct;
+
+  const accounts = accountsFromSession(provider);
+  if (!accounts.length) return null;
+
+  try {
+    const namespaces = provider.session.namespaces;
+    const key = Object.keys(namespaces).find((k) => k.indexOf('eip155') === 0);
+    const caipAccounts = namespaces[key].accounts;
+    provider.signer.onConnect();
+    provider.setChainIds(caipAccounts);
+    provider.setAccounts(caipAccounts);
+  } catch (e) {
+    // 补不上内部状态也能用：交易层的读操作全走公共 RPC，只有签名需要这个 provider，
+    // 而签名请求到那一步会再走一次 connect 流程。
+  }
+
+  return snapshot(provider) || { accounts, provider };
 }
 
 /**
  * 回跳 / 刷新后恢复会话。
  *
- * 两种情况：
- *   1. 页面活着：connect() 那笔 Promise 会自己 resolve，这个函数基本立刻命中；
- *   2. 页面被系统回收、重新加载：SDK init 时会把会话从 localStorage 读回来，
- *      但账户要 enable() 之后才填进 provider.accounts。
- *
- * 和有 OKX 那边一样，不能问一次就放弃：会话落盘和页面加载之间有一两秒的差。
+ * 注意这里不调 provider.enable()：在没有会话时它内部会发起一次新的配对，
+ * 把「静默恢复」变成「偷偷弹授权框」。轮询本地会话就够了。
  */
 export async function restoreWc({ windowMs = 8000 } = {}) {
   let provider;
@@ -172,29 +339,13 @@ export async function restoreWc({ windowMs = 8000 } = {}) {
     return null;
   }
 
-  const first = snapshot(provider);
-  if (first) return first;
-
-  if (provider.session) {
-    try { await provider.enable(); } catch (e) { /* 会话失效，下面继续等 */ }
-    const again = snapshot(provider);
-    if (again) return again;
-  }
-
   const deadline = Date.now() + windowMs;
-  while (Date.now() < deadline) {
-    await sleep(300);
-
-    if (!provider.session) {
-      // init 之后才落盘的会话：SDK 自己会在下一轮 storage 事件里捡起来，
-      // 这里只负责重新 enable 一次把它读进 accounts。
-      try { await provider.enable(); } catch (e) { /* 还没有会话，下一轮再看 */ }
-    }
-
-    const found = snapshot(provider);
+  for (;;) {
+    const found = revive(provider);
     if (found) return found;
+    if (Date.now() >= deadline) return null;
+    await sleep(300);
   }
-  return null;
 }
 
 /** 当前会话是否在 BSC 上。切链交给各钱包自己的确认框。 */
