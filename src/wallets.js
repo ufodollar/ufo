@@ -108,7 +108,13 @@ export function walletList() {
       // 退化为可用的路径：direct:false —— 点击时把链接写进剪贴板，再拉起
       // App，用户在地址栏粘贴一次。浏览器已经会打开，只差一次粘贴。
       id: 'trust', name: 'Trust Wallet', direct: false, manual: true,
-      url: 'trust://',
+      // 必须是 trust://open_url，不能是裸 trust://。
+      // 裸 scheme 没有 host，Android 找不到匹配的 Activity，点击后毫无反应
+      // （2026-11-22 真机验证）。open_url 这个 host 才注册了 intent-filter。
+      //
+      // 不带 ?c=1：query 里出现第二个 ? 会让部分解析路径出错，而落地后
+      // 用户本来就要点一次 Connect，不值得为省这一次点击牺牲拉起可靠性。
+      url: `trust://open_url?coin_id=60&url=${currentUrl()}`,
       fallback: 'https://trustwallet.com/download',
       scheme: true,
       pasteHint: 'Link copied. In Trust Wallet, tap the address bar and paste.',
