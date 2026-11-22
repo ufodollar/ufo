@@ -58,7 +58,7 @@
 <p class="sub">验证「绝对路径 + deep link + 粘贴兜底」这套方法能否复制到 OKX Wallet</p>
 
 <div class="banner info" id="banner">
-  在系统浏览器（Chrome）里打开本页，逐个点击下面的按钮。能进到 <span class="mono">okx-landed.html</span> 就是成功。
+  在系统浏览器（Chrome）里打开本页，逐个点击下面的按钮。能进到 <span class="mono">okx-landed</span> 就是成功。
 </div>
 
 <div class="card">
@@ -90,7 +90,7 @@
 <script>
 (function () {
   var HOST = 'https://ufo-eea.pages.dev';
-  var TARGET = HOST + '/okx-landed.html';   // 无 query、无 hash，裸串形态也不会被截断
+  var TARGET = HOST + '/okx-landed';   // Pages 会把 .html 308 到无后缀路径，直接用 clean URL 少一跳；无 query 无 hash，裸串形态不会被截断
   var ENC = encodeURIComponent(TARGET);
   var INNER_ENC = encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + ENC);
 
