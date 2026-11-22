@@ -91,8 +91,31 @@
       </div>
     </noscript>
     <script>
+      // 运行时错误记录：钱包内置浏览器没有控制台，出错时只能靠页面自己说出来。
+      // 只存最近几条，任何报错都会出现在下面的兜底界面里。
+      window.__ufoBoot = { t0: Date.now(), mounted: false, errors: [] };
+      (function () {
+        function push(msg) {
+          try { window.__ufoBoot.errors.push(String(msg).slice(0, 160)); } catch (e) {}
+        }
+        window.addEventListener('error', function (e) {
+          if (e && e.target && e.target.tagName === 'SCRIPT') { push('script failed: ' + (e.target.src || '').split('/').pop()); return; }
+          push((e.message || 'error') + ' @ ' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          push('rejection: ' + ((e.reason && e.reason.message) || e.reason));
+        });
+      })();
+    </script>
+    <script>
       // 自愈：脚本没下载下来 / 加载报错时，不要让人对着一个永远转圈的页面干等
       (function () {
+        function detail() {
+          var errs = (window.__ufoBoot && window.__ufoBoot.errors) || [];
+          return errs.length
+            ? '<div style="margin-top:10px;font-size:10.5px;color:#94a3b8;word-break:break-all;text-align:left">' + errs.slice(-3).join('<br>') + '</div>'
+            : '<div style="margin-top:10px;font-size:10.5px;color:#94a3b8">no script error recorded</div>';
+        }
         function fail() {
           var boot = document.querySelector('#root .boot');
           if (!boot) return; // React 已接管，说明正常
@@ -100,6 +123,7 @@
             '<div style="text-align:center;line-height:1.9">' +
             '<div style="font-size:13px;color:#475569;font-weight:600">页面加载失败</div>' +
             '<div style="font-size:11.5px;color:#94a3b8">请检查网络后重新加载</div>' +
+            detail() +
             '</div>' +
             '<button onclick="location.reload()" style="margin-top:6px;padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">重新加载</button>';
         }
@@ -112,16 +136,14 @@
             root.innerHTML =
               '<div style="padding:40px 24px;text-align:center;line-height:1.9">' +
               '<div style="font-size:13px;color:#475569;font-weight:600">Nothing rendered</div>' +
-              '<div style="font-size:11.5px;color:#94a3b8">The page loaded but the app did not start.<br>Try /diag.html to check the connection.</div>' +
+              '<div style="font-size:11.5px;color:#94a3b8">The page loaded but the app did not start.</div>' +
+              detail() +
               '</div>' +
               '<div style="text-align:center"><button onclick="location.reload()" style="padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">Reload</button></div>';
           }
         }
         setTimeout(fail, 9000);
         setTimeout(blank, 12000);
-        window.addEventListener('error', function (e) {
-          if (e && e.target && e.target.tagName === 'SCRIPT') fail();
-        }, true);
       })();
     </script>
     <script type="module" src="/src/main.jsx"></script>
