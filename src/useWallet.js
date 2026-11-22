@@ -48,7 +48,7 @@ const CHAIN_UNKNOWN = 'unknown';
  *
  * 这是网页能做的极限。钱包自己那一层「选择网络」弹窗属于 App 的
  * dapp 浏览器，在页面加载前就已发生，任何 JS 都够不着 —— 那一层只能靠
- * deeplink 参数（Bitget 的 _needChain、Trust 的 coin_id、Coin98 的 chainId）。
+ * deeplink 参数（Bitget 的 _needChain、Trust 的 coin_id）。
  *
  * 返回值必须被调用方接住。之前这里一律吞异常，理由是「链不对只影响写交易，
  * 读数据走固定 RPC，页面照常显示余额」—— 但那个理由只在「用户看得懂为什么
@@ -239,7 +239,7 @@ export function useWallet() {
     let cancelled = false;
 
     // 移动端 + 有注入 = 一定在某个钱包的内置浏览器里（手机普通浏览器没有 provider）。
-    // 有了这个判据，就算 deeplink 带不进 ?c=1（Coin98 就带不进，它不解码），
+    // 有了这个判据，就算 deeplink 带不进 ?c=1（Trust、SafePal 都带不进），
     // 进来后依然能自动走一次授权，不用用户自己去页面上找按钮。
     // 桌面扩展不在此列 —— 那种情况自动弹框会打扰人。
     const inWalletBrowser = isMobile();
