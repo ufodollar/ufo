@@ -10,7 +10,8 @@ ReactDOM.createRoot(rootEl).render(
   </React.StrictMode>
 );
 
-// 供 /probe 读取：真的挂载成功的标志是 #root 里有元素，而不是「脚本执行过了」
+// 记录「真的挂载成功」：判据是 #root 里有元素，而不是「脚本执行过了」。
+// 页面自愈兜底会读这个标志，避免把已经渲染好的页面误判成白屏。
 requestAnimationFrame(() => {
   if (window.__ufoBoot && rootEl.childElementCount > 0) window.__ufoBoot.mounted = true;
 });
