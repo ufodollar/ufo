@@ -13,3 +13,13 @@ export const CONFIG = {
 };
 
 export const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';
+
+/**
+ * Reown（WalletConnect）Project ID。
+ *
+ * 留给钱包墙判断「要不要走中继通道」：填了就启用，留空则所有钱包继续走各自的
+ * 内置浏览器，行为与今天完全一致，也不会下载那 300KB 的 SDK。
+ *
+ * 申请：https://cloud.reown.com → Create Project → 复制 Project ID。
+ */
+export const WC_PROJECT_ID = '';

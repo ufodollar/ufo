@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
@@ -11,7 +11,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
  */
-export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, busy, error }) {
+export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, wcReady, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -22,6 +22,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const [linkCopied, setLinkCopied] = useState(false);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
+  // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
+  // 直接退回该钱包的内置浏览器 —— 否则用户每点一次都要白等一轮。
+  const wcBroken = useRef(new Set());
 
   useEffect(() => {
     if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); return; }
@@ -33,9 +36,14 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   if (!open) return null;
 
   const handleApp = async (wallet) => {
+    // 这个钱包能不能走 WalletConnect：配了 Project ID、有入口前缀、
+    // 且这条入口不在本会话的失败名单里。
+    const useWc = !!(wcReady && wallet.wcPrefix && wallet.connect !== 'okx' && !wcBroken.current.has(wallet.id));
+
     // iOS 上 Trust Wallet 已经没有内置浏览器，跳转只会把 App 拉到首页，
     // 用户回来时看到的是「什么都没发生」。与其演一次失败的跳转，不如直接说清。
-    if (wallet.noBrowser) {
+    // 但它支持 WalletConnect，所以有 WC 通道时这条限制不适用。
+    if (wallet.noBrowser && !useWc) {
       setOpening('');
       setCopied(false);
       setNotice(`${wallet.name} removed its in-app browser on iOS in June 2025. Open this page in another wallet, or copy the link below and paste it into a DApp browser.`);
@@ -47,6 +55,32 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
     setCopied(false);
     setHint('');
     setPasteUrl('');
+
+    // WalletConnect：页面留在 Chrome，App 只负责确认。
+    // 和 OKX 那条是同一种体验，区别只是中继不同。
+    if (useWc && onWcConnect) {
+      setHint(`Approve the request in ${wallet.name}. You will come back here to continue.`);
+      setPasteUrl(wallet.target);
+      try {
+        await onWcConnect(wallet);
+        // 成功后 useWallet 写入账户并关面板，这里不用再做什么
+      } catch (e) {
+        const code = e && e.code;
+        const msg = String((e && (e.message || e.reason)) || '');
+        // 4001 / reject 是用户自己取消，不报错、不退回内置浏览器
+        const cancelled = code === 4001 || code === 'ACTION_REJECTED' || /reject|cancel|denied/i.test(msg);
+        if (!cancelled) {
+          // 这条入口真机没接住（scheme 不对 / App 没注册）：
+          // 记下它，同一个会话里不再重试，直接改用内置浏览器打开。
+          wcBroken.current.add(wallet.id);
+          setNotice(`${wallet.name} did not accept the WalletConnect link. Opening its in-app browser instead.`);
+          setTimeout(() => { openInWallet(wallet); }, 700);
+        }
+      } finally {
+        setOpening('');
+      }
+      return;
+    }
 
     // OKX 走官方 Connect 协议，而不是把网址塞进它内置浏览器 ——
     // 后者已用真机证明不可能（见 wallets.js 的 OKX 注释）。
@@ -104,7 +138,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const showQR = !mobile && !hasExt;  // 桌面什么都没有：扫码去手机
 
   const subtitle = mobile
-    ? 'The page opens inside your wallet, not here.'
+    ? (wcReady
+        ? 'Approve in your wallet app — this page stays open and you come straight back to it.'
+        : 'The page opens inside your wallet, not here.')
     : hasExt
       ? 'Pick the wallet already in this browser.'
       : 'No wallet in this browser. Scan below and open it on your phone.';

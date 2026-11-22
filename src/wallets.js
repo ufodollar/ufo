@@ -103,6 +103,30 @@ export function walletList() {
   // 随后发交易由 App 签名。deep link 只留一条纯拉起的退路。
   const okxLaunchUrl = 'okx://web3?stack=true';
 
+  // ---------- WalletConnect 入场 ----------
+  //
+  // 每个支持 WalletConnect 的钱包，都有一条把「配对 URI」交给它的专用入口。
+  // 走这条路的流程是：本页生成 URI → 跳 App → 用户在 App 里确认 →
+  // 自动回到本页继续操作，页面始终在 Chrome 里。
+  //
+  // 与内置浏览器路径的区别只有一个：连接状态存在中继上，不在 WebView 里。
+  // 所以回浏览器之后仍然连得上 —— 这正是不用内置浏览器也能「回来就能用」的原因。
+  //
+  // 这些前缀都来自各家公开文档；真机若接不住，WalletPicker 会自动退回该钱包的
+  // 内置浏览器路径，不会把用户卡在半路。
+  const WC_PREFIX = {
+    metamask: 'https://metamask.app.link/wc?uri=',
+    // Trust 用 universal link，不用 trust://：iOS 上自定义 scheme 会被
+    // Safari 的「在 App 中打开」判断拦掉，universal link 更稳。
+    trust: 'https://link.trustwallet.com/wc?uri=',
+    coinbase: 'https://go.cb-w.com/wc?uri=',
+    bitget: 'bitkeep://wc?uri=',
+    tokenpocket: 'tpdapp://wc?uri=',
+    imtoken: 'imtokenv2://wc?uri=',
+    coin98: 'coin98://wc?uri=',
+    phantom: 'phantom://wc?uri='
+  };
+
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
@@ -215,7 +239,13 @@ export function walletList() {
       manual: true,
       pasteHint: 'Link copied. Chrome will ask to open OKX — tap Continue. In OKX, tap Explore at the bottom, then paste the link into the search box at the top.'
     }
-  ].map((w) => ({ ...w, icon: ICON(w.id), target }));
+  ].map((w) => ({
+    ...w,
+    icon: ICON(w.id),
+    target,
+    // 支持 WalletConnect 的钱包带上入口前缀；OKX 走自己的 Connect，不在此列
+    wcPrefix: WC_PREFIX[w.id] || null
+  }));
 }
 
 /**

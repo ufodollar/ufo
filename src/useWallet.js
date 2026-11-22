@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { watchInjectedWallets, isMobile, AUTOCONNECT_PARAM } from './wallets';
 import { hasOkxPending, clearOkxPending, hasStoredOkxSession } from './okxpending';
+import { hasWcPending, clearWcPending, hasStoredWcSession } from './wcpending';
+import { WC_PROJECT_ID } from './config';
 
 // 本会话主动断开后，不要再用注入式自动连回去
 const OPTOUT_KEY = 'ufo_inj_off';
@@ -14,6 +16,10 @@ const SEEN_KEY = 'ufo_linked';
 //   c=1  → 页面里有 window.ethereum，走注入式授权
 //   okx=1 → 页面里没有注入，会话在 OKX SDK 里，需要单独恢复
 const OKX_RETURN_PARAM = 'okx';
+
+// WalletConnect 回跳标记。和 okx 分开，理由同 okxpending.js 的注释：
+// 两条通道恢复方式不同，混在一起会互相触发对方的恢复流程。
+const WC_RETURN_PARAM = 'wc';
 
 // 地址统一小写。
 // 不用 ethers 的 getAddress：它会对混合大小写做 EIP-55 校验和验证，
@@ -127,6 +133,7 @@ function clearAutoconnectParam() {
     let touched = false;
     if (url.searchParams.has(AUTOCONNECT_PARAM)) { url.searchParams.delete(AUTOCONNECT_PARAM); touched = true; }
     if (url.searchParams.has(OKX_RETURN_PARAM)) { url.searchParams.delete(OKX_RETURN_PARAM); touched = true; }
+    if (url.searchParams.has(WC_RETURN_PARAM)) { url.searchParams.delete(WC_RETURN_PARAM); touched = true; }
     if (!touched) return;
     history.replaceState(null, '', url.pathname + (url.search || ''));
   } catch (e) { /* 地址异常时留着参数也无害 */ }
@@ -196,27 +203,31 @@ export function useWallet() {
 
     let fromWallet = false;
     let okxReturn = false;
+    let wcReturn = false;
     try {
       const params = new URL(location.href).searchParams;
       fromWallet = params.get(AUTOCONNECT_PARAM) === '1';
       okxReturn = params.get(OKX_RETURN_PARAM) === '1';
+      wcReturn = params.get(WC_RETURN_PARAM) === '1';
     } catch (e) { /* 地址异常，按普通访问处理 */ }
 
     // 地址栏里没有标记也要恢复，两种很常见的情形：
     //   1. 钱包 App 回跳时把 query 拼掉了，只回到站点根地址；
     //   2. Chrome 发现这个 URL 已经开着，直接切回原标签 —— 地址栏根本不变。
-    // 这两种情况下，okxpending.js 里的本地标记是唯一的线索。
+    // 这两种情况下，*pending.js 里的本地标记是唯一的线索。
     if (hasOkxPending()) okxReturn = true;
+    if (hasWcPending()) wcReturn = true;
 
-    // 连过一次之后，这个浏览器里就存着一条 OKX 会话：以后每次打开页面都该是
+    // 连过一次之后，这个浏览器里就存着一条会话：以后每次打开页面都该是
     // 已连接状态，而不是让用户再点一次。判断只看 localStorage 的键名，
     // 不下载 SDK —— 没连过的人一分钱都不用付。
     const okxStored = okxReturn || hasStoredOkxSession();
+    const wcStored = !!(WC_PROJECT_ID && (wcReturn || hasStoredWcSession()));
 
     // 参数一旦读进变量就没有用了，立刻从地址栏抹掉。
     // 放在这里而不是各个分支结尾：无论后面走静默恢复、主动授权还是无声退出，
     // 用户复制网址、刷新页面时都不会再看到它，也不会因此重复弹授权框。
-    if (fromWallet || okxReturn) clearAutoconnectParam();
+    if (fromWallet || okxReturn || wcReturn) clearAutoconnectParam();
 
     const seenBefore = readFlag(localStorage, SEEN_KEY);
     let cancelled = false;
@@ -231,7 +242,10 @@ export function useWallet() {
       // OKX Connect 回跳：这个页面的浏览器里没有 window.ethereum，
       // 会话保存在 OKX SDK 自己的存储里，要单独去问它一句。
       // 动态 import 保证那块 SDK 只在真的需要时才下载。
-      if (okxStored) {
+      //
+      // 刚从 WalletConnect 回来时跳过：用户这一次等的是 WC 的会话，
+      // 为 OKX 白下 200KB 再失败一次，只会让「回来就已经连上」变成「回来等三秒」。
+      if (okxStored && !wcReturn) {
         // 刚从 App 回来才提示进度；普通刷新时安静恢复，别让用户看到一闪而过的状态。
         if (okxReturn && !cancelled) setAutoConnecting(true);
         try {
@@ -248,6 +262,25 @@ export function useWallet() {
         }
         // 窗口期内没等到会话就作废标记，否则以后每次打开页面都会白跑一次恢复。
         if (!cancelled) clearOkxPending();
+      }
+
+      // WalletConnect 回跳：会话在中继上，SDK 已经把它从 localStorage 读回来了，
+      // 只差 enable() 一次让 accounts 有值。等法和 OKX 完全一致。
+      if (wcStored) {
+        if (wcReturn && !cancelled) setAutoConnecting(true);
+        try {
+          const { restoreWc } = await import('./walletconnect');
+          const restored = await restoreWc({ windowMs: wcReturn ? 10000 : 3000 });
+          if (!cancelled && restored) {
+            clearWcPending();
+            accept(restored.accounts, restored.provider);
+            return;
+          }
+        } catch (e) { /* 恢复失败就当普通访问 */ }
+        finally {
+          if (!cancelled) setAutoConnecting(false);
+        }
+        if (!cancelled) clearWcPending();
       }
 
       const eth = await waitForProvider(fromWallet || inWalletBrowser ? 3000 : 1200);
@@ -443,6 +476,32 @@ export function useWallet() {
     return r === CHAIN_OK;
   }, [account]);
 
+  /**
+   * 钱包墙上点其他钱包：走 WalletConnect。
+   *
+   * 和 connectOkxWallet 是同构的 —— 拿到的都是 EIP-1193 provider，
+   * accept() 之后的逻辑一行都不用改。区别只在「谁在中继上」：
+   * OKX 用自家的 Connect，其余钱包用 WalletConnect。
+   *
+   * 只有配置了 Project ID 才会走到这里；没配置时钱包墙仍然走内置浏览器。
+   */
+  const connectWcWallet = useCallback(async (wallet) => {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    try {
+      const { connectWc } = await import('./walletconnect');
+      const { accounts, provider } = await connectWc(wallet);
+      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      return false;
+    } catch (e) {
+      if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return false;
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, accept]);
+
   const disconnect = useCallback(async () => {
     optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
@@ -463,9 +522,13 @@ export function useWallet() {
   }, [account]);
 
   // 打开钱包墙就顺手开始下 SDK：从面板出现到用户点中某个图标，
-  // 通常有 1~2 秒，这段空档正好用来下载。失败无所谓，点 OKX 时还会再 import 一次。
+  // 通常有 1~2 秒，这段空档正好用来下载。失败无所谓，点的时候还会再 import 一次。
+  // WalletConnect 只在配置了 Project ID 时才预下 —— 没配置的人不该为这 300KB 付费。
   const openPicker = useCallback(() => {
     import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
+    if (WC_PROJECT_ID) {
+      import('./walletconnect').then((m) => m.prefetchWc()).catch(() => {});
+    }
     setPickerOpen(true);
   }, []);
 
@@ -486,6 +549,7 @@ export function useWallet() {
     connect,
     connectWith,
     connectOkxWallet,
+    connectWcWallet,
     disconnect,
     clearError: () => setError('')
   };

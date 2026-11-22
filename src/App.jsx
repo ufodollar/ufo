@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 // 首屏不引入 ethers：读链走 chain.js 的裸 JSON-RPC，
 // 只有真正签名时才按需下载 ethers（见 tx.js）。体积对比见 README。
-import { CONFIG } from './config';
+import { CONFIG, WC_PROJECT_ID } from './config';
 import { formatUnits, parseUnits } from './units';
 import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot } from './chain';
 import { submitSwap, toWei, prefetchTxLibs } from './tx';
@@ -136,7 +136,7 @@ function App() {
     address, provider: walletProvider, isConnected,
     busy: walletBusy, autoConnecting, error: walletError,
     chainIssue, fixChain,
-    connect, disconnect, connectOkxWallet,
+    connect, disconnect, connectOkxWallet, connectWcWallet,
     pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
 
@@ -988,6 +988,8 @@ function App() {
         injectedWallets={injectedWallets}
         onPick={connectWith}
         onOkxConnect={connectOkxWallet}
+        onWcConnect={connectWcWallet}
+        wcReady={!!WC_PROJECT_ID}
         busy={walletBusy}
         error={walletError}
       />
