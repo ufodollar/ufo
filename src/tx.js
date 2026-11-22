@@ -149,12 +149,22 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
 
   // gas 预检。低于 0.0005 BNB 时发出去也大概率失败，
   // 不如在签名前就说清楚，省掉一次「App 弹窗 → 报错 → 回网页」。
-  const bnbHex = await rpcCall('eth_getBalance', [owner, 'latest']);
+  //
+  // 三件事彼此无关（余额、是否暂停、授权额度），并发问出去。
+  // 串行问要多花两个来回，在手机上就是大半秒。
+  const [bnbHex, isPaused, allowance] = await Promise.all([
+    rpcCall('eth_getBalance', [owner, 'latest']),
+    readView(vaultIface, CONFIG.VAULT_ADDRESS, 'paused'),
+    isBuy
+      ? readView(erc20Iface, tokenAddress, 'allowance', [owner, CONFIG.VAULT_ADDRESS])
+      : Promise.resolve(0n)
+  ]);
+
   if (Number(BigInt(bnbHex)) / 1e18 < 0.0005) {
     throw new Error('Insufficient BNB for gas.');
   }
 
-  if (await readView(vaultIface, CONFIG.VAULT_ADDRESS, 'paused')) {
+  if (isPaused) {
     throw new Error('The vault is currently paused for maintenance. Please try again later.');
   }
 
@@ -166,10 +176,6 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
   let nonceFloor = 0;
 
   if (isBuy) {
-    const allowance = await readView(
-      erc20Iface, tokenAddress, 'allowance', [owner, CONFIG.VAULT_ADDRESS]
-    );
-
     if (allowance < amountWei) {
       onStage('Approving…');
       // 按本次额度精确授权，不申请无限授权
