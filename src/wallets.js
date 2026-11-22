@@ -84,6 +84,38 @@ export function walletList() {
   // Trust 无法用 deep link 带 URL 进站（见该条目注释），改为复制 + 粘贴，
   // 因此这里不再需要单独拼它的落地地址 —— target 就是 autoconnectUrl()。
 
+  // ---------- OKX ----------
+  //
+  // OKX 的跳转格式从来没有公开文档，2026-11-22 两轮真机穷举的结果：
+  //   1. JS 里 location.href = 'okx://wallet/dapp/url?dappUrl=...' —— 全部无反应
+  //      （第一轮 7 种形态，包括裸 URL、details、order、okxapp://）
+  //   2. <a href> 点击同一条 —— 同样无反应，说明不是 Chrome 的手势拦截
+  //   3. https://www.okx.com/download?deeplink=... —— 直接落到 /en-us/download
+  //      网页，OKX 没给这个域名注册 App Links，浏览器当普通网页打开
+  //   4. 但内置浏览器本身完全可用：手动粘贴地址后站点正常加载、provider 注入、
+  //      eth_accounts 直接返回地址、UA 含 OKApp/(OKX-Wallet/6.197.0)
+  //
+  // 结论：带 URL 进站没有可靠手段，退到「拉起 App + 剪贴板」这一档，和 Trust
+  // 同级。区别是 OKX 的 scheme 是否存活尚未验证，所以用 intent:// 主动指定
+  // 包名——它不经过 scheme 注册表，是 Android 上投递意图最硬的方式。
+  //
+  // 三个阶段在一次点击内依次投递，每级 1.3 秒。任一级把 App 拉到前台，
+  // visibilitychange 立刻触发，剩余定时器全部取消，不会重复拉起。
+  //   ① intent 带 URL：唯一可能真正把网址送进 DApp 页的形态
+  //   ② intent 空路径：① 的 dappUrl 不被消费时，至少把 App 拉起来
+  //   ③ 裸 scheme：包名猜错时的最后一搏
+  const OKX_PKG = 'com.okinc.okex';
+  const okxStages = platform() === 'android'
+    ? [
+        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;package=${OKX_PKG};launchFlags=0x10000000;end`,
+        `intent://#Intent;package=${OKX_PKG};launchFlags=0x10000000;end`,
+        'okx://wallet/dapp'
+      ]
+    : [
+        `okx://wallet/dapp/url?dappUrl=${enc}`,
+        'okx://wallet/dapp'
+      ];
+
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
@@ -183,11 +215,14 @@ export function walletList() {
       fallback: 'https://coin98.com/'
     },
     {
-      id: 'onto', name: 'ONTO', direct: true,
-      // 官方文档 docs.onto.app/deep-link：chain 必填、可多值，url 必填。
-      // 是少数把「打开任意 URL」写进文档的钱包，和 TokenPocket / imToken 同一类。
-      url: `https://link.onto.app/open_url?chain=bsc&url=${enc}`,
-      fallback: 'https://onto.app/download'
+      id: 'okx', name: 'OKX Wallet', direct: false, manual: true, staged: true,
+      // 三级投递见上方 okxStages 的注释。
+      stages: okxStages,
+      url: okxStages[0],
+      fallback: 'https://www.okx.com/web3',
+      // OKX 内置浏览器的入口是顶部搜索框（不是 Trust 那种地址栏），
+      // 提示必须写清楚点哪里，否则用户会在首页找不到粘贴位置。
+      pasteHint: 'Link copied. In OKX, tap the search box at the top and paste the link — it opens in the built-in browser, then approve the connection.'
     }
   ].map((w) => ({ ...w, icon: ICON(w.id), target }));
 }
@@ -197,6 +232,28 @@ export function walletList() {
  * 落地后页面里已经有 window.ethereum，注入式逻辑会自动恢复连接。
  */
 export function openInWallet(wallet) {
+  // 分阶段投递：一次点击内依次试多个地址，任一被系统接住就全部停下。
+  // 第一级必须在点击的同步调用栈里发出，否则 Chrome 会当作非用户意图丢弃。
+  if (wallet.staged && wallet.stages && wallet.stages.length) {
+    let left = false;
+    const timers = [];
+
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') {
+        left = true;
+        timers.forEach(clearTimeout);
+        document.removeEventListener('visibilitychange', onHide);
+      }
+    };
+    document.addEventListener('visibilitychange', onHide);
+
+    location.href = wallet.stages[0];
+    wallet.stages.slice(1).forEach((u, i) => {
+      timers.push(setTimeout(() => { if (!left) location.href = u; }, (i + 1) * 1300));
+    });
+    return;
+  }
+
   // intent:// 自带 browser_fallback_url，系统会处理「没装」的情况，
   // 不需要我们再计时判断
   if (wallet.intent) { location.href = wallet.url; return; }
