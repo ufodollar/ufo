@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>OKX Deep Link Test</title>
+<title>OKX Deep Link Test v2</title>
 <style>
   :root{
     --bg:#f5f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b;
@@ -36,11 +36,12 @@
     padding:7px 8px;word-break:break-all;max-height:76px;overflow:auto;margin-bottom:8px;
   }
   .note{font-size:11.5px;color:var(--muted);margin:0 0 8px}
-  button{
+  button,.btn{
+    display:block;width:100%;box-sizing:border-box;text-align:center;text-decoration:none;
     font:inherit;font-size:13.5px;font-weight:600;border:0;border-radius:10px;
-    padding:10px 14px;background:var(--blue);color:#fff;width:100%;cursor:pointer;
+    padding:11px 14px;background:var(--blue);color:#fff;cursor:pointer;
   }
-  button.ghost{background:#fff;color:var(--blue);border:1px solid #c7d7fe}
+  .btn.ghost,button.ghost{background:#fff;color:var(--blue);border:1px solid #c7d7fe}
   button:disabled{opacity:.55}
   .st{font-size:11.5px;margin-top:8px;font-weight:600;display:none}
   .st.show{display:block}
@@ -50,15 +51,19 @@
   .banner.alert{background:#fff7ed;color:var(--warn);border:1px solid #fed7aa}
   .foot{color:var(--muted);font-size:11.5px;line-height:1.6;margin-top:16px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  details{border:1px solid var(--line);border-radius:14px;background:#fff;padding:0 12px;margin-bottom:12px}
+  summary{font-size:13px;font-weight:650;padding:12px 0;cursor:pointer;color:var(--muted)}
+  details[open] summary{border-bottom:1px solid var(--line);margin-bottom:12px}
+  details .v:last-of-type{margin-bottom:12px}
 </style>
 </head>
 <body>
 
-<h1>OKX Deep Link 测试</h1>
-<p class="sub">验证「绝对路径 + deep link + 粘贴兜底」这套方法能否复制到 OKX Wallet</p>
+<h1>OKX Deep Link 测试 · 第二轮</h1>
+<p class="sub">第一轮用 JS 跳转全部无反应，这轮换成真实链接和 intent://</p>
 
-<div class="banner info" id="banner">
-  在系统浏览器（Chrome）里打开本页，逐个点击下面的按钮。能进到 <span class="mono">okx-landed</span> 就是成功。
+<div class="banner alert">
+  在系统浏览器（Chrome）里打开本页，从上往下点。看到 OKX 被拉起并直接显示 <span class="mono">okx-landed</span> 页才算成功。
 </div>
 
 <div class="card">
@@ -67,72 +72,94 @@
   <div class="row"><span>document.baseURI</span><span id="e-base">—</span></div>
   <div class="row"><span>UA</span><span id="e-ua">—</span></div>
   <div class="row"><span>window.ethereum</span><span id="e-eth">—</span></div>
-  <div class="row"><span>OKX 标志位</span><span id="e-okx">—</span></div>
   <div class="row"><span>目标地址</span><span id="e-target">—</span></div>
 </div>
 
 <div class="card">
-  <h2>变体（建议按 1 → 7 顺序试）</h2>
-  <div id="variants"></div>
+  <h2>第二批 · 真实链接 / intent（重点看这些）</h2>
+  <div id="round2"></div>
 </div>
 
+<details>
+  <summary>第一批 · JS 跳转（已实测，7 个全部无反应）</summary>
+  <div id="round1"></div>
+</details>
+
 <div class="card">
-  <h2>兜底路径（Trust 最终用的那套）</h2>
-  <p class="note">复制落地页地址 → 拉起 OKX → 在地址栏粘贴 → 回车。这条不依赖任何 scheme 参数，只要 OKX 有内置浏览器就一定成。</p>
+  <h2>兜底</h2>
+  <p class="note">复制落地页地址 → 拉起 OKX → 在地址栏粘贴。这条路你已验证可用，只是多两步。</p>
   <button class="ghost" id="copy-open">复制链接并拉起 OKX</button>
   <div class="st" id="copy-st"></div>
 </div>
 
 <div class="foot">
-  判定标准：落地页显示 <b>provider: OKX</b> 且 chainId 能切到 56(BSC) → 可替代 ONTO。若页面能进但没有 provider → 只能当作「打开网页」，不能连钱包，替代价值为零。
+  <b>为什么换真实链接：</b>Android Chrome 会把脚本里的 <span class="mono">location.href = 'okx://...'</span> 当成非用户手势的导航而静默丢弃，
+  但对 <span class="mono">&lt;a href="okx://..."&gt;</span> 的点击是原生 intent 派发，行为完全不同。第一批全灭很可能不是 OKX 不支持，而是被 Chrome 拦了。
 </div>
 
 <script>
 (function () {
   var HOST = 'https://ufo-eea.pages.dev';
-  var TARGET = HOST + '/okx-landed';   // Pages 会把 .html 308 到无后缀路径，直接用 clean URL 少一跳；无 query 无 hash，裸串形态不会被截断
+  var TARGET = HOST + '/okx-landed';
   var ENC = encodeURIComponent(TARGET);
-  var INNER_ENC = encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + ENC);
-
-  var VARIANTS = [
-    { id: 'okx://wallet/dapp/url', label: 'wallet/dapp/url · 编码 URL', url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
-      note: '最常见形态。connect-demo.html 里用过，尚未真机确认。' },
-    { id: 'okx://wallet/dapp/url bare', label: 'wallet/dapp/url · 裸 URL', url: 'okx://wallet/dapp/url?dappUrl=' + TARGET,
-      note: '部分 build 不解码，裸串反而能过。目标地址无 query，所以不会出现第二个 ?。' },
-    { id: 'okx://wallet/dapp/details', label: 'wallet/dapp/details · 编码 URL', url: 'okx://wallet/dapp/details?dappUrl=' + ENC,
-      note: '较新版本的形态，参数名相同、路径不同。' },
-    { id: 'okx://wallet/dapp/details bare', label: 'wallet/dapp/details · 裸 URL', url: 'okx://wallet/dapp/details?dappUrl=' + TARGET,
-      note: '' },
-    { id: 'okx://wallet/dapp/order', label: 'wallet/dapp/order ?url=', url: 'okx://wallet/dapp/order?url=' + ENC,
-      note: '参数名换成 url 的老形态。' },
-    { id: 'okx:https', label: 'okx://https://… · 整段作 host', url: 'okx://' + TARGET,
-      note: '少数 App 把整个目标地址当 host 解析，形如 okx://https://…' },
-    { id: 'okxapp://', label: 'okxapp:// 前缀 · 对照组', url: 'okxapp://wallet/dapp/url?dappUrl=' + ENC,
-      note: '若 okx:// 全线失败但这个是通的，说明 scheme 名不同。' }
-  ];
-
+  var INNER = encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + ENC);
   var $ = function (id) { return document.getElementById(id); };
 
-  // ---------- 环境探测 ----------
+  // OKX Android 包名。写错会走系统 fallback，不会崩。
+  var PKG = 'com.okinc.okex';
+
+  var ROUND2 = [
+    {
+      label: 'okx://discover/dapp?url= · 真实链接',
+      url: 'okx://discover/dapp?url=' + ENC,
+      note: 'discover 路径，与 wallet 路径是两套入口，可能对应「发现页 DApp」。'
+    },
+    {
+      label: 'okx://wallet/dapp/url · 真实链接',
+      url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
+      note: '与第一批第 1 个同串，唯一区别是由 a 标签点击触发。用来分辨「被 Chrome 拦」还是「OKX 不认」。'
+    },
+    {
+      label: 'intent://wallet/dapp/url · 指定包名',
+      url: 'intent://wallet/dapp/url?dappUrl=' + ENC + '#Intent;scheme=okx;package=' + PKG + ';end',
+      note: 'Android 原生意图，精确投递给 OKX，不受 scheme 注册表影响。'
+    },
+    {
+      label: 'intent://discover/dapp · 指定包名',
+      url: 'intent://discover/dapp?url=' + ENC + '#Intent;scheme=okx;package=' + PKG + ';end',
+      note: '同上，走 discover 路径。'
+    },
+    {
+      label: 'okx://wallet/dapp/details · 真实链接',
+      url: 'okx://wallet/dapp/details?dappUrl=' + ENC,
+      note: 'details 路径，真实链接版。'
+    },
+    {
+      label: 'okx.com/download?deeplink= · https 中转',
+      url: 'https://www.okx.com/download?deeplink=' + INNER,
+      note: '官方推荐的 universal link 包装，装了由系统接管，没装落下载页。'
+    }
+  ];
+
+  var ROUND1 = [
+    { label: 'wallet/dapp/url · 编码 URL', url: 'okx://wallet/dapp/url?dappUrl=' + ENC },
+    { label: 'wallet/dapp/url · 裸 URL', url: 'okx://wallet/dapp/url?dappUrl=' + TARGET },
+    { label: 'wallet/dapp/details · 编码 URL', url: 'okx://wallet/dapp/details?dappUrl=' + ENC },
+    { label: 'wallet/dapp/details · 裸 URL', url: 'okx://wallet/dapp/details?dappUrl=' + TARGET },
+    { label: 'wallet/dapp/order ?url=', url: 'okx://wallet/dapp/order?url=' + ENC },
+    { label: 'okx://https://… · 整段作 host', url: 'okx://' + TARGET },
+    { label: 'okxapp:// 前缀', url: 'okxapp://wallet/dapp/url?dappUrl=' + ENC }
+  ];
+
+  // ---------- 环境 ----------
   $('e-href').textContent = location.href;
   $('e-base').textContent = document.baseURI;
   $('e-ua').textContent = navigator.userAgent;
   $('e-target').textContent = TARGET;
+  $('e-eth').textContent = window.ethereum ? '存在' : '无';
 
-  var eth = window.ethereum;
-  $('e-eth').textContent = eth ? '存在' : '无';
-  if (eth) {
-    var flags = ['isOkxWallet', 'isMetaMask', 'isTrust', 'isTokenPocket', 'isBitKeep', 'isImToken']
-      .filter(function (k) { return eth[k]; });
-    $('e-okx').textContent = flags.length ? flags.join(', ') : '无已知标志位';
-  } else {
-    $('e-okx').textContent = '—';
-  }
-
-  // ---------- 变体卡片 ----------
-  var wrap = $('variants');
-
-  VARIANTS.forEach(function (v, i) {
+  // ---------- 渲染 ----------
+  function makeCard(v, n, mode) {
     var el = document.createElement('div');
     el.className = 'v';
 
@@ -140,17 +167,16 @@
     hd.className = 'vhd';
     var no = document.createElement('div');
     no.className = 'no';
-    no.textContent = String(i + 1);
+    no.textContent = String(n);
     var nm = document.createElement('div');
     nm.className = 'vname';
     nm.textContent = v.label;
     hd.appendChild(no); hd.appendChild(nm);
+    el.appendChild(hd);
 
     var code = document.createElement('div');
     code.className = 'code';
     code.textContent = v.url;
-
-    el.appendChild(hd);
     el.appendChild(code);
 
     if (v.note) {
@@ -160,32 +186,41 @@
       el.appendChild(nt);
     }
 
-    var btn = document.createElement('button');
-    btn.textContent = '试这个';
     var st = document.createElement('div');
     st.className = 'st';
 
-    btn.addEventListener('click', function () { fire(v, btn, st); });
+    if (mode === 'link') {
+      var a = document.createElement('a');
+      a.className = 'btn';
+      a.href = v.url;
+      a.textContent = '打开（真实链接）';
+      a.addEventListener('click', function () {
+        st.className = 'st show warn';
+        st.textContent = '已派发。若 3 秒后还停在本页说明没通；若 OKX 起来了，看里面是否直接显示落地页。';
+      });
+      el.appendChild(a);
+    } else {
+      var b = document.createElement('button');
+      b.textContent = '试这个（JS 跳转）';
+      b.addEventListener('click', function () { fireJs(v.url, b, st); });
+      el.appendChild(b);
+    }
 
-    el.appendChild(btn);
     el.appendChild(st);
-    wrap.appendChild(el);
-    v._btn = btn; v._st = st;
-  });
+    return el;
+  }
 
-  function fire(v, btn, st) {
+  function fireJs(url, btn, st) {
     st.className = 'st show warn';
     st.textContent = '已触发，等待 2.5 秒…';
     btn.disabled = true;
-
-    var t0 = Date.now();
-    var left = false;
+    var t0 = Date.now(), left = false;
 
     function onHide() {
       if (document.visibilityState === 'hidden') {
         left = true;
         st.className = 'st show ok';
-        st.textContent = '页面已切走（' + (Date.now() - t0) + 'ms）→ 拉起成功，看 OKX 里是否加载了落地页';
+        st.textContent = '页面已切走（' + (Date.now() - t0) + 'ms）';
         document.removeEventListener('visibilitychange', onHide);
       }
     }
@@ -196,51 +231,43 @@
       btn.disabled = false;
       if (!left) {
         st.className = 'st show bad';
-        st.textContent = '无反应 → 这个变体不可用（浏览器不支持该 scheme，或 App 未注册此 Activity）';
+        st.textContent = '无反应';
       }
     }, 2500);
 
-    try {
-      location.href = v.url;
-    } catch (e) {
+    try { location.href = url; } catch (e) {
       st.className = 'st show bad';
       st.textContent = '抛错：' + e.message;
       btn.disabled = false;
     }
   }
 
-  // ---------- 复制 + 拉起 ----------
+  ROUND2.forEach(function (v, i) { $('round2').appendChild(makeCard(v, i + 1, 'link')); });
+  ROUND1.forEach(function (v, i) { $('round1').appendChild(makeCard(v, i + 1, 'js')); });
+
+  // ---------- 兜底 ----------
   $('copy-open').addEventListener('click', function () {
     var st = $('copy-st');
     function afterCopy(okCopy) {
       st.className = 'st show ' + (okCopy ? 'ok' : 'warn');
       st.textContent = okCopy
-        ? '已复制 ' + TARGET + '，正在拉起 OKX。进去后点地址栏粘贴再回车。'
-        : '复制失败，请手动长按选择：' + TARGET;
+        ? '已复制。正在拉起 OKX，进去后点地址栏粘贴再回车。'
+        : '复制失败，请手动记下：' + TARGET;
       setTimeout(function () { location.href = 'okx://wallet/dapp'; }, 350);
     }
-
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(TARGET).then(function () { afterCopy(true); }, function () { fallbackCopy(afterCopy); });
-    } else {
-      fallbackCopy(afterCopy);
-    }
+      navigator.clipboard.writeText(TARGET).then(function () { afterCopy(true); }, function () { fb(afterCopy); });
+    } else { fb(afterCopy); }
   });
 
-  function fallbackCopy(cb) {
+  function fb(cb) {
     try {
       var ta = document.createElement('textarea');
-      ta.value = TARGET;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
+      ta.value = TARGET; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
       var ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      cb(ok);
-    } catch (e) {
-      cb(false);
-    }
+      document.body.removeChild(ta); cb(ok);
+    } catch (e) { cb(false); }
   }
 })();
 </script>
