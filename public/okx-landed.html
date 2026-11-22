@@ -130,7 +130,12 @@
   });
 
   eth.request({ method: 'eth_accounts' }).then(function (accs) {
-    $('e-acc').textContent = accs && accs.length ? accs[0] : '未授权（正常，需点请求授权）';
+    if (accs && accs.length) {
+      $('e-acc').textContent = accs[0];
+      readContracts(accs[0]);
+    } else {
+      $('e-acc').textContent = '未授权（正常，需点请求授权）';
+    }
   }).catch(function (e) {
     $('e-acc').textContent = '读取失败 · ' + shortErr(e);
   });
@@ -142,7 +147,7 @@
     eth.request({ method: 'eth_requestAccounts' }).then(function (accs) {
       $('e-acc').textContent = accs && accs[0] ? accs[0] : '返回空数组';
       b.textContent = '已授权';
-      readContracts();
+      if (accs && accs[0]) readContracts(accs[0]);
     }).catch(function (e) {
       $('e-acc').textContent = '被拒绝/失败 · ' + shortErr(e);
       b.textContent = '请求授权（重试）';
@@ -179,7 +184,7 @@
     });
   }
 
-  function readContracts() {
+  function readContracts(addr) {
     ethCall(UFO, '0x18160ddd').then(function (r) {
       var v = BigInt(r);
       $('e-supply').textContent = (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' UFO';
@@ -188,14 +193,12 @@
       $('e-supply').textContent = '读取失败 · ' + shortErr(e);
     });
 
-    eth.request({ method: 'eth_accounts' }).then(function (accs) {
-      if (!accs || !accs.length) return;
-      ethCall(USDT, '0x70a08231' + padAddr(accs[0])).then(function (r) {
-        var v = BigInt(r);
-        $('e-usdt').textContent = (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' USDT';
-      }).catch(function (e) {
-        $('e-usdt').textContent = '读取失败 · ' + shortErr(e);
-      });
+    if (!addr) return;
+    ethCall(USDT, '0x70a08231' + padAddr(addr)).then(function (r) {
+      var v = BigInt(r);
+      $('e-usdt').textContent = (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' USDT';
+    }).catch(function (e) {
+      $('e-usdt').textContent = '读取失败 · ' + shortErr(e);
     });
   }
 })();
