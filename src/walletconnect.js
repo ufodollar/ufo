@@ -44,8 +44,57 @@ const CHAIN_HEX = '0x38';
 
 const ORIGIN = typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev';
 
-/** 通道是否可用。UI 用它决定钱包图标走中继还是走内置浏览器。 */
+/** 通道是否配置好（有 Project ID）。注意这只代表「能试」，不代表「能通」。 */
 export const wcConfigured = () => !!WC_PROJECT_ID;
+
+// ---------------------------------------------------------------------------
+// 中继可达性
+// ---------------------------------------------------------------------------
+// 这条通道的两端 —— 本页和钱包 App —— 都要连 relay.walletconnect.org。
+// 它在部分网络下是直接不可达的（真机实测：WebSocket 471ms 就失败，
+// 对照组的无关 WSS 能通）。SDK 对这种失败是静默重试，界面上表现为
+// 永远停在「Preparing a secure connection…」，什么也不说。
+//
+// 所以先花一个 HTTP 请求问一句「这个域名通吗」，通才走这条通道。
+// 用 no-cors：它不校验 CORS，只要 TCP+TLS 建起来就会 resolve（哪怕是 426），
+// 于是能把「网络层不通」和「服务端拒绝」分开 —— 后者对我们没影响。
+const RELAY_HTTP = 'https://relay.walletconnect.org/';
+const RELAY_TTL = 5 * 60 * 1000;
+
+let relayState = null;
+
+/** 上一次探测结果，未探测时为 null。 */
+export const relayKnown = () => relayState;
+
+export async function probeRelay({ timeoutMs = 5000, force = false } = {}) {
+  if (!WC_PROJECT_ID) {
+    relayState = { ok: false, at: Date.now(), reason: 'unconfigured' };
+    return relayState;
+  }
+  if (!force && relayState && Date.now() - relayState.at < RELAY_TTL) return relayState;
+
+  let ok = false;
+  let ctl = null;
+  let timer = null;
+  try {
+    ctl = new AbortController();
+    timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
+    await fetch(RELAY_HTTP, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      redirect: 'follow',
+      signal: ctl.signal
+    });
+    ok = true;
+  } catch (e) {
+    ok = false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
+  relayState = { ok, at: Date.now() };
+  return relayState;
+}
 
 let providerPromise = null;
 
@@ -137,13 +186,14 @@ export async function connectWc(wallet, { launched = false, onUri } = {}) {
   markWcPending();
 
   if (!launched) {
-    // 10 秒。配对 URI 是本地生成 + 中继发布的，正常网络下 300~800ms 就到；
+    // 6 秒。配对 URI 是本地生成 + 中继发布的，正常网络下 300~800ms 就到；
     // 一直不来基本只有一种可能：到 relay 的 WebSocket 建不起来。
     // 等太久只会让用户干看着，不如早点说清楚并退回内置浏览器。
-    const uri = st.uri || await waitForUri(st, 10000);
+    const uri = st.uri || await waitForUri(st, 6000);
     if (!uri) {
       clearWcPending();
       warm = null;
+      relayState = { ok: false, at: Date.now() };
       const reason = st.error && st.error.message;
       throw new Error(reason
         ? `Could not reach the WalletConnect relay (${reason}).`
@@ -335,6 +385,15 @@ function revive(provider) {
  * 把「静默恢复」变成「偷偷弹授权框」。轮询本地会话就够了。
  */
 export async function restoreWc({ windowMs = 8000 } = {}) {
+  // 中继不通时，App 那边的确认结果根本发不回来 —— 轮询只是白等。
+  // 已知不可达就直接放弃；还没探过就先探一次（几百毫秒），
+  // 探不通连那 400KB 都不下载。
+  if (relayState && relayState.ok === false) return null;
+  if (!relayState) {
+    const r = await probeRelay();
+    if (!r.ok) return null;
+  }
+
   let provider;
   try {
     provider = await loadProvider();

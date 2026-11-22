@@ -160,6 +160,12 @@ export function useWallet() {
   // null | 'wrong' | 'unknown'，见 ensureBscChain 上方的说明
   const [chainIssue, setChainIssue] = useState(null);
   const [error, setError] = useState('');
+  // WalletConnect 中继是否可达。null = 还没探测过。
+  //
+  // 为什么需要这一层：中继的域名在部分网络下完全不可达，此时 SDK 会
+  // 静默重试，界面永远停在「准备中」。与其让每个点钱包的人等一轮超时，
+  // 不如先探一次 —— 通才走中继，不通就直接用内置浏览器。
+  const [wcReachable, setWcReachable] = useState(WC_PROJECT_ID ? null : false);
 
   const optedOut = useRef(false);
   // 给下面的 watchdog 用的「当前是否已连上」。用 ref 而不是依赖 account，
@@ -322,13 +328,20 @@ export function useWallet() {
     if (conn && conn.saveData) return;
     let idleId = null;
     let timer = null;
+    let alive = true;
     const start = () => {
       import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
-      // WalletConnect 那块 400KB+，比 OKX 还重。用户从打开页面到点 Connect，
-      // 通常有好几秒，趁这段时间把代码拿下来，打开钱包墙时就只剩中继握手。
-      // 只下载不配对 —— 真正的配对要等面板打开，否则每次访问都建一条会话。
+      // WalletConnect 那块 400KB+，比 OKX 还重，而且在中继被封锁的网络里
+      // 下下来一行也用不上。所以先花一个 HTTP 请求问「通吗」，通了才下。
       if (WC_PROJECT_ID) {
-        import('./walletconnect').then((m) => m.prefetchWc()).catch(() => {});
+        import('./walletconnect')
+          .then(async (m) => {
+            const r = m.relayKnown() || await m.probeRelay();
+            if (!alive) return;
+            setWcReachable(r.ok);
+            if (r.ok) await m.prefetchWc();
+          })
+          .catch(() => { if (alive) setWcReachable(false); });
       }
     };
     if (typeof window.requestIdleCallback === 'function') {
@@ -337,9 +350,28 @@ export function useWallet() {
       timer = setTimeout(start, 1500);
     }
     return () => {
+      alive = false;
       if (idleId !== null && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idleId);
       if (timer) clearTimeout(timer);
     };
+  }, []);
+
+  // 网络变了（4G 切 Wi-Fi、或反过来）就重探一次中继。
+  // 探测结果带 5 分钟缓存，不这样处理的话，用户在 Wi-Fi 下连上、
+  // 再切回移动网络，页面会一直以为中继还通着。
+  useEffect(() => {
+    if (typeof window === 'undefined' || !WC_PROJECT_ID) return;
+    const onOnline = () => {
+      import('./walletconnect')
+        .then(async (m) => {
+          const r = await m.probeRelay({ force: true });
+          setWcReachable(r.ok);
+          if (r.ok && isMobile()) m.warmWc();
+        })
+        .catch(() => { /* 探测本身失败就当没网，保持原判 */ });
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, []);
 
   // ---- 回到前台时的兜底 ----
@@ -538,7 +570,16 @@ export function useWallet() {
   const openPicker = useCallback(() => {
     import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
     if (WC_PROJECT_ID) {
-      import('./walletconnect').then((m) => m.warmWc()).catch(() => {});
+      import('./walletconnect')
+        .then(async (m) => {
+          const r = m.relayKnown() || await m.probeRelay();
+          setWcReachable(r.ok);
+          // 只有确认可达才预热配对。不可达时连 SDK 都不下 —— 那 400KB
+          // 在被封锁的网络里下载下来，也只会换来一次超时。
+          // 桌面不预热：钱包墙只在手机上出现，桌面走扩展或二维码。
+          if (r.ok && isMobile()) m.warmWc();
+        })
+        .catch(() => setWcReachable(false));
     }
     setPickerOpen(true);
   }, []);
@@ -561,6 +602,7 @@ export function useWallet() {
     connectWith,
     connectOkxWallet,
     connectWcWallet,
+    wcReachable,
     disconnect,
     clearError: () => setError('')
   };

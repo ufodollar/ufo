@@ -12,7 +12,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
  */
-export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, wcReady, busy, error }) {
+export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, wcReady, wcBlocked, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -187,7 +187,11 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const subtitle = mobile
     ? (wcReady
         ? 'Approve in your wallet app — this page stays open and you come straight back to it.'
-        : 'The page opens inside your wallet, not here.')
+        : wcBlocked
+          // 说清楚「为什么 OKX 能回浏览器、其它钱包不能」：不是我们偷懒，
+          // 是中继域名在这个网络下不可达。用户换到别的网络就会自动恢复。
+          ? 'Your network blocks the WalletConnect relay, so these wallets open this page inside their app. OKX is unaffected — it uses its own servers.'
+          : 'The page opens inside your wallet, not here.')
     : hasExt
       ? 'Pick the wallet already in this browser.'
       : 'No wallet in this browser. Scan below and open it on your phone.';
