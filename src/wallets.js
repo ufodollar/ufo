@@ -229,9 +229,16 @@ export function walletList() {
       stages: okxStages,
       url: okxStages[0],
       fallback: 'https://www.okx.com/web3',
-      // OKX 内置浏览器的入口是顶部搜索框（不是 Trust 那种地址栏），
-      // 提示必须写清楚点哪里，否则用户会在首页找不到粘贴位置。
-      pasteHint: 'Link copied. In OKX, tap the search box at the top and paste the link — it opens in the built-in browser, then approve the connection.'
+      // 真机实测（2026-11-22，Android + OKX 6.197.0）：
+      //   · 系统会先弹「继续访问 OKX Wallet？」——Chrome 对跨 App scheme 的
+      //     强制确认，不是我们的代码能绕过的，必须在提示里预告，否则用户会
+      //     以为卡住了。
+      //   · 点继续之后 App 冷启动，停在资产首页（Account 1 / $0.00），
+      //     dapp/open 的 url 参数没有被消费。带网址那几级一律落空。
+      //   · 首页顶部没有可粘贴的地方，内置浏览器入口在底部「探索」里，
+      //     进去才有搜索框。旧文案写「tap the search box at the top」会让人
+      //     在首页来回找，所以改成先点探索。
+      pasteHint: 'Link copied. Chrome will ask to open OKX — tap Continue. In OKX, tap Explore at the bottom, then paste the link into the search box at the top.'
     }
   ].map((w) => ({ ...w, icon: ICON(w.id), target }));
 }
