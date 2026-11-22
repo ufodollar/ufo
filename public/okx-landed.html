@@ -107,30 +107,85 @@
 
   var flags = ['isOkxWallet', 'isMetaMask', 'isTrust', 'isTokenPocket', 'isBitKeep', 'isImToken', 'isCoinbaseWallet']
     .filter(function (k) { return eth[k]; });
-  var isOkx = !!eth.isOkxWallet;
+  // OKX 6.197 实测只设了 isMetaMask（兼容层伪装），isOkxWallet 反而是空的，
+  // 所以 UA 里的 OKApp / OKX-Wallet 才是可靠判据。
+  var isOkx = !!eth.isOkxWallet || /OKApp|OKX-Wallet/i.test(navigator.userAgent);
 
   $('e-eth').textContent = '存在';
   $('e-flags').textContent = flags.length ? flags.join(', ') : '无已知标志位';
   if (isOkx) $('e-flags').innerHTML += '<span class="tag ok">OKX</span>';
 
   // ---------- chainId ----------
+  var curChain = null;
+  var currentAddr = null;
+
   function shortErr(e) {
     if (!e) return 'unknown';
     return (e.code ? 'code ' + e.code + ' · ' : '') + (e.message || String(e)).slice(0, 90);
   }
 
+  function chainName(n) {
+    if (n === 56) return 'BSC';
+    if (n === 1) return 'Ethereum 主网';
+    if (n === 137) return 'Polygon';
+    if (n === 8453) return 'Base';
+    return '未知链';
+  }
+
+  function paintChain() {
+    var el = $('e-chain');
+    el.textContent = curChain + ' (0x' + curChain.toString(16) + ') ' + chainName(curChain);
+    if (curChain !== 56) el.innerHTML += '<span class="tag bad">非 BSC</span>';
+  }
+
+  var BSC_PARAMS = {
+    chainId: '0x38',
+    chainName: 'BNB Smart Chain',
+    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+    rpcUrls: ['https://bsc-dataseed.binance.org'],
+    blockExplorerUrls: ['https://bscscan.com']
+  };
+
+  function switchToBsc(auto) {
+    var b = $('btn-bsc');
+    b.disabled = true;
+    b.textContent = auto ? '自动切到 BSC…' : '切换中…';
+    return eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] })
+      .then(function () {
+        curChain = 56;
+        paintChain();
+        b.textContent = '已在 BSC';
+        return eth.request({ method: 'eth_accounts' }).then(function (a) {
+          if (a && a[0]) readContracts(a[0]);
+        });
+      })
+      .catch(function (e) {
+        var code = e && e.code;
+        if (code === 4902 || /4902|Unrecognized chain|not added/i.test((e && e.message) || '')) {
+          b.textContent = '正在添加 BSC 网络…';
+          return eth.request({ method: 'wallet_addEthereumChain', params: [BSC_PARAMS] })
+            .then(function () { b.disabled = false; return switchToBsc(false); });
+        }
+        paintChain();
+        $('e-chain').innerHTML += '<span class="tag bad">切换失败</span>';
+        b.textContent = '切到 BNB Smart Chain（重试）';
+        b.disabled = false;
+      });
+  }
+
   eth.request({ method: 'eth_chainId' }).then(function (cid) {
-    var n = parseInt(cid, 16);
-    $('e-chain').textContent = n + ' (0x' + n.toString(16) + ')' + (n === 56 ? ' BSC' : '');
-    if (n !== 56) {
-      $('e-chain').innerHTML += '<span class="tag bad">非 BSC</span>';
-    }
+    curChain = parseInt(cid, 16);
+    paintChain();
+    // 实测 OKX 默认停在 Ethereum 主网，不切链的话合约全读不到
+    if (curChain !== 56) switchToBsc(true);
+    else if (currentAddr) readContracts(currentAddr);
   }).catch(function (e) {
     $('e-chain').textContent = '读取失败 · ' + shortErr(e);
   });
 
   eth.request({ method: 'eth_accounts' }).then(function (accs) {
     if (accs && accs.length) {
+      currentAddr = accs[0];
       $('e-acc').textContent = accs[0];
       readContracts(accs[0]);
     } else {
@@ -156,20 +211,7 @@
   });
 
   $('btn-bsc').addEventListener('click', function () {
-    var b = this;
-    b.disabled = true;
-    b.textContent = '切换中…';
-    eth.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x38' }]
-    }).then(function () {
-      $('e-chain').textContent = '56 (0x38) BSC';
-      b.textContent = '已在 BSC';
-    }).catch(function (e) {
-      $('e-chain').textContent = '切换失败 · ' + shortErr(e);
-      b.textContent = '切到 BNB Smart Chain（重试）';
-      b.disabled = false;
-    });
+    switchToBsc(false);
   });
 
   // ---------- 合约读取 ----------
@@ -184,10 +226,31 @@
     });
   }
 
+  // 合约在错误的链上会返回 '0x'（地址无代码），BigInt('0x') 会直接抛
+  // "Cannot convert 0x to a BigInt"。这是实测踩到的第一个坑，必须容错。
+  function toBig(hex) {
+    if (!hex || hex === '0x' || hex.length < 3) return null;
+    try { return BigInt(hex); } catch (e) { return null; }
+  }
+
+  function fmt(v) {
+    return (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 });
+  }
+
   function readContracts(addr) {
+    if (curChain !== 56) {
+      $('e-supply').textContent = '未读 · 当前在 ' + chainName(curChain) + '，合约只在 BSC 有代码';
+      $('e-usdt').textContent = '未读 · 同上';
+      return;
+    }
+
     ethCall(UFO, '0x18160ddd').then(function (r) {
-      var v = BigInt(r);
-      $('e-supply').textContent = (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' UFO';
+      var v = toBig(r);
+      if (v === null) {
+        $('e-supply').textContent = '返回空 · UFO 地址在该链无代码';
+        return;
+      }
+      $('e-supply').textContent = fmt(v) + ' UFO';
       if (v === 0n) $('e-supply').innerHTML += '<span class="tag bad">尚未铸造</span>';
     }).catch(function (e) {
       $('e-supply').textContent = '读取失败 · ' + shortErr(e);
@@ -195,8 +258,8 @@
 
     if (!addr) return;
     ethCall(USDT, '0x70a08231' + padAddr(addr)).then(function (r) {
-      var v = BigInt(r);
-      $('e-usdt').textContent = (Number(v) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' USDT';
+      var v = toBig(r);
+      $('e-usdt').textContent = v === null ? '返回空 · USDT 地址在该链无代码' : fmt(v) + ' USDT';
     }).catch(function (e) {
       $('e-usdt').textContent = '读取失败 · ' + shortErr(e);
     });
