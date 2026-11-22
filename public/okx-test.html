@@ -116,7 +116,7 @@
   var ROUND2 = [
     {
       label: '① intent:// 空路径 · 只验包名（先点这条）',
-      url: 'intent://#Intent;package=' + PKG_GP + ';launchFlags=0x10000000;end',
+      url: 'intent://#Intent;package=' + PKG_GP + ';action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10000000;end',
       note: '不要求加载任何页面，只验证 com.okinc.okex.gp。这条能拉起 OKX，就说明包名对了，后面成败只看路径。'
     },
     {
@@ -136,7 +136,7 @@
     },
     {
       label: '⑤ com.okinc.okex · 旧包名（应跳商店）',
-      url: 'intent://#Intent;package=' + PKG_OFFICIAL + ';launchFlags=0x10000000;end',
+      url: 'intent://#Intent;package=' + PKG_OFFICIAL + ';action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10000000;end',
       note: '对照项：这条必然跳商店。若 ① 能拉起而这条不能，就彻底确认只有 .gp 存在。'
     },
     {

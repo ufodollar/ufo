@@ -108,20 +108,32 @@ export function walletList() {
   // 触发，剩余定时器全部取消，不会重复拉起：
   //   ① 带 URL、不带 package —— 安全探测：没有 App 认领时 Chrome 静默取消，
   //      不会跳商店（带 package 而包名不存在才会跳，第 5 条就是这么暴露的）
-  //   ② 只拉起、不带 package —— ① 的 path 不存在时的退路
-  //   ③ 显式 package=com.okinc.okex.gp —— 保底，包名已核实，必中
-  //   ④ 显式 package=com.okinc.okex —— 官网 APK 渠道的包名，最后兜底
+  //   ② 纯拉起、package=com.okinc.okex.gp —— 保底
+  //   ③ 纯拉起、package=com.okinc.okex —— 官网 APK 渠道的包名，最后兜底
+  //
+  // 注意 ②③ 必须带 action=MAIN + category=LAUNCHER。只写 package 时
+  // Android 按 VIEW 解析，找不到能处理「空 data 的 VIEW」的 Activity，
+  // 结果和包名写错一样，仍然失败。这一条是第三轮跳商店的第二个原因。
+  //
+  // ① 失败就直接跳到 ②，不插「带 URL + 指定包名」那一级：没有 App 认领
+  // okx://wallet/dapp/url 时，加了 package 只会把「找不到 Activity」变成
+  // 「跳 Play 商店」，路径匹配结果完全一样，纯属多一次副作用。
   const OKX_PKG_GP = 'com.okinc.okex.gp';
   const OKX_PKG_OFFICIAL = 'com.okinc.okex';
   const okxHome = encodeURIComponent(
     (typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev') + '/'
   );
+  const okxLaunch = (pkg) =>
+    `intent://#Intent;package=${pkg};action=android.intent.action.MAIN;`
+    + `category=android.intent.category.LAUNCHER;launchFlags=0x10000000;`
+    + `S.browser_fallback_url=${okxHome};end`;
+
   const okxStages = platform() === 'android'
     ? [
-        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`,
-        `intent://#Intent;scheme=okx;action=android.intent.action.MAIN;launchFlags=0x10000000;end`,
-        `intent://#Intent;package=${OKX_PKG_GP};launchFlags=0x10000000;S.browser_fallback_url=${okxHome};end`,
-        `intent://#Intent;package=${OKX_PKG_OFFICIAL};launchFlags=0x10000000;S.browser_fallback_url=${okxHome};end`
+        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;`
+          + 'action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end',
+        okxLaunch(OKX_PKG_GP),
+        okxLaunch(OKX_PKG_OFFICIAL)
       ]
     : [
         `okx://wallet/dapp/url?dappUrl=${enc}`,
