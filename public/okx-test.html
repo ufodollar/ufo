@@ -63,7 +63,7 @@
 <p class="sub">第一轮用 JS 跳转全部无反应，这轮换成真实链接和 intent://</p>
 
 <div class="banner alert">
-  在系统浏览器（Chrome）里打开本页，从上往下点。看到 OKX 被拉起并直接显示 <span class="mono">okx-landed</span> 页才算成功。
+  在系统浏览器（Chrome）里打开。重点点 <b>第 1、2 条</b>（intent:// 带包名），这两条最可能成功。每条点完停 3 秒，页面会自己告诉你有没有被拉起。
 </div>
 
 <div class="card">
@@ -110,19 +110,9 @@
 
   var ROUND2 = [
     {
-      label: 'okx://discover/dapp?url= · 真实链接',
-      url: 'okx://discover/dapp?url=' + ENC,
-      note: 'discover 路径，与 wallet 路径是两套入口，可能对应「发现页 DApp」。'
-    },
-    {
-      label: 'okx://wallet/dapp/url · 真实链接',
-      url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
-      note: '与第一批第 1 个同串，唯一区别是由 a 标签点击触发。用来分辨「被 Chrome 拦」还是「OKX 不认」。'
-    },
-    {
       label: 'intent://wallet/dapp/url · 指定包名',
       url: 'intent://wallet/dapp/url?dappUrl=' + ENC + '#Intent;scheme=okx;package=' + PKG + ';end',
-      note: 'Android 原生意图，精确投递给 OKX，不受 scheme 注册表影响。'
+      note: '最可能成功。Android 原生意图精确投递给 OKX，绕开 Chrome 对自定义 scheme 的拦截。'
     },
     {
       label: 'intent://discover/dapp · 指定包名',
@@ -130,14 +120,30 @@
       note: '同上，走 discover 路径。'
     },
     {
+      label: 'okx://discover/dapp?url= · 真实链接',
+      url: 'okx://discover/dapp?url=' + ENC,
+      note: 'discover 与 wallet 是两套入口，可能只有前者注册了 intent-filter。'
+    },
+    {
+      label: 'okx://wallet/dapp/url · 真实链接',
+      url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
+      note: '与第一批第 1 个同串，唯一区别是由 a 标签点击触发。用来分辨「被 Chrome 拦」还是「OKX 不认」。'
+    },
+    {
       label: 'okx://wallet/dapp/details · 真实链接',
       url: 'okx://wallet/dapp/details?dappUrl=' + ENC,
       note: 'details 路径，真实链接版。'
     },
     {
-      label: 'okx.com/download?deeplink= · https 中转',
+      label: 'intent:// 空路径 · 只测能否拉起 App',
+      url: 'intent://#Intent;package=' + PKG + ';end',
+      note: '不要求加载任何页面，只验证包名对不对。这条通了说明包名正确，前面失败就只是路径问题。'
+    },
+    {
+      label: 'okx.com/download?deeplink= · 已证伪',
       url: 'https://www.okx.com/download?deeplink=' + INNER,
-      note: '官方推荐的 universal link 包装，装了由系统接管，没装落下载页。'
+      web: true,
+      note: '你实测落到 okx.com/en-us/download 网页。说明 OKX 没为这个域名注册 App Links，浏览器直接当普通网页打开。不用再试。'
     }
   ];
 
@@ -193,11 +199,8 @@
       var a = document.createElement('a');
       a.className = 'btn';
       a.href = v.url;
-      a.textContent = '打开（真实链接）';
-      a.addEventListener('click', function () {
-        st.className = 'st show warn';
-        st.textContent = '已派发。若 3 秒后还停在本页说明没通；若 OKX 起来了，看里面是否直接显示落地页。';
-      });
+      a.textContent = v.web ? '打开（会跳走，别点）' : '打开（真实链接）';
+      a.addEventListener('click', function () { watchLeave(st); });
       el.appendChild(a);
     } else {
       var b = document.createElement('button');
@@ -208,6 +211,29 @@
 
     el.appendChild(st);
     return el;
+  }
+
+  function watchLeave(st) {
+    st.className = 'st show warn';
+    st.textContent = '已派发，观察 3 秒…';
+    var t0 = Date.now(), left = false;
+
+    function onHide() {
+      if (document.visibilityState === 'hidden') {
+        left = true;
+        st.className = 'st show ok';
+        st.textContent = '页面已离开（' + (Date.now() - t0) + 'ms）→ 有东西被拉起了';
+        document.removeEventListener('visibilitychange', onHide);
+      }
+    }
+    document.addEventListener('visibilitychange', onHide);
+
+    setTimeout(function () {
+      if (left) return;
+      document.removeEventListener('visibilitychange', onHide);
+      st.className = 'st show bad';
+      st.textContent = '3 秒内页面没切走 → 这条链接没有触发任何跳转';
+    }, 3000);
   }
 
   function fireJs(url, btn, st) {
