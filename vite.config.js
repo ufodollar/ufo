@@ -16,10 +16,13 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
-    // 首屏入口约 220KB；两个按需 chunk（ethers / OKX SDK）分开命名，
-    // 用户点 OKX 时只该为 OKX 那 200KB 付费，不该顺带把 ethers 也拉下来。
-    // 阈值定在 400KB：正常情况下碰不到，一旦有人把重依赖塞回主包就会立刻告警。
-    chunkSizeWarningLimit: 400,
+    // 首屏入口约 226KB。按需 chunk 三组：
+    //   ethers   —— 点 Issuance 才下载，约 62KB
+    //   okx      —— 点 OKX 才下载，约 200KB（gzip）
+    //   WalletConnect —— 点其他钱包才下载，最重的一组
+    // 阈值定在 700KB：WalletConnect 的 core 单块就有 599KB，是它的固有体积；
+    // 一旦有人把重依赖塞回主包，仍然会立刻告警。
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -27,7 +30,8 @@ export default defineConfig({
             // OKX Connect 的一整棵依赖树（tweetnacl / crypto-js / bs58 / cross-fetch…）
             // 只有点 OKX 图标时才会用到，必须独立成块，否则会和 ethers 混在一起。
             if (/@okxconnect|tweetnacl|crypto-js|bs58|cross-fetch|uint8array-extras/.test(id)) return 'okx';
-            if (/node_modules\/(ethers|@adraffy|@noble)/.test(id)) return 'ethers';
+            if (/node_modules\/(ethers|@adraffy)\//.test(id)) return 'ethers';
+            if (/node_modules\/@noble\//.test(id)) return 'noble';
           }
           return undefined;
         }

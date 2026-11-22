@@ -22,4 +22,4 @@ export const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a6
  *
  * 申请：https://cloud.reown.com → Create Project → 复制 Project ID。
  */
-export const WC_PROJECT_ID = '';
+export const WC_PROJECT_ID = 'd6431212399f6c487b364387859983ea';
