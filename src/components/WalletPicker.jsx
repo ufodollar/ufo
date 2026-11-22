@@ -55,14 +55,14 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
     // 复制必须在手势的同步调用栈里发起，浏览器才认为这是用户意图。
     if (!wallet.direct) {
       setPasteUrl(wallet.target);
+      // 指引立刻显示，不等复制结果。clipboard 在部分 WebView 里会静默失败，
+      // 若只在 then 里设 hint，用户就只剩一句 Opening…，不知道该干什么。
+      if (wallet.pasteHint) setHint(wallet.pasteHint);
       try {
         navigator.clipboard.writeText(wallet.target)
-          .then(() => {
-            setCopied(true);
-            if (wallet.pasteHint) setHint(wallet.pasteHint);
-          })
+          .then(() => setCopied(true))
           .catch(() => {});
-      } catch (e) { /* 浏览器不支持剪贴板，下面的兜底文案仍然可用 */ }
+      } catch (e) { /* 不支持剪贴板时，下面展示的完整链接仍可手动复制 */ }
     }
 
     openInWallet(wallet);
@@ -136,25 +136,22 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
                         background: copied ? '#f0fdf4' : '#eff6ff',
                         border: `1px solid ${copied ? '#bbf7d0' : '#bfdbfe'}`,
                         color: copied ? '#15803d' : '#1d4ed8', fontSize: '12px', lineHeight: 1.55, fontWeight: '600' }}>
-            {copied
-              ? (hint
-                  ? (
-                    <div>
-                      <div>{hint}</div>
-                      {pasteUrl && (
-                        <div style={{ marginTop: '7px', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px',
-                                      fontWeight: 500, color: '#166534', background: '#fff',
-                                      border: '1px solid #bbf7d0', borderRadius: '6px', padding: '6px 8px',
-                                      wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>
-                          {pasteUrl}
-                        </div>
-                      )}
-                    </div>
-                  )
-                  : (opening
-                      ? `Link copied. In ${opening}, open its DApp browser and paste it.`
-                      : 'Link copied. Open your wallet’s DApp browser and paste it.'))
-              : `Opening ${opening}…`}
+            {hint ? (
+              <div>
+                {opening && <div style={{ opacity: 0.75, marginBottom: '5px' }}>Opening {opening}…</div>}
+                <div>{hint}</div>
+                {pasteUrl && (
+                  <div style={{ marginTop: '7px', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px',
+                                fontWeight: 500, color: '#166534', background: '#fff',
+                                border: '1px solid #bbf7d0', borderRadius: '6px', padding: '6px 8px',
+                                wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>
+                    {pasteUrl}
+                  </div>
+                )}
+              </div>
+            ) : (copied
+                  ? 'Link copied. Open your wallet’s DApp browser and paste it.'
+                  : `Opening ${opening}…`)}
           </div>
         )}
 
