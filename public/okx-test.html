@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>OKX Deep Link Test</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b;
+    --line:#e2e8f0; --blue:#2563eb; --blue-soft:#eff4ff;
+    --ok:#0f9d58; --bad:#d93025; --warn:#b45309;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;padding:16px 14px 48px;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  h1{font-size:19px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:13.5px;margin:0 0 10px;font-weight:650}
+  .row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .row span:first-child{color:var(--muted);flex:0 0 auto}
+  .row span:last-child{text-align:right;word-break:break-all;font-variant-numeric:tabular-nums;
+    color:var(--ink);text-decoration:none}
+  .v{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px;background:#fff}
+  .v:last-child{margin-bottom:0}
+  .vhd{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+  .no{flex:0 0 auto;width:20px;height:20px;border-radius:6px;background:var(--blue-soft);color:var(--blue);
+      font-size:11px;font-weight:700;display:grid;place-items:center}
+  .vname{font-size:13.5px;font-weight:650;letter-spacing:-.01em}
+  .code{
+    font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:#334155;background:#f8fafc;border:1px solid var(--line);border-radius:8px;
+    padding:7px 8px;word-break:break-all;max-height:76px;overflow:auto;margin-bottom:8px;
+  }
+  .note{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+  button{
+    font:inherit;font-size:13.5px;font-weight:600;border:0;border-radius:10px;
+    padding:10px 14px;background:var(--blue);color:#fff;width:100%;cursor:pointer;
+  }
+  button.ghost{background:#fff;color:var(--blue);border:1px solid #c7d7fe}
+  button:disabled{opacity:.55}
+  .st{font-size:11.5px;margin-top:8px;font-weight:600;display:none}
+  .st.show{display:block}
+  .st.bad{color:var(--bad)} .st.ok{color:var(--ok)} .st.warn{color:var(--warn)}
+  .banner{border-radius:12px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5}
+  .banner.info{background:var(--blue-soft);color:#1e40af;border:1px solid #c7d7fe}
+  .banner.alert{background:#fff7ed;color:var(--warn);border:1px solid #fed7aa}
+  .foot{color:var(--muted);font-size:11.5px;line-height:1.6;margin-top:16px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+
+<h1>OKX Deep Link 测试</h1>
+<p class="sub">验证「绝对路径 + deep link + 粘贴兜底」这套方法能否复制到 OKX Wallet</p>
+
+<div class="banner info" id="banner">
+  在系统浏览器（Chrome）里打开本页，逐个点击下面的按钮。能进到 <span class="mono">okx-landed.html</span> 就是成功。
+</div>
+
+<div class="card">
+  <h2>当前环境</h2>
+  <div class="row"><span>页面地址</span><span id="e-href">—</span></div>
+  <div class="row"><span>document.baseURI</span><span id="e-base">—</span></div>
+  <div class="row"><span>UA</span><span id="e-ua">—</span></div>
+  <div class="row"><span>window.ethereum</span><span id="e-eth">—</span></div>
+  <div class="row"><span>OKX 标志位</span><span id="e-okx">—</span></div>
+  <div class="row"><span>目标地址</span><span id="e-target">—</span></div>
+</div>
+
+<div class="card">
+  <h2>变体（建议按 1 → 7 顺序试）</h2>
+  <div id="variants"></div>
+</div>
+
+<div class="card">
+  <h2>兜底路径（Trust 最终用的那套）</h2>
+  <p class="note">复制落地页地址 → 拉起 OKX → 在地址栏粘贴 → 回车。这条不依赖任何 scheme 参数，只要 OKX 有内置浏览器就一定成。</p>
+  <button class="ghost" id="copy-open">复制链接并拉起 OKX</button>
+  <div class="st" id="copy-st"></div>
+</div>
+
+<div class="foot">
+  判定标准：落地页显示 <b>provider: OKX</b> 且 chainId 能切到 56(BSC) → 可替代 ONTO。若页面能进但没有 provider → 只能当作「打开网页」，不能连钱包，替代价值为零。
+</div>
+
+<script>
+(function () {
+  var HOST = 'https://ufo-eea.pages.dev';
+  var TARGET = HOST + '/okx-landed.html';   // 无 query、无 hash，裸串形态也不会被截断
+  var ENC = encodeURIComponent(TARGET);
+  var INNER_ENC = encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + ENC);
+
+  var VARIANTS = [
+    { id: 'okx://wallet/dapp/url', label: 'wallet/dapp/url · 编码 URL', url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
+      note: '最常见形态。connect-demo.html 里用过，尚未真机确认。' },
+    { id: 'okx://wallet/dapp/url bare', label: 'wallet/dapp/url · 裸 URL', url: 'okx://wallet/dapp/url?dappUrl=' + TARGET,
+      note: '部分 build 不解码，裸串反而能过。目标地址无 query，所以不会出现第二个 ?。' },
+    { id: 'okx://wallet/dapp/details', label: 'wallet/dapp/details · 编码 URL', url: 'okx://wallet/dapp/details?dappUrl=' + ENC,
+      note: '较新版本的形态，参数名相同、路径不同。' },
+    { id: 'okx://wallet/dapp/details bare', label: 'wallet/dapp/details · 裸 URL', url: 'okx://wallet/dapp/details?dappUrl=' + TARGET,
+      note: '' },
+    { id: 'okx://wallet/dapp/order', label: 'wallet/dapp/order ?url=', url: 'okx://wallet/dapp/order?url=' + ENC,
+      note: '参数名换成 url 的老形态。' },
+    { id: 'okx:https', label: 'okx://https://… · 整段作 host', url: 'okx://' + TARGET,
+      note: '少数 App 把整个目标地址当 host 解析，形如 okx://https://…' },
+    { id: 'okxapp://', label: 'okxapp:// 前缀 · 对照组', url: 'okxapp://wallet/dapp/url?dappUrl=' + ENC,
+      note: '若 okx:// 全线失败但这个是通的，说明 scheme 名不同。' }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- 环境探测 ----------
+  $('e-href').textContent = location.href;
+  $('e-base').textContent = document.baseURI;
+  $('e-ua').textContent = navigator.userAgent;
+  $('e-target').textContent = TARGET;
+
+  var eth = window.ethereum;
+  $('e-eth').textContent = eth ? '存在' : '无';
+  if (eth) {
+    var flags = ['isOkxWallet', 'isMetaMask', 'isTrust', 'isTokenPocket', 'isBitKeep', 'isImToken']
+      .filter(function (k) { return eth[k]; });
+    $('e-okx').textContent = flags.length ? flags.join(', ') : '无已知标志位';
+  } else {
+    $('e-okx').textContent = '—';
+  }
+
+  // ---------- 变体卡片 ----------
+  var wrap = $('variants');
+
+  VARIANTS.forEach(function (v, i) {
+    var el = document.createElement('div');
+    el.className = 'v';
+
+    var hd = document.createElement('div');
+    hd.className = 'vhd';
+    var no = document.createElement('div');
+    no.className = 'no';
+    no.textContent = String(i + 1);
+    var nm = document.createElement('div');
+    nm.className = 'vname';
+    nm.textContent = v.label;
+    hd.appendChild(no); hd.appendChild(nm);
+
+    var code = document.createElement('div');
+    code.className = 'code';
+    code.textContent = v.url;
+
+    el.appendChild(hd);
+    el.appendChild(code);
+
+    if (v.note) {
+      var nt = document.createElement('p');
+      nt.className = 'note';
+      nt.textContent = v.note;
+      el.appendChild(nt);
+    }
+
+    var btn = document.createElement('button');
+    btn.textContent = '试这个';
+    var st = document.createElement('div');
+    st.className = 'st';
+
+    btn.addEventListener('click', function () { fire(v, btn, st); });
+
+    el.appendChild(btn);
+    el.appendChild(st);
+    wrap.appendChild(el);
+    v._btn = btn; v._st = st;
+  });
+
+  function fire(v, btn, st) {
+    st.className = 'st show warn';
+    st.textContent = '已触发，等待 2.5 秒…';
+    btn.disabled = true;
+
+    var t0 = Date.now();
+    var left = false;
+
+    function onHide() {
+      if (document.visibilityState === 'hidden') {
+        left = true;
+        st.className = 'st show ok';
+        st.textContent = '页面已切走（' + (Date.now() - t0) + 'ms）→ 拉起成功，看 OKX 里是否加载了落地页';
+        document.removeEventListener('visibilitychange', onHide);
+      }
+    }
+    document.addEventListener('visibilitychange', onHide);
+
+    setTimeout(function () {
+      document.removeEventListener('visibilitychange', onHide);
+      btn.disabled = false;
+      if (!left) {
+        st.className = 'st show bad';
+        st.textContent = '无反应 → 这个变体不可用（浏览器不支持该 scheme，或 App 未注册此 Activity）';
+      }
+    }, 2500);
+
+    try {
+      location.href = v.url;
+    } catch (e) {
+      st.className = 'st show bad';
+      st.textContent = '抛错：' + e.message;
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- 复制 + 拉起 ----------
+  $('copy-open').addEventListener('click', function () {
+    var st = $('copy-st');
+    function afterCopy(okCopy) {
+      st.className = 'st show ' + (okCopy ? 'ok' : 'warn');
+      st.textContent = okCopy
+        ? '已复制 ' + TARGET + '，正在拉起 OKX。进去后点地址栏粘贴再回车。'
+        : '复制失败，请手动长按选择：' + TARGET;
+      setTimeout(function () { location.href = 'okx://wallet/dapp'; }, 350);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(TARGET).then(function () { afterCopy(true); }, function () { fallbackCopy(afterCopy); });
+    } else {
+      fallbackCopy(afterCopy);
+    }
+  });
+
+  function fallbackCopy(cb) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = TARGET;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      cb(ok);
+    } catch (e) {
+      cb(false);
+    }
+  }
+})();
+</script>
+</body>
+</html>
