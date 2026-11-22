@@ -95,21 +95,33 @@ export function walletList() {
   //   4. 但内置浏览器本身完全可用：手动粘贴地址后站点正常加载、provider 注入、
   //      eth_accounts 直接返回地址、UA 含 OKApp/(OKX-Wallet/6.197.0)
   //
-  // 结论：带 URL 进站没有可靠手段，退到「拉起 App + 剪贴板」这一档，和 Trust
-  // 同级。区别是 OKX 的 scheme 是否存活尚未验证，所以用 intent:// 主动指定
-  // 包名——它不经过 scheme 注册表，是 Android 上投递意图最硬的方式。
+  //   5. 【关键】第三轮用 intent:// 指定 package=com.okinc.okex，真机点了
+  //      直接跳到 Play 商店「找不到该内容」。这不是路径问题，是包名根本不存在：
+  //      系统按包名找不到 App，才回落到商店。APKPure / Uptodown / Malavida
+  //      三处 APK 元数据一致给出真实包名 com.okinc.okex.gp（版本号 6.197.x
+  //      与真机 UA 里的 OKX-Wallet/6.197.0 对得上）。
   //
-  // 三个阶段在一次点击内依次投递，每级 1.3 秒。任一级把 App 拉到前台，
-  // visibilitychange 立刻触发，剩余定时器全部取消，不会重复拉起。
-  //   ① intent 带 URL：唯一可能真正把网址送进 DApp 页的形态
-  //   ② intent 空路径：① 的 dappUrl 不被消费时，至少把 App 拉起来
-  //   ③ 裸 scheme：包名猜错时的最后一搏
-  const OKX_PKG = 'com.okinc.okex';
+  // 所以 1~4 全部失败的原因可以合并成一个：包名错，intent 从未投递到 OKX。
+  // 路径对不对反而无从判断——这一轮要把这个变量单独测出来。
+  //
+  // 四级投递，每级 1.1 秒。任一级把 App 拉到前台，visibilitychange 立刻
+  // 触发，剩余定时器全部取消，不会重复拉起：
+  //   ① 带 URL、不带 package —— 安全探测：没有 App 认领时 Chrome 静默取消，
+  //      不会跳商店（带 package 而包名不存在才会跳，第 5 条就是这么暴露的）
+  //   ② 只拉起、不带 package —— ① 的 path 不存在时的退路
+  //   ③ 显式 package=com.okinc.okex.gp —— 保底，包名已核实，必中
+  //   ④ 显式 package=com.okinc.okex —— 官网 APK 渠道的包名，最后兜底
+  const OKX_PKG_GP = 'com.okinc.okex.gp';
+  const OKX_PKG_OFFICIAL = 'com.okinc.okex';
+  const okxHome = encodeURIComponent(
+    (typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev') + '/'
+  );
   const okxStages = platform() === 'android'
     ? [
-        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;package=${OKX_PKG};launchFlags=0x10000000;end`,
-        `intent://#Intent;package=${OKX_PKG};launchFlags=0x10000000;end`,
-        'okx://wallet/dapp'
+        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`,
+        `intent://#Intent;scheme=okx;action=android.intent.action.MAIN;launchFlags=0x10000000;end`,
+        `intent://#Intent;package=${OKX_PKG_GP};launchFlags=0x10000000;S.browser_fallback_url=${okxHome};end`,
+        `intent://#Intent;package=${OKX_PKG_OFFICIAL};launchFlags=0x10000000;S.browser_fallback_url=${okxHome};end`
       ]
     : [
         `okx://wallet/dapp/url?dappUrl=${enc}`,
@@ -216,7 +228,8 @@ export function walletList() {
     },
     {
       id: 'okx', name: 'OKX Wallet', direct: false, manual: true, staged: true,
-      // 三级投递见上方 okxStages 的注释。
+      // 四级投递见上方 okxStages 的注释。前三轮失败已定位为包名错误，
+      // 这一轮换成 com.okinc.okex.gp 重新验证路径是否可用。
       stages: okxStages,
       url: okxStages[0],
       fallback: 'https://www.okx.com/web3',
@@ -249,7 +262,7 @@ export function openInWallet(wallet) {
 
     location.href = wallet.stages[0];
     wallet.stages.slice(1).forEach((u, i) => {
-      timers.push(setTimeout(() => { if (!left) location.href = u; }, (i + 1) * 1300));
+      timers.push(setTimeout(() => { if (!left) location.href = u; }, (i + 1) * 1100));
     });
     return;
   }

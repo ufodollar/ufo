@@ -63,7 +63,7 @@
 <p class="sub">第一轮用 JS 跳转全部无反应，这轮换成真实链接和 intent://</p>
 
 <div class="banner alert">
-  在系统浏览器（Chrome）里打开。重点点 <b>第 1、2 条</b>（intent:// 带包名），这两条最可能成功。每条点完停 3 秒，页面会自己告诉你有没有被拉起。
+  包名已换成 <span class="mono">com.okinc.okex.gp</span>（旧包名 <span class="mono">com.okinc.okex</span> 不存在，会跳商店）。<b>请从上往下按顺序点：① → ②</b>。① 只验证包名，② 才验证能不能带网址进 DApp 页。
 </div>
 
 <div class="card">
@@ -105,45 +105,45 @@
   var INNER = encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + ENC);
   var $ = function (id) { return document.getElementById(id); };
 
-  // OKX Android 包名。写错会走系统 fallback，不会崩。
-  var PKG = 'com.okinc.okex';
+  // OKX Android 包名。
+  // com.okinc.okex.gp  —— APKPure / Uptodown / Malavida 三处 APK 元数据一致，
+  //                        版本 6.197.x 与真机 UA 的 OKX-Wallet/6.197.0 吻合。
+  // com.okinc.okex     —— 之前用的，真机实测直接跳 Play 商店「找不到该内容」，
+  //                        说明该包不存在。留作对照。
+  var PKG_GP = 'com.okinc.okex.gp';
+  var PKG_OFFICIAL = 'com.okinc.okex';
 
   var ROUND2 = [
     {
-      label: 'intent://wallet/dapp/url · 指定包名',
-      url: 'intent://wallet/dapp/url?dappUrl=' + ENC + '#Intent;scheme=okx;package=' + PKG + ';end',
-      note: '最可能成功。Android 原生意图精确投递给 OKX，绕开 Chrome 对自定义 scheme 的拦截。'
+      label: '① intent:// 空路径 · 只验包名（先点这条）',
+      url: 'intent://#Intent;package=' + PKG_GP + ';launchFlags=0x10000000;end',
+      note: '不要求加载任何页面，只验证 com.okinc.okex.gp。这条能拉起 OKX，就说明包名对了，后面成败只看路径。'
     },
     {
-      label: 'intent://discover/dapp · 指定包名',
-      url: 'intent://discover/dapp?url=' + ENC + '#Intent;scheme=okx;package=' + PKG + ';end',
-      note: '同上，走 discover 路径。'
+      label: '② intent://wallet/dapp/url · URL + 正确包名',
+      url: 'intent://wallet/dapp/url?dappUrl=' + ENC + '#Intent;scheme=okx;package=' + PKG_GP + ';launchFlags=0x10000000;end',
+      note: '包名修对之后，这是唯一真有可能把网址送进 DApp 页的形态。成功即落地页直接出现。'
     },
     {
-      label: 'okx://discover/dapp?url= · 真实链接',
-      url: 'okx://discover/dapp?url=' + ENC,
-      note: 'discover 与 wallet 是两套入口，可能只有前者注册了 intent-filter。'
+      label: '③ intent:// 无 package · 靠 scheme 认领',
+      url: 'intent://wallet/dapp/url?dappUrl=' + ENC + '#Intent;scheme=okx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end',
+      note: '不带包名，由系统按 okx:// 分发。没有 App 认领时 Chrome 静默取消，不会跳商店。'
     },
     {
-      label: 'okx://wallet/dapp/url · 真实链接',
-      url: 'okx://wallet/dapp/url?dappUrl=' + ENC,
-      note: '与第一批第 1 个同串，唯一区别是由 a 标签点击触发。用来分辨「被 Chrome 拦」还是「OKX 不认」。'
+      label: '④ intent://discover/dapp · URL + 正确包名',
+      url: 'intent://discover/dapp?url=' + ENC + '#Intent;scheme=okx;package=' + PKG_GP + ';end',
+      note: 'discover 路径的对照。若 ② 通而 ④ 不通，说明只有 wallet 路径注册了 intent-filter。'
     },
     {
-      label: 'okx://wallet/dapp/details · 真实链接',
-      url: 'okx://wallet/dapp/details?dappUrl=' + ENC,
-      note: 'details 路径，真实链接版。'
+      label: '⑤ com.okinc.okex · 旧包名（应跳商店）',
+      url: 'intent://#Intent;package=' + PKG_OFFICIAL + ';launchFlags=0x10000000;end',
+      note: '对照项：这条必然跳商店。若 ① 能拉起而这条不能，就彻底确认只有 .gp 存在。'
     },
     {
-      label: 'intent:// 空路径 · 只测能否拉起 App',
-      url: 'intent://#Intent;package=' + PKG + ';end',
-      note: '不要求加载任何页面，只验证包名对不对。这条通了说明包名正确，前面失败就只是路径问题。'
-    },
-    {
-      label: 'okx.com/download?deeplink= · 已证伪',
+      label: '⑥ okx.com/download?deeplink= · 已证伪',
       url: 'https://www.okx.com/download?deeplink=' + INNER,
       web: true,
-      note: '你实测落到 okx.com/en-us/download 网页。说明 OKX 没为这个域名注册 App Links，浏览器直接当普通网页打开。不用再试。'
+      note: '你实测落到 okx.com/en-us/download 网页。OKX 没为这个域名注册 App Links。不用再试。'
     }
   ];
 
