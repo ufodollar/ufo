@@ -137,14 +137,17 @@ export async function connectWc(wallet, { launched = false, onUri } = {}) {
   markWcPending();
 
   if (!launched) {
-    const uri = st.uri || await waitForUri(st, 15000);
+    // 10 秒。配对 URI 是本地生成 + 中继发布的，正常网络下 300~800ms 就到；
+    // 一直不来基本只有一种可能：到 relay 的 WebSocket 建不起来。
+    // 等太久只会让用户干看着，不如早点说清楚并退回内置浏览器。
+    const uri = st.uri || await waitForUri(st, 10000);
     if (!uri) {
       clearWcPending();
       warm = null;
       const reason = st.error && st.error.message;
       throw new Error(reason
-        ? `Could not reach the WalletConnect relay: ${reason}`
-        : 'Could not reach the WalletConnect relay. Check your connection and try again.');
+        ? `Could not reach the WalletConnect relay (${reason}).`
+        : 'The WalletConnect relay did not respond. This network may block it.');
     }
     // 已经不在用户手势里了。把 URI 交给 UI，由用户自己点那个链接。
     // 注意这里必须无条件交出去：URI 可能是刚刚才到的（wclink 里刚有值），

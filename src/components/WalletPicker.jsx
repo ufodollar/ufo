@@ -115,12 +115,13 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
         // 4001 / reject 是用户自己取消，不报错、不退回内置浏览器
         const cancelled = code === 4001 || code === 'ACTION_REJECTED' || /reject|cancel|denied/i.test(msg);
         if (!cancelled) {
-          // 这条入口真机没接住（scheme 不对 / App 没注册）：
-          // 记下它，同一个会话里不再重试，直接改用内置浏览器打开。
+          // 这条入口真机没接住（relay 不通 / App 没注册）：
+          // 记下它，同一个会话里不再重试，直接改用内置浏览器打开 ——
+          // 至少让用户能连上，而不是卡在钱包墙前面。
           wcBroken.current.add(wallet.id);
           setManualOpen(null);
-          setNotice(`${wallet.name} could not complete the WalletConnect request. Opening its in-app browser instead.`);
-          setTimeout(() => { openInWallet(wallet); }, 900);
+          setNotice(`${wallet.name}: ${msg || 'the WalletConnect request did not complete'}. Opening its in-app browser instead.`);
+          setTimeout(() => { openInWallet(wallet); }, 1200);
         }
       } finally {
         setOpening('');
