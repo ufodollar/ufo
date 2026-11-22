@@ -103,7 +103,22 @@
             '</div>' +
             '<button onclick="location.reload()" style="margin-top:6px;padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">重新加载</button>';
         }
+        // 白屏兜底：脚本被拦、bundle 解析失败、React 挂载后整棵树被卸载，
+        // 三种情况最终都会留下一个空的 #root。只要它空着就说明没渲染成功，
+        // 与其让人对着纯白页面，不如给一句话和一个重载按钮。
+        function blank() {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            root.innerHTML =
+              '<div style="padding:40px 24px;text-align:center;line-height:1.9">' +
+              '<div style="font-size:13px;color:#475569;font-weight:600">Nothing rendered</div>' +
+              '<div style="font-size:11.5px;color:#94a3b8">The page loaded but the app did not start.<br>Try /diag.html to check the connection.</div>' +
+              '</div>' +
+              '<div style="text-align:center"><button onclick="location.reload()" style="padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">Reload</button></div>';
+          }
+        }
         setTimeout(fail, 9000);
+        setTimeout(blank, 12000);
         window.addEventListener('error', function (e) {
           if (e && e.target && e.target.tagName === 'SCRIPT') fail();
         }, true);
