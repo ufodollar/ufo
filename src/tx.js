@@ -102,8 +102,13 @@ async function waitReceipt(hash) {
 /**
  * 发一笔交易：参数全部由公共 RPC 算好，只让钱包签名。
  * 这样无论注入式钱包还是 OKX Connect，走的都是同一条路径。
+ *
+ * nonceFloor：approve 与主交易是连续两笔，第二笔必须严格大于第一笔。
+ * 公共 RPC 的 pending nonce 在刚出块的瞬间可能还是旧值，直接采信会拿到
+ * 同一个 nonce —— 后发的那笔会把前一笔替换掉，表现为「approve 成功但
+ * deposit 永远 pending」。所以由调用方传一个下界，取两者较大值。
  */
-async function sendTx(walletProvider, { from, to, data }) {
+async function sendTx(walletProvider, { from, to, data, nonceFloor = 0 }) {
   const [nonce, gasPrice, gasEstimate] = await Promise.all([
     rpcCall('eth_getTransactionCount', [from, 'pending']),
     rpcCall('eth_gasPrice', []),
@@ -113,11 +118,14 @@ async function sendTx(walletProvider, { from, to, data }) {
   // 留 20% 余量：估算与实际执行之间状态可能微变，out of gas 的代价是白付手续费
   const gasLimit = (BigInt(gasEstimate) * 12n) / 10n;
 
+  const rpcNonce = Number(BigInt(nonce));
+  const useNonce = Math.max(rpcNonce, nonceFloor);
+
   const tx = {
     from,
     to,
     data,
-    nonce,
+    nonce: '0x' + useNonce.toString(16),
     gasPrice,
     gas: '0x' + gasLimit.toString(16),
     chainId: CHAIN_ID_HEX
@@ -126,7 +134,7 @@ async function sendTx(walletProvider, { from, to, data }) {
   const hash = await walletProvider.request({ method: 'eth_sendTransaction', params: [tx] });
   if (!hash) throw new Error('Wallet returned no transaction hash.');
   const receipt = await waitReceipt(hash);
-  return { hash, receipt };
+  return { hash, receipt, nonce: useNonce };
 }
 
 /**
@@ -154,6 +162,8 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
   let receipt = null;
   let paid = parseFloat(formatUnits(amountWei, 18)).toFixed(6);
   let received = null;
+  // 本次流程用到的 nonce 下界，见 sendTx 的注释
+  let nonceFloor = 0;
 
   if (isBuy) {
     const allowance = await readView(
@@ -163,18 +173,20 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
     if (allowance < amountWei) {
       onStage('Approving…');
       // 按本次额度精确授权，不申请无限授权
-      await sendTx(walletProvider, {
+      const approved = await sendTx(walletProvider, {
         from: owner,
         to: tokenAddress,
         data: erc20Iface.encodeFunctionData('approve', [CONFIG.VAULT_ADDRESS, amountWei])
       });
+      nonceFloor = approved.nonce + 1;
     }
 
     onStage('Swapping…');
     ({ hash, receipt } = await sendTx(walletProvider, {
       from: owner,
       to: CONFIG.VAULT_ADDRESS,
-      data: vaultIface.encodeFunctionData('deposit', [tokenAddress, amountWei])
+      data: vaultIface.encodeFunctionData('deposit', [tokenAddress, amountWei]),
+      nonceFloor
     }));
 
     for (const log of receipt.logs || []) {
