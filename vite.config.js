@@ -16,8 +16,22 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
-    // 首屏入口约 200KB；唯一的按需 chunk 是 ethers（点 Swap 才下载，约 180KB）。
+    // 首屏入口约 220KB；两个按需 chunk（ethers / OKX SDK）分开命名，
+    // 用户点 OKX 时只该为 OKX 那 200KB 付费，不该顺带把 ethers 也拉下来。
     // 阈值定在 400KB：正常情况下碰不到，一旦有人把重依赖塞回主包就会立刻告警。
-    chunkSizeWarningLimit: 400
+    chunkSizeWarningLimit: 400,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            // OKX Connect 的一整棵依赖树（tweetnacl / crypto-js / bs58 / cross-fetch…）
+            // 只有点 OKX 图标时才会用到，必须独立成块，否则会和 ethers 混在一起。
+            if (/@okxconnect|tweetnacl|crypto-js|bs58|cross-fetch|uint8array-extras/.test(id)) return 'okx';
+            if (/node_modules\/(ethers|@adraffy|@noble)/.test(id)) return 'ethers';
+          }
+          return undefined;
+        }
+      }
+    }
   }
 })

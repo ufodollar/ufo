@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { watchInjectedWallets, isMobile, AUTOCONNECT_PARAM } from './wallets';
+import { hasOkxPending, clearOkxPending, hasStoredOkxSession } from './okxpending';
 
 // 本会话主动断开后，不要再用注入式自动连回去
 const OPTOUT_KEY = 'ufo_inj_off';
@@ -119,6 +120,10 @@ export function useWallet() {
   const [error, setError] = useState('');
 
   const optedOut = useRef(false);
+  // 给下面的 watchdog 用的「当前是否已连上」。用 ref 而不是依赖 account，
+  // 是为了让监听器绑一次就够，不会随每次状态变化重新注册。
+  const accountRef = useRef(null);
+  useEffect(() => { accountRef.current = account; }, [account]);
 
   // 发现浏览器里所有实现了 EIP-6963 的钱包
   useEffect(() => watchInjectedWallets(setInjectedWallets), []);
@@ -159,6 +164,17 @@ export function useWallet() {
       okxReturn = params.get(OKX_RETURN_PARAM) === '1';
     } catch (e) { /* 地址异常，按普通访问处理 */ }
 
+    // 地址栏里没有标记也要恢复，两种很常见的情形：
+    //   1. 钱包 App 回跳时把 query 拼掉了，只回到站点根地址；
+    //   2. Chrome 发现这个 URL 已经开着，直接切回原标签 —— 地址栏根本不变。
+    // 这两种情况下，okxpending.js 里的本地标记是唯一的线索。
+    if (hasOkxPending()) okxReturn = true;
+
+    // 连过一次之后，这个浏览器里就存着一条 OKX 会话：以后每次打开页面都该是
+    // 已连接状态，而不是让用户再点一次。判断只看 localStorage 的键名，
+    // 不下载 SDK —— 没连过的人一分钱都不用付。
+    const okxStored = okxReturn || hasStoredOkxSession();
+
     // 参数一旦读进变量就没有用了，立刻从地址栏抹掉。
     // 放在这里而不是各个分支结尾：无论后面走静默恢复、主动授权还是无声退出，
     // 用户复制网址、刷新页面时都不会再看到它，也不会因此重复弹授权框。
@@ -176,13 +192,24 @@ export function useWallet() {
     (async () => {
       // OKX Connect 回跳：这个页面的浏览器里没有 window.ethereum，
       // 会话保存在 OKX SDK 自己的存储里，要单独去问它一句。
-      // 动态 import 保证那 100KB 只在真的从 OKX 回来时才下载。
-      if (okxReturn) {
+      // 动态 import 保证那块 SDK 只在真的需要时才下载。
+      if (okxStored) {
+        // 刚从 App 回来才提示进度；普通刷新时安静恢复，别让用户看到一闪而过的状态。
+        if (okxReturn && !cancelled) setAutoConnecting(true);
         try {
           const { restoreOkx } = await import('./okxconnect');
-          const restored = await restoreOkx();
-          if (!cancelled && restored) { accept(restored.accounts, restored.provider); return; }
+          const restored = await restoreOkx({ windowMs: okxReturn ? 10000 : 3000 });
+          if (!cancelled && restored) {
+            clearOkxPending();
+            accept(restored.accounts, restored.provider);
+            return;
+          }
         } catch (e) { /* 恢复失败就当普通访问，页面上的 Connect 按钮仍然在 */ }
+        finally {
+          if (!cancelled) setAutoConnecting(false);
+        }
+        // 窗口期内没等到会话就作废标记，否则以后每次打开页面都会白跑一次恢复。
+        if (!cancelled) clearOkxPending();
       }
 
       const eth = await waitForProvider(fromWallet || inWalletBrowser ? 3000 : 1200);
@@ -211,6 +238,67 @@ export function useWallet() {
     })();
 
     return () => { cancelled = true; };
+  }, [accept]);
+
+  // ---- 空闲预热 OKX SDK ----
+  // 「点图标之后 3 秒才切进 App」里，大头是在移动网络上下 600KB 的 SDK。
+  // 页面渲染完之后趁空闲把它拿下来，用户点 OKX 时只剩一次 WS 握手。
+  // 只在手机上做：桌面浏览器连不上 OKX App，预热没有意义。
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMobile()) return;
+    // 开了省流模式的用户不要替他花这 200KB
+    const conn = navigator.connection;
+    if (conn && conn.saveData) return;
+    let idleId = null;
+    let timer = null;
+    const start = () => {
+      import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(start, { timeout: 3000 });
+    } else {
+      timer = setTimeout(start, 1500);
+    }
+    return () => {
+      if (idleId !== null && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idleId);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  // ---- 回到前台时的兜底 ----
+  // 如果 Chrome 直接切回了原来的标签（URL 一致，不会触发任何导航），
+  // 页面里的那笔 connect() 有时会因为后台期间 WS 被系统断掉而永远不 resolve。
+  // 用户已经确认过了，不能让他对着「未连接」发呆 —— 回到前台时再恢复一次。
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    let running = false;
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (running || accountRef.current) return;
+      if (!hasOkxPending()) return;
+
+      running = true;
+      setAutoConnecting(true);
+      try {
+        const { restoreOkx } = await import('./okxconnect');
+        const restored = await restoreOkx({ windowMs: 8000 });
+        if (restored) {
+          clearOkxPending();
+          accept(restored.accounts, restored.provider);
+          return;
+        }
+        clearOkxPending();
+      } catch (e) {
+        clearOkxPending();
+      } finally {
+        running = false;
+        setAutoConnecting(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [accept]);
 
   // ---- 跟随当前 provider 的账户变化 ----
@@ -323,6 +411,13 @@ export function useWallet() {
     setPickerOpen(false);
   }, [account]);
 
+  // 打开钱包墙就顺手开始下 SDK：从面板出现到用户点中某个图标，
+  // 通常有 1~2 秒，这段空档正好用来下载。失败无所谓，点 OKX 时还会再 import 一次。
+  const openPicker = useCallback(() => {
+    import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
+    setPickerOpen(true);
+  }, []);
+
   return {
     address: account ? account.address : null,
     provider: account ? account.provider : null,
@@ -330,7 +425,7 @@ export function useWallet() {
     source: account ? 'injected' : null,
     injectedWallets,
     pickerOpen,
-    openPicker: () => setPickerOpen(true),
+    openPicker,
     closePicker: () => setPickerOpen(false),
     busy,
     autoConnecting,
