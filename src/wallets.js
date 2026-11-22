@@ -86,62 +86,42 @@ export function walletList() {
 
   // ---------- OKX ----------
   //
-  // OKX 的跳转格式从来没有公开文档，2026-11-22 两轮真机穷举的结果：
-  //   1. JS 里 location.href = 'okx://wallet/dapp/url?dappUrl=...' —— 全部无反应
-  //      （第一轮 7 种形态，包括裸 URL、details、order、okxapp://）
-  //   2. <a href> 点击同一条 —— 同样无反应，说明不是 Chrome 的手势拦截
-  //   3. https://www.okx.com/download?deeplink=... —— 直接落到 /en-us/download
-  //      网页，OKX 没给这个域名注册 App Links，浏览器当普通网页打开
-  //   4. 但内置浏览器本身完全可用：手动粘贴地址后站点正常加载、provider 注入、
-  //      eth_accounts 直接返回地址、UA 含 OKApp/(OKX-Wallet/6.197.0)
+  // 前四轮真机全灭。2026-11-22 直接把 OKX 官方 SDK（@okxconnect/core@1.9.1）
+  // 拆开看源码，才发现一直在试一个根本不存在的路径。
   //
-  //   5. 【关键】第三轮用 intent:// 指定 package=com.okinc.okex，真机点了
-  //      直接跳到 Play 商店「找不到该内容」。这不是路径问题，是包名根本不存在：
-  //      系统按包名找不到 App，才回落到商店。APKPure / Uptodown / Malavida
-  //      三处 APK 元数据一致给出真实包名 com.okinc.okex.gp（版本号 6.197.x
-  //      与真机 UA 里的 OKX-Wallet/6.197.0 对得上）。
+  // SDK 的 protocol/constants.js 里写死的入口只有这些：
+  //   okx://web3/wallet/connect?param=…   连接钱包（param 是加密过的会话）
+  //   okxwallet://web3/wallet/connect
+  //   okxweb3://web3/wallet/connect
+  //   okx://web3?stack=true               打开 Web3 首页（Android）
+  //   okxwallet://web3?stack=true
+  //   okxweb3://web3?stack=true
+  //   https://link.okx.com/ul/connect     universal link
   //
-  // 所以 1~4 全部失败的原因可以合并成一个：包名错，intent 从未投递到 OKX。
-  // 路径对不对反而无从判断——这一轮要把这个变量单独测出来。
+  // 同文件第 27 行还有一行被注释掉的：
+  //   // export const stackDeepLink = 'okx://web3/dapp/open'
+  // 这是整个 SDK 里唯一出现过的「打开 DApp」形态。
   //
-  // 四级投递，每级 1.1 秒。任一级把 App 拉到前台，visibilitychange 立刻
-  // 触发，剩余定时器全部取消，不会重复拉起：
-  //   ① 带 URL、不带 package —— 安全探测：没有 App 认领时 Chrome 静默取消，
-  //      不会跳商店（带 package 而包名不存在才会跳，第 5 条就是这么暴露的）
-  //   ② 纯拉起、package=com.okinc.okex.gp —— 保底
-  //   ③ 纯拉起、package=com.okinc.okex —— 官网 APK 渠道的包名，最后兜底
+  // 之前的 okx://wallet/dapp/url?dappUrl= 是凭印象拼的，OKX 从来没这个路由，
+  // 所以前三轮无论换编码、换触发方式都不可能成功。第三、四轮跳 Play 商店
+  // 则是因为 intent 里带了不存在的 package —— 两个失败原因彼此独立，各错一层。
   //
-  // 注意 ②③ 必须带 action=MAIN + category=LAUNCHER。只写 package 时
-  // Android 按 VIEW 解析，找不到能处理「空 data 的 VIEW」的 Activity，
-  // 结果和包名写错一样，仍然失败。这一条是第三轮跳商店的第二个原因。
-  //
-  // ① 失败就直接跳到 ②，不插「带 URL + 指定包名」那一级：没有 App 认领
-  // okx://wallet/dapp/url 时，加了 package 只会把「找不到 Activity」变成
-  // 「跳 Play 商店」，路径匹配结果完全一样，纯属多一次副作用。
-  const OKX_PKG_GP = 'com.okinc.okex.gp';
-  const OKX_PKG_OFFICIAL = 'com.okinc.okex';
-  // 失败兜底不能直接回首页：页面一刷新，钱包面板就关了，用户看到的是
-  // 「点了图标，面板自己消失」，完全不知道发生了什么。落到一个说明页，
-  // 把「打开 App → 点顶部搜索框 → 粘贴」写成三步走，链接一并带过去。
-  const okxHome = encodeURIComponent(
-    (typeof location !== 'undefined' ? location.origin : 'https://ufo-eea.pages.dev')
-    + '/okx-help?t=' + encodeURIComponent(target)
-  );
-  const okxLaunch = (pkg) =>
-    `intent://#Intent;package=${pkg};action=android.intent.action.MAIN;`
-    + `category=android.intent.category.LAUNCHER;launchFlags=0x10000000;`
-    + `S.browser_fallback_url=${okxHome};end`;
-
+  // 现在四级全是 scheme、不带 package：失败时 Chrome 静默取消，不会把用户
+  // 甩到商店（这是前几轮最糟的副作用，用户会直接离开站点）。
+  //   ①②③ 试被注释掉的 dapp/open，换三个官方 scheme —— 三个里必有一个
+  //        是 App 真实注册的；若这个路由还在，就会带 URL 直接进 DApp 页。
+  //   ④   退到官方正在使用的 web3?stack=true，只求把 App 拉起来，粘贴一次。
+  const okxOpen = (scheme, p) => `${scheme}://web3/dapp/open?${p}=${enc}`;
   const okxStages = platform() === 'android'
     ? [
-        `intent://wallet/dapp/url?dappUrl=${enc}#Intent;scheme=okx;`
-          + 'action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end',
-        okxLaunch(OKX_PKG_GP),
-        okxLaunch(OKX_PKG_OFFICIAL)
+        okxOpen('okx', 'url'),
+        okxOpen('okxwallet', 'url'),
+        okxOpen('okxweb3', 'url'),
+        'okx://web3?stack=true'
       ]
     : [
-        `okx://wallet/dapp/url?dappUrl=${enc}`,
-        'okx://wallet/dapp'
+        okxOpen('okx', 'url'),
+        'okx://web3?stack=true'
       ];
 
   return [
