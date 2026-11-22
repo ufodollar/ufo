@@ -25,8 +25,17 @@ function normalizeAddress(addr) {
 // BNB Smart Chain
 const BSC_CHAIN_ID = '0x38';
 
+// 链状态的三档结果。不再用 true/false，是因为「切不过去」有两种完全不同的原因，
+// UI 该说的话也不一样：
+//   ok      → 已经在 BSC，什么都不用说
+//   wrong   → 明确读到别的 chainId，且切链/加链都没成
+//   unknown → 连 chainId 都读不到（个别钱包不实现 eth_chainId），不敢下结论
+const CHAIN_OK = 'ok';
+const CHAIN_WRONG = 'wrong';
+const CHAIN_UNKNOWN = 'unknown';
+
 /**
- * 连上之后立刻把钱包拨到 BSC，全程不弹我们自己的任何 UI。
+ * 连上之后立刻把钱包拨到 BSC。
  *
  * 为什么放在「连上之后」而不是页面加载时：授权之前钱包不会响应
  * wallet_switchEthereumChain，太早调用只会拿到 4100（unauthorized）。
@@ -35,35 +44,59 @@ const BSC_CHAIN_ID = '0x38';
  * dapp 浏览器，在页面加载前就已发生，任何 JS 都够不着 —— 那一层只能靠
  * deeplink 参数（Bitget 的 _needChain、Trust 的 coin_id、Coin98 的 chainId）。
  *
- * 失败一律吞掉：链不对只影响写交易，读数据走的是固定 RPC，
- * 页面照常显示余额，不该因为切链失败就报错给用户。
+ * 返回值必须被调用方接住。之前这里一律吞异常，理由是「链不对只影响写交易，
+ * 读数据走固定 RPC，页面照常显示余额」—— 但那个理由只在「用户看得懂为什么
+ * 发不出去」时成立。实际上用户看到的是余额 0、点按钮没反应，
+ * 这比直接告诉他「网络不对」糟糕得多。
  */
 async function ensureBscChain(provider) {
-  if (!provider || typeof provider.request !== 'function') return;
-  try {
-    const current = await provider.request({ method: 'eth_chainId' });
-    if (!current || String(current).toLowerCase() === BSC_CHAIN_ID) return;
+  if (!provider || typeof provider.request !== 'function') return CHAIN_UNKNOWN;
 
-    try {
-      await provider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: BSC_CHAIN_ID }]
-      });
-    } catch (err) {
-      // 4902 = 钱包里还没有这条链。补一次 addEthereumChain，添加后多数钱包会自己切过去。
-      if (!err || (err.code !== 4902 && err.code !== -32603)) return;
-      await provider.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: BSC_CHAIN_ID,
-          chainName: 'BNB Smart Chain',
-          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-          rpcUrls: ['https://bsc-dataseed.binance.org/'],
-          blockExplorerUrls: ['https://bscscan.com/']
-        }]
-      });
+  let current = null;
+  let couldRead = false;
+  try {
+    current = await provider.request({ method: 'eth_chainId' });
+    couldRead = true;
+  } catch (e) {
+    // 读不到 chainId 不代表链是错的，只代表我们没有证据。往下走一次 switch：
+    // 有些钱包不支持 eth_chainId，但支持 wallet_switchEthereumChain。
+  }
+
+  if (current && String(current).toLowerCase() === BSC_CHAIN_ID) return CHAIN_OK;
+
+  // 切链失败时，能给出的结论取决于前面有没有读到 chainId：
+  // 读到过 → 确定在别的链上；没读到过 → 只能说「不确定」，措辞必须留余地，
+  // 否则一个不支持 eth_chainId 的老钱包会被冤枉成「网络不对」。
+  const failure = () => (couldRead ? CHAIN_WRONG : CHAIN_UNKNOWN);
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: BSC_CHAIN_ID }]
+    });
+    return CHAIN_OK;
+  } catch (err) {
+    // 4902 = 钱包里还没有这条链。补一次 addEthereumChain，添加后多数钱包会自己切过去。
+    if (err && (err.code === 4902 || err.code === -32603)) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: BSC_CHAIN_ID,
+            chainName: 'BNB Smart Chain',
+            nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+            blockExplorerUrls: ['https://bscscan.com/']
+          }]
+        });
+        return CHAIN_OK;
+      } catch (e) {
+        return failure();
+      }
     }
-  } catch (e) { /* 用户拒绝 / 钱包不支持，保持原状 */ }
+    // 4001（用户拒绝）和其它错误：链仍然是错的，交给 UI 说清楚。
+    return failure();
+  }
 }
 
 function readFlag(storage, key) {
@@ -117,6 +150,8 @@ export function useWallet() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [autoConnecting, setAutoConnecting] = useState(false);
+  // null | 'wrong' | 'unknown'，见 ensureBscChain 上方的说明
+  const [chainIssue, setChainIssue] = useState(null);
   const [error, setError] = useState('');
 
   const optedOut = useRef(false);
@@ -136,8 +171,11 @@ export function useWallet() {
     setAccount({ address: normalizeAddress(accounts[0]), provider });
     setError('');
     // 不等它：切链是后台动作，用户点完图标应当立刻看到页面。
-    // 已经在 BSC 时会先读一次 chainId 就返回，代价是一次本地调用。
-    ensureBscChain(provider);
+    // 但结果要接住 —— 切不过去时页面需要一条明确的提示，
+    // 否则用户看到的是「余额 0 + 按钮点不动」。
+    ensureBscChain(provider).then((r) => {
+      setChainIssue(r === CHAIN_OK ? null : r);
+    }).catch(() => { /* ensureBscChain 内部已兜住所有异常 */ });
     return true;
   }, []);
 
@@ -393,6 +431,18 @@ export function useWallet() {
     }
   }, [busy, accept]);
 
+  /**
+   * 提示条上那个「Switch」按钮：再试一次。
+   * 用户可能在钱包里手动改了网络，或者刚才只是点错了「拒绝」。
+   */
+  const fixChain = useCallback(async () => {
+    const provider = account && account.provider;
+    if (!provider) return false;
+    const r = await ensureBscChain(provider);
+    setChainIssue(r === CHAIN_OK ? null : r);
+    return r === CHAIN_OK;
+  }, [account]);
+
   const disconnect = useCallback(async () => {
     optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
@@ -408,6 +458,7 @@ export function useWallet() {
     }
 
     setAccount(null);
+    setChainIssue(null);
     setPickerOpen(false);
   }, [account]);
 
@@ -429,6 +480,8 @@ export function useWallet() {
     closePicker: () => setPickerOpen(false),
     busy,
     autoConnecting,
+    chainIssue,
+    fixChain,
     error,
     connect,
     connectWith,

@@ -135,6 +135,7 @@ function App() {
   const {
     address, provider: walletProvider, isConnected,
     busy: walletBusy, autoConnecting, error: walletError,
+    chainIssue, fixChain,
     connect, disconnect, connectOkxWallet,
     pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
@@ -223,29 +224,21 @@ function App() {
     });
   };
 
+  // 「Switch」按钮的重试状态。切链会弹钱包自己的确认框，可能要等用户几秒，
+  // 这期间按钮必须变成不可再点，否则连点会叠出多个切换请求。
+  const [chainFixing, setChainFixing] = useState(false);
+  const handleFixChain = useCallback(async () => {
+    if (chainFixing) return;
+    setChainFixing(true);
+    try { await fixChain(); } finally { setChainFixing(false); }
+  }, [chainFixing, fixChain]);
+
   const ensureBscNetwork = useCallback(async () => {
-    if (!walletProvider) return false;
-    // 先读当前链：已经在 BSC 就直接返回，避免每次连接都弹一次切换确认框
-    try {
-      const cur = await walletProvider.request({ method: 'eth_chainId' });
-      if (String(cur).toLowerCase() === '0x38') return true;
-    } catch (e) { /* 个别钱包不支持 eth_chainId，继续走标准切换 */ }
-    try {
-      await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-      return true;
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        try {
-          await walletProvider.request({
-            method: 'wallet_addEthereumChain',
-            params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org'], blockExplorerUrls: ['https://bscscan.com/'] }],
-          });
-          return true;
-        } catch (addError) { return false; }
-      }
-      return false;
-    }
-  }, [walletProvider]);
+    // 切链逻辑统一在 useWallet.ensureBscChain 里，这里不再抄一份：
+    // 两份实现迟早会漂移（一份加 addEthereumChain、另一份忘了），
+    // 而且只有那边会顺手把失败结果告诉 UI。
+    return fixChain();
+  }, [fixChain]);
 
   useEffect(() => {
     if (!isConnected || !walletProvider) return;
@@ -522,6 +515,9 @@ function App() {
     // 自动授权正在进行时，钱包自己的弹窗盖在上面，此时按钮不该再被点
     (!isConnected && autoConnecting) ||
     (isConnected && (
+      // 钱包明确在别的链上时直接拦住：签名请求要么被钱包拒绝，
+      // 要么在错误的网络上执行，两种都不该让用户等到最后一步才发现。
+      chainIssue === 'wrong' ||
       errorMsg !== '' ||
       !inputAmount ||
       parseFloat(inputAmount) <= 0 ||
@@ -622,6 +618,34 @@ function App() {
 
       {/* Main Content */}
       <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
+
+        {/* 网络不对时常驻提示。不用上面那条 8 秒自动消失的 notice：
+            这是一个持续状态，用户滚回来看时它还得在，否则他只会看到
+            「余额 0、按钮点不动」，却不知道原因。
+            文案分两档：确定在别的链 vs 读不到链，后者的说法必须留余地。 */}
+        {isConnected && chainIssue && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px',
+                        marginTop: '10px', padding: '10px 12px',
+                        background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '12px',
+                        color: '#92400e', fontSize: '12px', lineHeight: 1.45 }}>
+            <span style={{ flex: 1 }}>
+              {chainIssue === 'wrong'
+                ? 'Your wallet is on a different network. Switch to BNB Smart Chain to continue.'
+                : 'Could not confirm your wallet network. Please make sure BNB Smart Chain is selected.'}
+            </span>
+            <button
+              onClick={handleFixChain}
+              disabled={chainFixing}
+              style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
+                       height: '32px', padding: '0 12px', borderRadius: '8px', border: 'none',
+                       background: chainFixing ? '#fbbf24' : '#f59e0b', color: '#fff',
+                       fontWeight: '700', fontSize: '12px', lineHeight: 1.2,
+                       cursor: chainFixing ? 'wait' : 'pointer' }}
+            >
+              {chainFixing ? 'Switching…' : 'Switch'}
+            </button>
+          </div>
+        )}
 
         {activeTab === 'swap' && (
           <div style={{ ...SUB_CARD, marginTop: '10px' }}>

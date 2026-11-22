@@ -152,13 +152,23 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
   //
   // 三件事彼此无关（余额、是否暂停、授权额度），并发问出去。
   // 串行问要多花两个来回，在手机上就是大半秒。
-  const [bnbHex, isPaused, allowance] = await Promise.all([
+  const [bnbHex, isPaused, allowance, walletChain] = await Promise.all([
     rpcCall('eth_getBalance', [owner, 'latest']),
     readView(vaultIface, CONFIG.VAULT_ADDRESS, 'paused'),
     isBuy
       ? readView(erc20Iface, tokenAddress, 'allowance', [owner, CONFIG.VAULT_ADDRESS])
-      : Promise.resolve(0n)
+      : Promise.resolve(0n),
+    // 最后一道闸。UI 已经按 chainIssue 禁用了按钮，但两种情况会漏：
+    //   1. 用户在切链结果回来之前就点了；
+    //   2. 钱包中途被切到别的网络，而它不推送 chainChanged（OKX Connect 就不推）。
+    // 问这一句和其它三个请求并发，不额外花时间。读不到 chainId 的钱包放行 ——
+    // 少数老钱包不实现该方法，不能因此拦住正常交易。
+    walletProvider.request({ method: 'eth_chainId' }).catch(() => null)
   ]);
+
+  if (walletChain && String(walletChain).toLowerCase() !== CHAIN_ID_HEX) {
+    throw new Error('Your wallet is on a different network. Switch to BNB Smart Chain and try again.');
+  }
 
   if (Number(BigInt(bnbHex)) / 1e18 < 0.0005) {
     throw new Error('Insufficient BNB for gas.');
