@@ -11,7 +11,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
  */
-export default function WalletPicker({ open, onClose, injectedWallets, onPick, busy, error }) {
+export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -32,7 +32,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
 
   if (!open) return null;
 
-  const handleApp = (wallet) => {
+  const handleApp = async (wallet) => {
     // iOS 上 Trust Wallet 已经没有内置浏览器，跳转只会把 App 拉到首页，
     // 用户回来时看到的是「什么都没发生」。与其演一次失败的跳转，不如直接说清。
     if (wallet.noBrowser) {
@@ -47,6 +47,36 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, b
     setCopied(false);
     setHint('');
     setPasteUrl('');
+
+    // OKX 走官方 Connect 协议，而不是把网址塞进它内置浏览器 ——
+    // 后者已用真机证明不可能（见 wallets.js 的 OKX 注释）。
+    // 这里的 await 会一直挂到用户在 App 里点完「连接」，页面在后台，
+    // 回来时才 resolve。
+    if (wallet.connect === 'okx' && onOkxConnect) {
+      setHint('Approve the request in OKX Wallet. This page continues when you come back.');
+      setPasteUrl(wallet.target);
+      try {
+        await onOkxConnect();
+        // 成功后 useWallet 会写入账户并关闭面板，这里不用再做什么
+      } catch (e) {
+        const code = e && e.code;
+        const msg = String((e && (e.message || e.reason)) || '');
+        // 4001 / reject 都是用户主动取消，不该报错打扰他
+        const cancelled = code === 4001 || code === 'ACTION_REJECTED' || /reject|cancel|denied/i.test(msg);
+        if (!cancelled) {
+          setNotice(`OKX Connect did not complete: ${msg || 'unknown error'}. You can still paste the link into OKX manually.`);
+        }
+        // 兜底：把链接放进剪贴板，并给出「探索 → 粘贴」的路径
+        try {
+          await navigator.clipboard.writeText(wallet.target);
+          setCopied(true);
+        } catch (err) { /* 剪贴板不可用时，下面的完整链接仍可手动复制 */ }
+        if (wallet.pasteHint) setHint(wallet.pasteHint);
+      } finally {
+        setOpening('');
+      }
+      return;
+    }
 
     // direct:false 的钱包只能拉起 App，不能自带 URL（Trust 属于这一类）。
     // 它需要用户粘贴一次，所以先把链接放进剪贴板。

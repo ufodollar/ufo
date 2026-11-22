@@ -28,16 +28,28 @@ export const decodeUint = (hex) => (hex && hex !== '0x' ? BigInt(hex) : null);
 
 let rpcId = 0;
 
-/** 单次 eth_call */
-export async function ethCall(to, data) {
+/**
+ * 通用 JSON-RPC。除了 eth_call 之外，交易层还要预取 nonce / gasPrice /
+ * estimateGas / receipt —— 这些都不能问钱包。
+ *
+ * OKX Connect 只代理签名类方法，eth_getTransactionCount、eth_estimateGas、
+ * eth_getTransactionReceipt 一律不支持。所以「读」永远走这条公共 RPC，
+ * 钱包只负责最后那一次 eth_sendTransaction 的签名。
+ */
+export async function rpcCall(method, params) {
   const res = await fetch(RPC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'eth_call', params: [{ to, data }, 'latest'] })
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params })
   });
   const json = await res.json();
   if (json && json.error) throw new Error(json.error.message || 'RPC error');
   return json.result;
+}
+
+/** 单次 eth_call */
+export async function ethCall(to, data) {
+  return rpcCall('eth_call', [{ to, data }, 'latest']);
 }
 
 /**

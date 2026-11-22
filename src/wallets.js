@@ -86,43 +86,22 @@ export function walletList() {
 
   // ---------- OKX ----------
   //
-  // 前四轮真机全灭。2026-11-22 直接把 OKX 官方 SDK（@okxconnect/core@1.9.1）
-  // 拆开看源码，才发现一直在试一个根本不存在的路径。
+  // 前四轮真机全灭，第五轮用官方 SDK 源码定位到两个彼此独立的错误：
+  //   1. okx://wallet/dapp/url?dappUrl= 这个路由从来不存在（凭印象拼的）
+  //   2. 某一版 intent 里写了不存在的包名，导致回落 Play 商店
   //
-  // SDK 的 protocol/constants.js 里写死的入口只有这些：
-  //   okx://web3/wallet/connect?param=…   连接钱包（param 是加密过的会话）
-  //   okxwallet://web3/wallet/connect
-  //   okxweb3://web3/wallet/connect
-  //   okx://web3?stack=true               打开 Web3 首页（Android）
-  //   okxwallet://web3?stack=true
-  //   okxweb3://web3?stack=true
-  //   https://link.okx.com/ul/connect     universal link
+  // 第六轮换成 @okxconnect/core@1.9.1 里真实存在的 scheme 后，真机结果：
+  //   · 系统弹出「继续访问 OKX Wallet？」，App 被拉起 —— scheme 这一层通了
+  //   · 但 App 冷启动停在资产首页，dapp/open 的 url 参数没有被消费
   //
-  // 同文件第 27 行还有一行被注释掉的：
-  //   // export const stackDeepLink = 'okx://web3/dapp/open'
-  // 这是整个 SDK 里唯一出现过的「打开 DApp」形态。
+  // 第 27 行那句 `// export const stackDeepLink = 'okx://web3/dapp/open'`
+  // 是注释状态，说明「打开任意网址」从来不是 OKX 开放的能力。到此可以确定：
+  // **网页侧没有任何办法把网址送进 OKX 内置浏览器。**
   //
-  // 之前的 okx://wallet/dapp/url?dappUrl= 是凭印象拼的，OKX 从来没这个路由，
-  // 所以前三轮无论换编码、换触发方式都不可能成功。第三、四轮跳 Play 商店
-  // 则是因为 intent 里带了不存在的 package —— 两个失败原因彼此独立，各错一层。
-  //
-  // 现在四级全是 scheme、不带 package：失败时 Chrome 静默取消，不会把用户
-  // 甩到商店（这是前几轮最糟的副作用，用户会直接离开站点）。
-  //   ①②③ 试被注释掉的 dapp/open，换三个官方 scheme —— 三个里必有一个
-  //        是 App 真实注册的；若这个路由还在，就会带 URL 直接进 DApp 页。
-  //   ④   退到官方正在使用的 web3?stack=true，只求把 App 拉起来，粘贴一次。
-  const okxOpen = (scheme, p) => `${scheme}://web3/dapp/open?${p}=${enc}`;
-  const okxStages = platform() === 'android'
-    ? [
-        okxOpen('okx', 'url'),
-        okxOpen('okxwallet', 'url'),
-        okxOpen('okxweb3', 'url'),
-        'okx://web3?stack=true'
-      ]
-    : [
-        okxOpen('okx', 'url'),
-        'okx://web3?stack=true'
-      ];
+  // 所以 OKX 改走官方唯一支持的外部唤起协议 OKX Connect —— 见 src/okxconnect.js。
+  // 它不需要内置浏览器：浏览器里发起会话，App 弹「连接」，确认后自动跳回本页，
+  // 随后发交易由 App 签名。deep link 只留一条纯拉起的退路。
+  const okxLaunchUrl = 'okx://web3?stack=true';
 
   return [
     {
@@ -223,21 +202,17 @@ export function walletList() {
       fallback: 'https://coin98.com/'
     },
     {
-      id: 'okx', name: 'OKX Wallet', direct: false, manual: true, staged: true,
-      // 四级投递见上方 okxStages 的注释。前三轮失败已定位为包名错误，
-      // 这一轮换成 com.okinc.okex.gp 重新验证路径是否可用。
-      stages: okxStages,
-      url: okxStages[0],
+      id: 'okx', name: 'OKX Wallet',
+      // 走 OKX Connect（src/okxconnect.js），由 WalletPicker 识别这个标记后
+      // 改调 useWallet 提供的连接函数，不再走 openInWallet。
+      connect: 'okx',
+      // Connect 失败时的退路：至少把 App 拉起来，用户手动粘贴。
+      // 首页顶部没有可粘贴的地方，内置浏览器入口在底部「探索」里 ——
+      // 旧文案写「tap the search box at the top」会让人在首页来回找。
+      url: okxLaunchUrl,
       fallback: 'https://www.okx.com/web3',
-      // 真机实测（2026-11-22，Android + OKX 6.197.0）：
-      //   · 系统会先弹「继续访问 OKX Wallet？」——Chrome 对跨 App scheme 的
-      //     强制确认，不是我们的代码能绕过的，必须在提示里预告，否则用户会
-      //     以为卡住了。
-      //   · 点继续之后 App 冷启动，停在资产首页（Account 1 / $0.00），
-      //     dapp/open 的 url 参数没有被消费。带网址那几级一律落空。
-      //   · 首页顶部没有可粘贴的地方，内置浏览器入口在底部「探索」里，
-      //     进去才有搜索框。旧文案写「tap the search box at the top」会让人
-      //     在首页来回找，所以改成先点探索。
+      direct: false,
+      manual: true,
       pasteHint: 'Link copied. Chrome will ask to open OKX — tap Continue. In OKX, tap Explore at the bottom, then paste the link into the search box at the top.'
     }
   ].map((w) => ({ ...w, icon: ICON(w.id), target }));

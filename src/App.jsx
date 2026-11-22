@@ -135,7 +135,7 @@ function App() {
   const {
     address, provider: walletProvider, isConnected,
     busy: walletBusy, autoConnecting, error: walletError,
-    connect, disconnect,
+    connect, disconnect, connectOkxWallet,
     pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
 
@@ -963,6 +963,7 @@ function App() {
         onClose={closePicker}
         injectedWallets={injectedWallets}
         onPick={connectWith}
+        onOkxConnect={connectOkxWallet}
         busy={walletBusy}
         error={walletError}
       />

@@ -9,6 +9,11 @@ const OPTOUT_KEY = 'ufo_inj_off';
 // 所以它只表达一件事：「这个人上次在这里连过」—— 再进来时直接续上。
 const SEEN_KEY = 'ufo_linked';
 
+// OKX Connect 完成连接后回跳的标记。与 c=1 分开，是因为两者要做的事不同：
+//   c=1  → 页面里有 window.ethereum，走注入式授权
+//   okx=1 → 页面里没有注入，会话在 OKX SDK 里，需要单独恢复
+const OKX_RETURN_PARAM = 'okx';
+
 // 地址统一小写。
 // 不用 ethers 的 getAddress：它会对混合大小写做 EIP-55 校验和验证，
 // 钱包返回不规范的地址时会抛错，导致「有地址却显示未连接」。
@@ -81,12 +86,14 @@ function waitForProvider(timeout) {
   });
 }
 
-/** 用过就把 c=1 从地址栏去掉，避免用户手动刷新时又弹一次授权框 */
+/** 用过就把 c=1 / okx=1 从地址栏去掉，避免用户手动刷新时又弹一次授权框 */
 function clearAutoconnectParam() {
   try {
     const url = new URL(location.href);
-    if (!url.searchParams.has(AUTOCONNECT_PARAM)) return;
-    url.searchParams.delete(AUTOCONNECT_PARAM);
+    let touched = false;
+    if (url.searchParams.has(AUTOCONNECT_PARAM)) { url.searchParams.delete(AUTOCONNECT_PARAM); touched = true; }
+    if (url.searchParams.has(OKX_RETURN_PARAM)) { url.searchParams.delete(OKX_RETURN_PARAM); touched = true; }
+    if (!touched) return;
     history.replaceState(null, '', url.pathname + (url.search || ''));
   } catch (e) { /* 地址异常时留着参数也无害 */ }
 }
@@ -145,14 +152,17 @@ export function useWallet() {
     if (optedOut.current) return;
 
     let fromWallet = false;
+    let okxReturn = false;
     try {
-      fromWallet = new URL(location.href).searchParams.get(AUTOCONNECT_PARAM) === '1';
+      const params = new URL(location.href).searchParams;
+      fromWallet = params.get(AUTOCONNECT_PARAM) === '1';
+      okxReturn = params.get(OKX_RETURN_PARAM) === '1';
     } catch (e) { /* 地址异常，按普通访问处理 */ }
 
     // 参数一旦读进变量就没有用了，立刻从地址栏抹掉。
     // 放在这里而不是各个分支结尾：无论后面走静默恢复、主动授权还是无声退出，
     // 用户复制网址、刷新页面时都不会再看到它，也不会因此重复弹授权框。
-    if (fromWallet) clearAutoconnectParam();
+    if (fromWallet || okxReturn) clearAutoconnectParam();
 
     const seenBefore = readFlag(localStorage, SEEN_KEY);
     let cancelled = false;
@@ -164,6 +174,17 @@ export function useWallet() {
     const inWalletBrowser = isMobile();
 
     (async () => {
+      // OKX Connect 回跳：这个页面的浏览器里没有 window.ethereum，
+      // 会话保存在 OKX SDK 自己的存储里，要单独去问它一句。
+      // 动态 import 保证那 100KB 只在真的从 OKX 回来时才下载。
+      if (okxReturn) {
+        try {
+          const { restoreOkx } = await import('./okxconnect');
+          const restored = await restoreOkx();
+          if (!cancelled && restored) { accept(restored.accounts, restored.provider); return; }
+        } catch (e) { /* 恢复失败就当普通访问，页面上的 Connect 按钮仍然在 */ }
+      }
+
       const eth = await waitForProvider(fromWallet || inWalletBrowser ? 3000 : 1200);
       if (cancelled || !eth) return;
 
@@ -256,6 +277,34 @@ export function useWallet() {
     }
   }, [busy, accept]);
 
+  /**
+   * 钱包墙上点 OKX：走官方 Connect 协议。
+   *
+   * 和 connectWith 的区别只有 provider 的来源：那边是浏览器注入的
+   * window.ethereum，这边是 OKX SDK 建立会话后给出的 EIP-1193 包装。
+   * 拿到之后完全同构 —— accept() 之后的逻辑一行都不用改。
+   *
+   * 这个 Promise 会一直挂到用户在 App 里点完「连接」为止，期间页面在后台。
+   */
+  const connectOkxWallet = useCallback(async () => {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    try {
+      // 动态 import：SDK 约 100KB（gzip 后），只有真的点 OKX 才下载
+      const { connectOkx } = await import('./okxconnect');
+      const { accounts, provider } = await connectOkx();
+      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      return false;
+    } catch (e) {
+      // 4001 / reject 是用户自己取消，不当作错误上报
+      if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return false;
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, accept]);
+
   const disconnect = useCallback(async () => {
     optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
@@ -288,6 +337,7 @@ export function useWallet() {
     error,
     connect,
     connectWith,
+    connectOkxWallet,
     disconnect,
     clearError: () => setError('')
   };
