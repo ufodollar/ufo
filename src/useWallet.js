@@ -612,6 +612,30 @@ export function useWallet() {
     }
   }, [busy, accept]);
 
+  /**
+   * 钱包墙上点「浏览器钱包」：私钥在本地生成，授权框由本页渲染，
+   * 全程不离开浏览器 —— 这是唯一一条不需要把 App 叫起来的路径。
+   *
+   * 拿到的仍然是 EIP-1193 provider，accept() 之后的逻辑一行都不用改，
+   * 余额刷新、nonce 管理、回执轮询全部照旧（见 src/localwallet.js）。
+   *
+   * 错误不在这里吞：PIN 错误要让调用方区分出来显示「Wrong PIN」，
+   * 而不是一句笼统的失败。
+   */
+  const connectLocal = useCallback(async (pin) => {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    try {
+      const { connectLocalWallet } = await import('./localwallet');
+      const { accounts, provider } = await connectLocalWallet(pin);
+      if (accept(accounts, provider, 'sdk')) { setPickerOpen(false); return true; }
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, accept]);
+
   const disconnect = useCallback(() => {
     optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
@@ -700,6 +724,7 @@ export function useWallet() {
     connectOkxWallet,
     connectMetaMaskWallet,
     connectWcWallet,
+    connectLocal,
     wcReachable,
     disconnect,
     clearError: () => setError('')

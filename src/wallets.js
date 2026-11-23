@@ -15,6 +15,21 @@
 
 const ICON = (id) => `/wallets/${id}.webp`;
 
+// 浏览器钱包的图标：内联 SVG。它不是任何一个品牌，所以没有 webp 可用。
+// 画的是一扇浏览器窗口 + 一把钥匙槽 —— 「钥匙在窗口里」，正是这个钱包的
+// 全部含义：私钥留在本页，不交给任何 App。
+const LOCAL_ICON = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">' +
+  '<rect width="48" height="48" rx="13" fill="#1d4ed8"/>' +
+  '<rect x="10.5" y="14.5" width="27" height="19" rx="3.5" fill="none" stroke="#fff" stroke-width="2.3"/>' +
+  '<path d="M10.5 21.5h27" stroke="#fff" stroke-width="2.3"/>' +
+  '<circle cx="15.5" cy="18" r="1.35" fill="#fff"/>' +
+  '<circle cx="19.6" cy="18" r="1.35" fill="#fff"/>' +
+  '<circle cx="24" cy="28.5" r="3.1" fill="none" stroke="#fff" stroke-width="2.2"/>' +
+  '<path d="M24 31.6v2.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' +
+  '</svg>'
+);
+
 export function platform() {
   if (typeof navigator === 'undefined') return 'desktop';
   const ua = navigator.userAgent;
@@ -131,6 +146,15 @@ export function walletList() {
     coin98: 'coin98://wc?uri='
   };
   return [
+    {
+      id: 'local', name: 'Browser Wallet', connect: 'local',
+      // 唯一一条「不离开浏览器」的路径：私钥在本地生成、加密存在浏览器里，
+      // 授权框由本页渲染。其余八个都必须先把 App 叫起来，确认框在 App 内。
+      //
+      // 代价：这是一个新地址，跟用户手机里的钱包不是同一个。要发行 UFO
+      // 得先往它转 USDT；清掉浏览器数据等于丢私钥，所以创建时强制展示助记词。
+      direct: false
+    },
     {
       id: 'metamask', name: 'MetaMask', direct: true,
       // 走 universal link 进 MetaMask 内置浏览器，落地即自动授权。
@@ -284,7 +308,7 @@ export function walletList() {
     }
   ].map((w) => ({
     ...w,
-    icon: ICON(w.id),
+    icon: w.id === 'local' ? LOCAL_ICON : ICON(w.id),
     target,
     // 支持 WalletConnect 的钱包带上入口前缀；OKX 走自己的 Connect，不在此列
     wcPrefix: WC_PREFIX[w.id] || null

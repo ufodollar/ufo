@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
 import { getWcUri } from '../wclink';
+import { hasLocalWallet, createLocalWallet } from '../localwallet';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
 
@@ -12,7 +13,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
  */
-export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, onMmConnect, wcReady, wcBlocked, busy, error }) {
+export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, onMmConnect, onLocalConnect, wcReady, wcBlocked, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -24,6 +25,13 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   // WalletConnect 的「手动打开」链接。只在自动跳转不可靠时出现 ——
   // 用户点它是一个全新的用户手势，浏览器不会再拦。
   const [manualOpen, setManualOpen] = useState(null);
+  // 浏览器钱包的内嵌表单。它不跳转、不复制链接，整个流程都发生在这一层
+  // sheet 里 —— 这是唯一一条「不离开浏览器」的路径。
+  const [localStep, setLocalStep] = useState('');   // '' | 'create' | 'backup' | 'unlock'
+  const [localPin, setLocalPin] = useState('');
+  const [localMnemonic, setLocalMnemonic] = useState('');
+  const [localBusy, setLocalBusy] = useState(false);
+  const [localErr, setLocalErr] = useState('');
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
@@ -31,7 +39,12 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const wcBroken = useRef(new Set());
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); return; }
+    if (!open) {
+      setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl('');
+      setLinkCopied(false); setManualOpen(null);
+      setLocalStep(''); setLocalPin(''); setLocalMnemonic(''); setLocalBusy(false); setLocalErr('');
+      return;
+    }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -39,7 +52,60 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
 
   if (!open) return null;
 
+  const localPrimary = {
+    appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+    marginTop: '12px', padding: '14px 16px', border: 'none', borderRadius: '13px',
+    background: '#1d4ed8', color: '#fff', fontSize: '14.5px', fontWeight: '700',
+    cursor: 'pointer', boxShadow: '0 2px 10px rgba(29,78,216,0.25)'
+  };
+
+  // ---- 浏览器钱包：创建 / 备份 / 解锁 ----------------------------------
+  // 这三步都不调用任何钱包 App，也不需要网络 —— 私钥在本页生成、
+  // 用 PIN 加密后写进 localStorage。用户看到的「授权」就是这一步。
+  const doCreateLocal = async () => {
+    if (localPin.length < 6) { setLocalErr('Use at least 6 digits.'); return; }
+    setLocalBusy(true); setLocalErr('');
+    try {
+      const r = await createLocalWallet(localPin);
+      setLocalMnemonic(r.mnemonic);
+      setLocalStep('backup');
+    } catch (e) {
+      setLocalErr(String((e && e.message) || e));
+    } finally { setLocalBusy(false); }
+  };
+
+  const finishLocal = async () => {
+    if (!onLocalConnect) return;
+    setLocalBusy(true); setLocalErr('');
+    try {
+      // 创建时已经把会话放在内存里了，这里不需要再输一次 PIN
+      await onLocalConnect();
+      setLocalMnemonic(''); setLocalPin('');
+    } catch (e) {
+      setLocalErr(String((e && e.message) || e));
+    } finally { setLocalBusy(false); }
+  };
+
+  const doUnlockLocal = async () => {
+    if (!onLocalConnect) return;
+    setLocalBusy(true); setLocalErr('');
+    try {
+      await onLocalConnect(localPin);
+    } catch (e) {
+      setLocalErr(e && e.code === 'BAD_PIN' ? 'Wrong PIN. Try again.' : String((e && e.message) || e));
+    } finally { setLocalBusy(false); }
+  };
+
   const handleApp = async (wallet) => {
+    // 浏览器钱包：不跳转、不复制链接，直接在这一层展开表单。
+    // 它是唯一一条全程不离开浏览器的路径。
+    if (wallet.connect === 'local') {
+      setNotice(''); setHint(''); setOpening(''); setPasteUrl(''); setManualOpen(null);
+      setLocalErr('');
+      setLocalStep(hasLocalWallet() ? 'unlock' : 'create');
+      return;
+    }
+
     // 这个钱包能不能走 WalletConnect：配了 Project ID、有入口前缀、
     // 且这条入口不在本会话的失败名单里。
     // 已经有私有通道（OKX / MetaMask）的钱包不走 WC —— 那条路更短，
@@ -365,8 +431,73 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
           </div>
         )}
 
+        {/* 浏览器钱包的内嵌表单。它替代钱包墙显示 —— 这一步不需要选任何 App，
+            生成、加密、签名全部发生在这一层 sheet 里。 */}
+        {localStep && (
+          <div style={{ marginTop: '18px' }}>
+            {localStep === 'backup' ? (
+              <>
+                <div style={{ fontSize: '13px', color: '#92400e', background: '#fffbeb',
+                              border: '1px solid #fde68a', borderRadius: '10px',
+                              padding: '11px 12px', lineHeight: 1.65 }}>
+                  Write these 12 words down and keep them offline. They are the only way back into
+                  this wallet — clearing browser data erases it.
+                </div>
+                <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px',
+                              background: '#f8fafc', border: '1px solid #e2e8f0',
+                              fontSize: '13px', lineHeight: 1.95, wordSpacing: '2px',
+                              fontFamily: 'ui-monospace, Menlo, monospace',
+                              userSelect: 'all', WebkitUserSelect: 'all' }}>
+                  {localMnemonic}
+                </div>
+                <button onClick={finishLocal} disabled={localBusy} style={localPrimary}>
+                  {localBusy ? 'Connecting…' : 'I saved it — use this wallet'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginBottom: '10px' }}>
+                  {localStep === 'create'
+                    ? 'A new address that lives in this browser — no app opens, every signature happens here. Set a 6-digit PIN to encrypt the key. It starts empty: send USDT (BEP-20) to it before issuing.'
+                    : 'Unlock the wallet you created in this browser.'}
+                </div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={localPin}
+                  onChange={(e) => { setLocalPin(e.target.value.replace(/\D/g, '').slice(0, 8)); setLocalErr(''); }}
+                  placeholder="6-digit PIN"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '13px 14px',
+                           fontSize: '16px', letterSpacing: '6px', borderRadius: '12px',
+                           border: '1px solid #e2e8f0', background: '#f8fafc',
+                           color: '#0f172a', outline: 'none' }}
+                />
+                {localErr && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#b91c1c' }}>{localErr}</div>
+                )}
+                <button
+                  onClick={localStep === 'create' ? doCreateLocal : doUnlockLocal}
+                  disabled={localBusy || localPin.length < 6}
+                  style={{ ...localPrimary, opacity: (localBusy || localPin.length < 6) ? 0.55 : 1 }}
+                >
+                  {localBusy ? 'Working…' : localStep === 'create' ? 'Create wallet' : 'Unlock'}
+                </button>
+                <button
+                  onClick={() => { setLocalStep(''); setLocalPin(''); setLocalErr(''); }}
+                  style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                           marginTop: '8px', padding: '11px', border: 'none', background: 'transparent',
+                           color: '#64748b', fontSize: '13px', cursor: 'pointer' }}
+                >
+                  Back to wallets
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* 移动端：钱包墙 */}
-        {showWall && (
+        {showWall && !localStep && (
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', marginTop: '18px' }}>
             {wallets.map((w) => (
               <button
