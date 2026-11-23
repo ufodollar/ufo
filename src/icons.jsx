@@ -1,20 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { logoSources } from './tokens';
 
 // ============================================================================
 // 代币图标
 // ----------------------------------------------------------------------------
-// 市面上的钱包（Trust Wallet、MetaMask、Rabby）取图标的方式是同一条链路：
-// 维护一份 token list，每条带 address + decimals + logoURI，图标来自
-// Trust Wallet 的 assets 仓库或 CoinGecko 的 CDN，运行时按 logoURI 拉。
+// 两类来源：
+//   1. 官方 logo —— 运行时按合约地址去 Trust Wallet 的 assets 仓库拉，
+//      与主流钱包同一套做法（ERC-20 链上没有图标字段，只能这样查）；
+//   2. 内置矢量图 —— 拉不到时的兜底，不是主路径。
 //
-// 这里不能那么做，原因有二：
-//   1. 本产品的用户大量在国内网络，assets.coingecko.com / raw.githubusercontent
-//      实测经常十几秒超时，图标位就成了永久空白；
-//   2. 图标是第三方内容，多一个外链就多一个能被替换、被劫持、被墙的输入。
-//
-// 所以图标和代币地址一样，作为静态资源随包发布：BNB / USDT / USDC 用官方
-// 矢量路径原样内联，其余按各项目官方标志的配色与几何重绘（40×40 圆底）。
-// 想换成远程图只需给 tokens.js 里的条目加 logoURI —— TokenIcon 会优先用它。
+// 之所以留兜底：图标是外链，会超时、会被限流、会 404。图标位空着比画得不准
+// 更糟 —— 用户会以为这个币出了问题。UFO 没有上任何资产库，走的就是兜底。
 // ============================================================================
 
 /** 40×40 圆底 + 内容 */
@@ -209,17 +205,42 @@ const ICONS = {
   SHIB: ShibMark
 };
 
-/** 优先用 token.logoURI（若项目以后接 token list），否则用内置矢量图 */
+/**
+ * 代币图标：先按合约地址去资产库拉官方 logo，拉不到再退回内置矢量图。
+ *
+ * 为什么不在构建时把图打包进来：图标是第三方内容，随包发布就意味着每加一个
+ * 代币要重发一次站点；而按地址拉是钱包的通行做法，加币不用动代码。
+ *
+ * 内置矢量图始终画在底层，官方 logo 盖在上面 —— 不是「拉不到才画」。外链
+ * 失败可能只是慢（DNS 卡住十几秒），先画兜底再覆盖，图标位永远不会是一个
+ * 空白灰圈；三个源全挂了也只是留在兜底图上，不会闪。
+ */
 export function TokenIcon({ token, size = 40 }) {
+  const [idx, setIdx] = useState(0);
   if (!token) return null;
-  if (token.logoURI) {
-    return (
-      <img src={token.logoURI} width={size} height={size} alt=""
-           style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'block' }} />
-    );
-  }
+
+  const sources = logoSources(token);
   const Mark = ICONS[token.symbol] || BnbMark;
-  return <Mark size={size} />;
+
+  return (
+    <span style={{ position: 'relative', width: size, height: size, flexShrink: 0, display: 'block' }}>
+      <Mark size={size} />
+      {idx < sources.length && (
+        <img
+          src={sources[idx]}
+          width={size}
+          height={size}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setIdx((i) => i + 1)}
+          style={{
+            position: 'absolute', inset: 0, width: size, height: size,
+            borderRadius: '50%', display: 'block', background: 'transparent'
+          }}
+        />
+      )}
+    </span>
+  );
 }
 
 export { BnbMark as BnbIcon, UfoMark as UfoIcon };

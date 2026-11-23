@@ -14,7 +14,7 @@ import TokenPicker from './components/TokenPicker';
 import TransferSheet from './components/TransferSheet';
 import ReadmeTab from './components/ReadmeTab';
 import { TokenIcon, UfoIcon } from './icons';
-import { TOKENS, TOKEN_BY_SYMBOL, UFO_TOKEN, isStable, isVaultPair, formatAmount } from './tokens';
+import { TOKENS, TOKEN_BY_SYMBOL, UFO_TOKEN, isStable, isVaultPair, formatAmount, formatTokenAmount } from './tokens';
 import { skyBtn, skyLink } from './ui';
 
 // Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
@@ -225,6 +225,16 @@ function App() {
   // 链上询价结果（symbol → USD）。没询到的币不写默认值，
   // 界面上显示 "—" 而不是把它当成 0 美元。
   const [prices, setPrices] = useState({});
+
+  // 价格表只在数值真的变了才换引用。轮询会把同一批数字重复写回来，
+  // 每次都生成新对象的话，依赖 prices 的 effect 会被无意义地重跑。
+  const mergePrices = useCallback((map) => {
+    if (!map || !Object.keys(map).length) return;
+    setPrices((prev) => {
+      const changed = Object.keys(map).some((k) => prev[k] !== map[k]);
+      return changed ? { ...prev, ...map } : prev;
+    });
+  }, []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -373,7 +383,7 @@ function App() {
       if (!held.length) return;
       try {
         const map = await readTokenPrices(held);
-        if (map && Object.keys(map).length) setPrices((prev) => ({ ...prev, ...map }));
+        mergePrices(map);
       } catch (e) { /* 取不到价就保留上一轮的值，界面显示 — */ }
     } catch (error) {
       console.warn('[ufo] wallet balances unavailable:', error && error.message);
@@ -428,9 +438,7 @@ function App() {
     if (!need.length) return undefined;
     let alive = true;
     readTokenPrices(need)
-      .then((m) => {
-        if (alive && m && Object.keys(m).length) setPrices((prev) => ({ ...prev, ...m }));
-      })
+      .then((m) => { if (alive) mergePrices(m); })
       .catch(() => { /* 拿不到就显示 "—" */ });
     return () => { alive = false; };
   }, [activeTab, paySym, recvSym, prices]);
@@ -453,6 +461,15 @@ function App() {
   //   pancake：要问链，350ms 防抖，并丢弃过期结果 —— 用户完全可能在
   //            报价回来之前就换成另一对币，那笔迟到的结果不能盖在新界面上。
   const priceReady = !globalPriceError && (!vaultRoute || !!stablePriceData);
+
+  // 报价 effect 的依赖只放标量。价格轮询每 8 秒、余额轮询每 10 秒都会换掉
+  // tokenBalances / stablecoinPrices 的对象引用（内容常常没变）。对象进了依赖，
+  // 报价就会被反复重新计算，面板上的数字每隔几秒清空一次 —— 看起来就是
+  // 「一会儿有一会儿 Quoting…」。先把要用的数字取出来，内容不变就不重算。
+  const payBalNum = isConnected ? Number(tokenBalances[paySym] || 0) : 0;
+  const vaultStableBalNum = vaultStable ? Number(vaultBalances[vaultStable.symbol] || 0) : 0;
+  const stablePriceKey = stablePriceData && stablePriceData.price18 ? String(stablePriceData.price18) : '';
+  const globalPriceErrMsg = globalPriceError ? globalPriceError.message : '';
 
   useEffect(() => {
     let dead = false;
@@ -489,13 +506,16 @@ function App() {
       return undefined;
     }
 
-    const balanceMsg = isConnected && amt > Number(tokenBalances[paySym] || 0)
+    const balanceMsg = isConnected && amt > payBalNum
       ? `Insufficient ${paySym} balance`
       : '';
 
+    // 报价的身份：币对 + 金额。同一笔在重算时不把已有数字清掉。
+    const quoteKey = `${paySym}|${recvSym}|${amountInWei.toString()}`;
+
     if (vaultRoute) {
-      const price18 = stablePriceData && stablePriceData.price18;
-      if (globalPriceError) {
+      const price18 = stablePriceKey ? BigInt(stablePriceKey) : null;
+      if (globalPriceErrMsg) {
         setQuote(EMPTY_QUOTE);
         setErrorMsg('Network error. Please retry.');
         return undefined;
@@ -519,10 +539,10 @@ function App() {
         const feeUsd = (usdValue * 50n) / 10000n;
         const ufoOut = usdValue - feeUsd;
         setQuote({
-          out: parseFloat(formatUnits(ufoOut, 18)).toFixed(6),
-          fee: parseFloat(formatUnits(feeUsd, 18)).toFixed(6),
+          out: formatTokenAmount(formatUnits(ufoOut, 18)),
+          fee: formatTokenAmount(formatUnits(feeUsd, 18)),
           amountInWei, minOutWei: ufoOut,
-          path: null, kind: 'vault', hops: 1, loading: false
+          path: null, kind: 'vault', hops: 1, loading: false, pairKey: quoteKey
         });
         setErrorMsg(balanceMsg);
       } else {
@@ -534,16 +554,16 @@ function App() {
         const feeTokens = (feeUfo * 10n ** 18n) / price18;
         const totalOut = tokenOut + feeTokens;
 
-        const vaultBal = vaultBalances[vaultStable.symbol] || 0;
+        const vaultBal = vaultStableBalNum;
         let msg = balanceMsg;
         if (parseFloat(formatUnits(totalOut, 18)) > vaultBal) {
           msg = `Insufficient ${vaultStable.symbol} in Vault. Available: ${vaultBal.toFixed(2)}`;
         }
         setQuote({
-          out: parseFloat(formatUnits(tokenOut, 18)).toFixed(6),
-          fee: parseFloat(formatUnits(feeUfo, 18)).toFixed(6),
+          out: formatTokenAmount(formatUnits(tokenOut, 18)),
+          fee: formatTokenAmount(formatUnits(feeUfo, 18)),
           amountInWei, minOutWei: tokenOut,
-          path: null, kind: 'vault', hops: 1, loading: false
+          path: null, kind: 'vault', hops: 1, loading: false, pairKey: quoteKey
         });
         setErrorMsg(msg);
       }
@@ -551,7 +571,13 @@ function App() {
     }
 
     // ---- BNB Chain 上的 AMM 报价 ----
-    setQuote({ ...EMPTY_QUOTE, loading: true, amountInWei });
+    // 同一笔报价重算时不清空已有数字：价格轮询会周期性触发重算，清一次闪一次。
+    // 只有币对或金额变了（pairKey 不同）才切到「Quoting…」。
+    setQuote((prev) => (
+      prev.pairKey === quoteKey && prev.amountInWei === amountInWei && prev.out !== '0'
+        ? { ...prev, loading: true }
+        : { ...EMPTY_QUOTE, loading: true, amountInWei, pairKey: quoteKey }
+    ));
     setErrorMsg(balanceMsg);
 
     const timer = setTimeout(async () => {
@@ -561,7 +587,7 @@ function App() {
         const q = await quotePancake(payToken, receiveToken, amountInWei, 6000);
         if (dead) return;
         if (!q) {
-          setQuote({ ...EMPTY_QUOTE, amountInWei });
+          setQuote({ ...EMPTY_QUOTE, amountInWei, pairKey: quoteKey });
           setErrorMsg(`No swap route for ${paySym} → ${recvSym} on BNB Chain.`);
           return;
         }
@@ -572,15 +598,16 @@ function App() {
         const slipBps = volatile ? 100n : 50n;
         const minOut = (q.amountOutWei * (10000n - slipBps)) / 10000n;
         setQuote({
-          out: parseFloat(formatUnits(q.amountOutWei, decOut)).toFixed(6),
-          fee: '0.000000',
+          out: formatTokenAmount(formatUnits(q.amountOutWei, decOut)),
+          fee: '0',
           amountInWei, minOutWei: minOut,
-          path: q.path, kind: 'pancake', hops: q.path.length - 1, loading: false
+          path: q.path, kind: 'pancake', hops: q.path.length - 1,
+          loading: false, pairKey: quoteKey
         });
         setErrorMsg(balanceMsg);
       } catch (e) {
         if (dead) return;
-        setQuote({ ...EMPTY_QUOTE, amountInWei });
+        setQuote({ ...EMPTY_QUOTE, amountInWei, pairKey: quoteKey });
         setErrorMsg('Price feed unreachable. Please retry.');
       }
     }, 350);
@@ -588,8 +615,8 @@ function App() {
     return () => { dead = true; clearTimeout(timer); };
   }, [
     inputAmount, paySym, recvSym, decIn, decOut, payToken, receiveToken,
-    vaultRoute, vaultStable, tokenBalances, vaultBalances, isConnected,
-    stablePriceData, globalPriceError
+    vaultRoute, isConnected, payBalNum, vaultStableBalNum,
+    stablePriceKey, globalPriceErrMsg
   ]);
 
   const handleAction = async () => {
@@ -620,7 +647,7 @@ function App() {
 
     // 报价可能刚好在点击的瞬间过期（比如用户改了金额还没等新的回来）。
     // 没有 amountInWei 就不发交易 —— 宁可让按钮再点一次，也不签一笔金额为 0 的。
-    if (!quote.amountInWei || quote.amountInWei <= 0n) {
+    if (!quote.minOutWei || quote.minOutWei <= 0n) {
       setErrorMsg('Still pricing. Give it a second and try again.');
       return;
     }
@@ -743,7 +770,7 @@ function App() {
   // 报价还没回来、或金额为 0 时不能点：那不是「禁用态」，是「还没到能签的时候」。
   const swapDisabled = isProcessing || (isConnected && !needTopUp && (
     !!errorMsg || !inputAmount || parseFloat(inputAmount) <= 0 ||
-    !priceReady || quote.loading || !(quote.amountInWei > 0n)
+    !priceReady || !(quote.minOutWei > 0n)
   ));
 
   // 代币 → 美元，全部来自链上：
@@ -790,22 +817,23 @@ function App() {
   const rateLine = (() => {
     if (!(inputNum > 0) || !(outNum > 0)) return '—';
     const r = outNum / inputNum;
-    const dp = r >= 100 ? 2 : r >= 1 ? 4 : 6;
-    return `1 ${paySym} = ${r.toLocaleString('en-US', { maximumFractionDigits: dp })} ${recvSym}`;
+    if (r >= 100) return `1 ${paySym} = ${r.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${recvSym}`;
+    if (r >= 1) return `1 ${paySym} = ${r.toLocaleString('en-US', { maximumFractionDigits: 4 })} ${recvSym}`;
+    return `1 ${paySym} = ${formatTokenAmount(r)} ${recvSym}`;
   })();
 
   // 路由与费率都读 vaultRoute（币对本身决定的），不读 quote.kind ——
   // quote 可能是上一对币留下的，也可能是空对象，拿它写文案会出现
   // 「CAKE → UFO 却写着 Vault」这种自相矛盾的画面。
   const routeLine = (() => {
-    if (vaultRoute) return `Vault · ${paySym} → ${recvSym}`;
+    if (vaultRoute) return `UFO Vault · ${paySym} → ${recvSym}`;
     if (!quote.path) return '—';
     const name = (addr) => {
       const a = String(addr).toLowerCase();
       const hit = TOKENS.find((t) => (t.address || '').toLowerCase() === a);
       return hit ? hit.symbol : a.slice(0, 6) + '…';
     };
-    return 'Pancake V2 · ' + quote.path.map(name).join(' → ');
+    return 'BNB Chain · ' + quote.path.map(name).join(' → ');
   })();
 
   const feeLine = (() => {
@@ -1128,7 +1156,7 @@ function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                   <span>Minimum received</span>
                   <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
-                    {formatAmount(Number(formatUnits(quote.minOutWei, decOut)), 6)} {recvSym}
+                    {formatTokenAmount(formatUnits(quote.minOutWei, decOut))} {recvSym}
                   </span>
                 </div>
               )}

@@ -111,3 +111,53 @@ export function formatAmount(v, maxDp = 6) {
   if (n > 0 && n < 0.000001) return '<0.000001';
   return n.toLocaleString('en-US', { maximumFractionDigits: maxDp });
 }
+
+/**
+ * 报价用的数量格式：既不掉有效数字，也不写科学计数法。
+ *
+ * 1 DOT 换 BTCB 只有 0.00001118 个，按 6 位小数一截就成了 "0.000000"，
+ * 界面把它读成 0 —— 于是明明有报价，Rate 和到账量却双双显示「—」。
+ * 这里对极小值按「首位有效数字」补位（最多 12 位小数），
+ * 0.0000000000000229 也照样读得出来，而 123.456 仍然是 123.456。
+ */
+export function formatTokenAmount(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  if (n >= 0.0001) {
+    const s = n.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    return s === '' ? '0' : s;
+  }
+  const dp = Math.min(12, 4 - Math.floor(Math.log10(n)));
+  return n.toFixed(dp).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+// ============================================================================
+// 代币图标
+// ----------------------------------------------------------------------------
+// ERC-20 标准里没有图标字段 —— 链上只有 name / symbol / decimals，
+// 图标一律是钱包按「合约地址」去外部资产库查出来的，没有任何「从链上拉」的
+// 办法。主流钱包用的就是 Trust Wallet 的 assets 仓库（按链 + 地址组织）：
+//   .../blockchains/smartchain/assets/<checksum-address>/logo.png
+// 路径里的地址必须是 EIP-55 校验和格式，小写会 404，所以下面这些地址都是
+// 现成校验和过的，不要手动改大小写。
+//
+// 三个源按可达性排：jsDelivr（国内有节点）→ Trust Wallet 自己的 CDN →
+// GitHub raw。前一个失败才退下一个，全失败就用内置矢量图，图标位永远不会空。
+// ============================================================================
+const LOGO_HOSTS = [
+  (p) => `https://cdn.jsdelivr.net/gh/trustwallet/assets@master/blockchains/smartchain/${p}`,
+  (p) => `https://assets-cdn.trustwallet.com/blockchains/smartchain/${p}`,
+  (p) => `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/smartchain/${p}`
+];
+
+export function logoSources(token) {
+  if (!token) return [];
+  if (token.logoURI) return [token.logoURI];
+  const path = token.native
+    ? 'info/logo.png'
+    : token.address
+      ? `assets/${token.address}/logo.png`
+      : '';
+  if (!path) return [];
+  return LOGO_HOSTS.map((host) => host(path));
+}

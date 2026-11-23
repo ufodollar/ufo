@@ -233,14 +233,21 @@ export async function quotePancake(from, to, amountInWei, timeoutMs = 12000) {
     timeoutMs
   );
 
+  // 所有候选路径都在同一个 batch 里问完，取「到账最多」的那条，而不是第一条
+  // 有返回的。BSC 上有不少没人维护的直连池子：DOT/BTCB 直连只报 2.29e-8，
+  // 走 DOT→WBNB→BTCB 是 1.12e-5，差 500 倍。先到先得会把用户按垃圾池子的
+  // 价格成交 —— 这种事在链上不可逆，必须在报价这一层滤掉。
+  let best = null;
   for (let i = 0; i < paths.length; i++) {
     const amounts = decodeAmounts(res[i]);
     if (!amounts || amounts.length !== paths[i].length) continue;
     const out = amounts[amounts.length - 1];
     if (out <= 0n) continue;
-    return { path: paths[i], amounts, amountOutWei: out };
+    if (!best || out > best.amountOutWei) {
+      best = { path: paths[i], amounts, amountOutWei: out };
+    }
   }
-  return null;
+  return best;
 }
 
 async function inChunks(calls, size = 12) {

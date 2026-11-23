@@ -79,7 +79,11 @@
   <tr><td>其余任意币对</td><td>PancakeSwap V2 Router</td><td><code>getAmountsOut</code> 实时报价</td><td>0.25% 池费 × 跳数</td></tr>
 </table>
 <p>路由判断只有一处实现（<code>tokens.isVaultPair</code>），界面文案、报价和真正提交的合约都读它，不会出现「写着金库、实际走 AMM」。没有流动性的币对（例如任何非稳定币 → UFO）不会在选币时被拦下，而是在报价那一步直接说「No swap route」——链上有没有池子是链说了算，前端不该假装知道。</p>
+<p>同一次批量请求会把所有候选路径都问一遍（直连、经 WBNB、经 USDT），取<b>到账最多</b>的那条，而不是第一条有返回的。BSC 上不少直连池子没人维护：DOT/BTCB 直连只报 2.29e-8，走 DOT→WBNB→BTCB 是 1.12e-5，差 500 倍 —— 先到先得会按垃圾池子的价格成交，不可逆。界面上 Route 行写的是<b>链名 + 实际路径</b>（如 <code>BNB Chain · DOT → WBNB → BTCB</code>），不是 DEX 名。</p>
 <p>报价带滑点保护：一端是稳定币或 BNB 时最小到账按 0.5% 下浮，两个波动币之间按 1%。成交用 <code>*SupportingFeeOnTransferTokens</code> 系列函数，收转账税的代币不会因为「实际到账略少于报价」整笔 revert。到账数量按回执里的 <code>Transfer</code> 日志求和，历史记录写真实值，不写报价。</p>
+
+<h3>代币图标</h3>
+<p>ERC-20 标准没有图标字段，链上只有 name / symbol / decimals，所以「从链上拉图标」在协议层不存在。钱包的通行做法是按<b>合约地址</b>去资产库查：<code>blockchains/smartchain/assets/&lt;checksum-address&gt;/logo.png</code>。本产品按顺序试三个源（jsDelivr → Trust Wallet CDN → GitHub raw），路径里的地址必须是 EIP-55 校验和格式，小写会 404。内置的矢量图始终画在底层，官方 logo 加载成功后覆盖上去 —— 外链慢、被限流、被墙都只会留在兜底图上，图标位不会出现空白灰圈。UFO 未收录于任何资产库，用的就是兜底矢量图。</p>
 
 <h3>页面结构</h3>
 <p>底部五个入口：<b>Wallet</b>（余额 + 发送 / 接收）、<b>Readme</b>、<b>Trade</b>（闪兑）、<b>History</b>、<b>Contact</b>。</p>
