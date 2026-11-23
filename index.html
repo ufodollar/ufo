@@ -72,6 +72,18 @@
         color: #94a3b8;
         font-weight: 600;
       }
+      /* 品牌字标。
+         它的唯一用途是「让截图自带证据」：钱包内置浏览器一旦加载了本页，
+         哪怕 JS 一行都没执行，这三个字母也会画出来。
+         白屏截图里如果有 UFO，问题在 JS/网络；如果连它都没有，
+         问题在唤起链接或 WebView 本身 —— 这两个方向的处理办法完全不同。 */
+      .boot-mark {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.34em;
+        color: #1d4ed8;
+        text-indent: 0.34em;
+      }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
         .boot-ring { animation: none; border-top-color: #dbeafe; }
@@ -81,6 +93,7 @@
   <body>
     <div id="root">
       <div class="boot">
+        <div class="boot-mark">UFO</div>
         <div class="boot-ring"></div>
         <div class="boot-text">LOADING</div>
       </div>

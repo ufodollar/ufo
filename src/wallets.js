@@ -139,27 +139,39 @@ export function walletList() {
     },
     {
       id: 'trust', name: 'Trust Wallet',
-      // 白屏的真因不在链接格式，而在产物语法 —— 见 vite.config.js 里
-      // build.target 的注释。
+      // ---- 第五次修正（前四次都在改参数，这次改的是"用哪个入口"）----
       //
-      // 之前四轮排查（open_url 中转 / 编码 / intent / 裸 url）全在改参数，
-      // 方向从一开始就偏了：拿 app.uniswap.org 走同一条链接也白屏，不是
-      // 因为 Trust 不认这个域名，而是两边产物都用了 Chrome 80+ 才支持的
-      // 可选链，Trust 的 WebView 一解析就 SyntaxError，页面连一帧都渲染不出来。
+      // 白屏的直接证据：截图里 Trust 的地址栏是空的，页面纯白连骨架都没有。
+      // 如果 URL 真传进去了，哪怕 JS 全挂，index.html 里那个纯 CSS 的转圈
+      // 也会画出来。所以不是"渲染白"，是"压根没加载本站"。
       //
-      // 现在改了三处，各自对应一个独立的失败点：
-      //   1. 产物降到 es2017        → 老 WebView 能执行（根本原因）
-      //   2. 用 https universal link → 没装 App 会落下载页，而不是点了没反应
-      //   3. url 参数整段编码        → 裸 URL 里的 :// 和 ? 会被参数解析器截断，
-      //                                最终打开一个空地址，那也会白屏
+      // 三个独立的错，都在 url 这条参数上：
       //
-      // 以前这里还埋了一个自相矛盾：注释写着「不能出现第二个 ?」，代码却拼了
-      // `?v=` 来做缓存穿透。缓存问题早就由 Cloudflare 的 must-revalidate 解决，
-      // 这个参数只是把 URL 搞坏。
-      url: `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(autoconnectUrl())}`,
+      //   1. https://link.trustwallet.com —— 该域名在这条网络下 DNS 只返回
+      //      IPv6（2001::a27d:2006），TLS 握手直接失败，实测 code=000。
+      //      而 Trust 注册了这个域名的 App Links：系统把链接交给 App 后，
+      //      App 仍要拿这个 URL 去加载 —— 连不上，就是白屏。
+      //      必须换成 trust:// 直连，跳过这个不可达的落地页。
+      //
+      //   2. url 参数不能编码。官方文档给的样例是 url=https://compound.finance，
+      //      原样不编码。我们之前用 encodeURIComponent，Trust 的解析器不做
+      //      percent-decode，于是它去加载字面量 "https%3A%2F%2F..." —— 空白页。
+      //
+      //   3. url 里不能带 query。目标地址后面跟 ?c=1 会出现第二个 "?"，
+      //      Trust 按最朴素的规则切分，目标被截成半个。
+      //      自动连接本来也不需要这个标记：页面检测到 window.ethereum
+      //      就会自己走 eth_requestAccounts（见 useWallet.js 的 inWalletBrowser）。
+      //
+      // 官方文档注明 DApp 浏览器是 Android Only —— iOS 版已移除该功能，
+      // 所以 iOS 上不显示这个入口（noBrowser）。
+      url: `trust://open_url?coin_id=60&url=${currentUrl().replace(/\/+$/, '')}`,
       fallback: 'https://trustwallet.com/download',
-      direct: false,
-      pasteHint: 'Link copied. In Trust Wallet, tap the address bar at the top, paste the link, then tap Go.',
+      direct: true,
+      scheme: true,
+      // manual 在 openInWallet 里只表示「不要 1.8 秒后自动跳下载页」——
+      // Trust 冷启动经常超过 1.8 秒，自动兜底会把已经进 App 的用户甩到
+      // 下载站。没装 App 的情况由面板上的手动按钮接住。
+      manual: true,
       noBrowser: platform() === 'ios'
     },
     {
