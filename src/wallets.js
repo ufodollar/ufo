@@ -138,34 +138,28 @@ export function walletList() {
       fallback: 'https://metamask.io/download/'
     },
     {
-      id: 'trust', name: 'Trust Wallet', direct: true,
-      // 四次真机排查的最终结论（Android，2026-11-22）：
-      //   1. https://link.trustwallet.com/open_url —— 落地页中转，参数丢失，停首页
-      //   2. trust:// + encodeURIComponent(url) —— 浏览器打开，白屏
-      //   3. intent:// + package —— 部分 ROM 被拦，点了没反应
-      //   4. trust:// + 裸 url（官方文档形态，coin_id 60/714/20000714 全试）
-      //      —— 浏览器都打开了，但一律白屏
+      id: 'trust', name: 'Trust Wallet',
+      // 白屏的真因不在链接格式，而在产物语法 —— 见 vite.config.js 里
+      // build.target 的注释。
       //
-      // 决定性对照：用 app.uniswap.org 走同一条链接，同样白屏。所以不是
-      // 我们的域名、不是参数编码、不是链 ID —— 是这个 build 收到 open_url
-      // 后只切到浏览器面板，不消费 url。参数层面到此为止。
+      // 之前四轮排查（open_url 中转 / 编码 / intent / 裸 url）全在改参数，
+      // 方向从一开始就偏了：拿 app.uniswap.org 走同一条链接也白屏，不是
+      // 因为 Trust 不认这个域名，而是两边产物都用了 Chrome 80+ 才支持的
+      // 可选链，Trust 的 WebView 一解析就 SyntaxError，页面连一帧都渲染不出来。
       //
-      // 退化为可用的路径：direct:false —— 点击时把链接写进剪贴板，再拉起
-      // App，用户在地址栏粘贴一次。浏览器已经会打开，只差一次粘贴。
-      id: 'trust', name: 'Trust Wallet', direct: false, manual: true,
-      // 必须是 trust://open_url，不能是裸 trust://。
-      // 裸 scheme 没有 host，Android 找不到匹配的 Activity，点击后毫无反应
-      // （2026-11-22 真机验证）。open_url 这个 host 才注册了 intent-filter。
+      // 现在改了三处，各自对应一个独立的失败点：
+      //   1. 产物降到 es2017        → 老 WebView 能执行（根本原因）
+      //   2. 用 https universal link → 没装 App 会落下载页，而不是点了没反应
+      //   3. url 参数整段编码        → 裸 URL 里的 :// 和 ? 会被参数解析器截断，
+      //                                最终打开一个空地址，那也会白屏
       //
-      // 不带 ?c=1：query 里出现第二个 ? 会让部分解析路径出错，而落地后
-      // 用户本来就要点一次 Connect，不值得为省这一次点击牺牲拉起可靠性。
-      // 每次点击都换一个从未访问过的地址：Trust 会把这条 deep link 当作
-      // 标签页地址并缓存其内容，同一个地址反复点击永远拿到旧的那份 HTML，
-      // 线上已经换过包也不会生效。只加一个 ?v=，不出现 &，避免参数被截断。
-      url: `trust://open_url?coin_id=60&url=${currentUrl()}?v=${Date.now()}`,
+      // 以前这里还埋了一个自相矛盾：注释写着「不能出现第二个 ?」，代码却拼了
+      // `?v=` 来做缓存穿透。缓存问题早就由 Cloudflare 的 must-revalidate 解决，
+      // 这个参数只是把 URL 搞坏。
+      url: `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(autoconnectUrl())}`,
       fallback: 'https://trustwallet.com/download',
-      scheme: true,
-      pasteHint: 'Link copied. Trust opens on a blank page — tap the address bar at the top, paste, then press Go.',
+      direct: false,
+      pasteHint: 'Link copied. In Trust Wallet, tap the address bar at the top, paste the link, then tap Go.',
       noBrowser: platform() === 'ios'
     },
     {

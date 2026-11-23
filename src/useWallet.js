@@ -249,11 +249,11 @@ export function useWallet() {
     const seenBefore = readFlag(localStorage, SEEN_KEY);
     let cancelled = false;
 
-    // 移动端 + 有注入 = 一定在某个钱包的内置浏览器里（手机普通浏览器没有 provider）。
-    // 有了这个判据，就算 deeplink 带不进 ?c=1（Trust、SafePal 都带不进），
-    // 进来后依然能自动走一次授权，不用用户自己去页面上找按钮。
-    // 桌面扩展不在此列 —— 那种情况自动弹框会打扰人。
-    const inWalletBrowser = isMobile();
+    // 注意这里只判断「是不是手机」。它决定等 provider 等多久：
+    // 手机上有可能是钱包内置浏览器（注入晚一点），值得多等；
+    // 桌面普通浏览器有扩展，注入是同步的。
+    // 真正的「是否在钱包内置浏览器里」要等 provider 到手才能确认，见下面。
+    const mobile = isMobile();
 
     (async () => {
       // MetaMask Connect 回跳：页面里没有 window.ethereum，会话在 MetaMask SDK
@@ -320,8 +320,19 @@ export function useWallet() {
         if (!cancelled) clearWcPending();
       }
 
-      const eth = await waitForProvider(fromWallet || inWalletBrowser ? 3000 : 1200);
+      const eth = await waitForProvider(fromWallet || mobile ? 3000 : 1200);
       if (cancelled || !eth) return;
+
+      // 到这里 eth 一定存在。移动端还有 provider = 一定在某个钱包的内置
+      // 浏览器里（手机普通浏览器、微信、小米浏览器都不会注入）。
+      //
+      // 这个判据比 URL 上的 ?c=1 可靠得多：Trust、SafePal 的 deeplink
+      // 都带不进 query，落地时地址栏是干净的，唯一能说明「用户就是为了
+      // 连接才进来的」就是 provider 本身。
+      //
+      // 旧写法直接拿 isMobile() 当结论，语义是错的（手机会被误判成
+      // 「一定在钱包里」），只是因为 !eth 提前 return 才没有出事。
+      const inWalletBrowser = mobile;
 
       // 1) 已授权：静默恢复，不弹任何东西
       try {

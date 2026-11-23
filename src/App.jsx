@@ -206,6 +206,13 @@ function App() {
 
   const priceRefreshingRef = useRef(false);
   const balanceRefreshingRef = useRef(false);
+  // errorMsg 有两个来源，语义完全不同，不能一视同仁地拦按钮：
+  //   · 校验类（余额不足、价格偏差、金额非法）→ 必须拦，否则用户白签一笔会 revert 的交易；
+  //   · 交易类（用户在钱包里点了拒绝、gas 不足、上链失败）→ 不能拦，因为
+  //     用户再点一次按钮的意思就是「我知道了，再试一次」，拦住等于按钮失灵。
+  // 旧代码用 `|| errorMsg` 一刀切，导致被拒一次之后再点毫无反应 —— 这个
+  // 现象很难归因，用户只会说「按钮坏了」。
+  const txErrorRef = useRef(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('ufo_tx_history');
@@ -347,6 +354,9 @@ function App() {
 
   useEffect(() => {
     const input = parseFloat(inputAmount);
+    // 每次重新计算都把「上一次交易失败」的标记清掉：只要输入或价格变了，
+    // 旧的失败结论就不再适用，不该继续影响按钮。
+    txErrorRef.current = false;
     // 已经开始输金额，就说明下一秒可能要签交易了 —— 此刻把 ethers 拉下来，
     // 等真正点按钮时不必再等 100KB 的下载
     if (isConnected && input > 0) prefetchTxLibs();
@@ -438,7 +448,10 @@ function App() {
     if (!isNetworkOk) return;
 
     const input = parseFloat(inputAmount);
-    if (!inputAmount || input <= 0 || isNaN(input) || errorMsg) return;
+    if (!inputAmount || input <= 0 || isNaN(input)) return;
+    // 只让「校验类」错误拦住提交；交易类错误放行，让用户能重试。
+    if (errorMsg && !txErrorRef.current) return;
+    txErrorRef.current = false;
 
     if (!priceReady) {
       setErrorMsg('Price feed not ready. Please wait or refresh.');
@@ -488,6 +501,7 @@ function App() {
 
     } catch (error) {
       console.warn('[ufo] transaction failed:', error && error.message);
+      txErrorRef.current = true;
       setErrorMsg(error.reason || error.shortMessage || error.message || 'Transaction failed');
       txRecord.status = 'Failed';
       txRecord.txHash = '-';

@@ -35,16 +35,30 @@ let rpcId = 0;
  * OKX Connect 只代理签名类方法，eth_getTransactionCount、eth_estimateGas、
  * eth_getTransactionReceipt 一律不支持。所以「读」永远走这条公共 RPC，
  * 钱包只负责最后那一次 eth_sendTransaction 的签名。
+ *
+ * ★ 必须带超时。fetch 本身没有默认超时：RPC 丢包或回源卡住时，这个 await
+ *   会一直挂着，页面就停在「加载中」，余额、价格、按钮全部空着，用户以为
+ *   网站坏了。移动网络切换（4G ↔ Wi-Fi）时尤其容易触发。
  */
-export async function rpcCall(method, params) {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params })
-  });
-  const json = await res.json();
-  if (json && json.error) throw new Error(json.error.message || 'RPC error');
-  return json.result;
+export async function rpcCall(method, params, timeoutMs = 12000) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
+  try {
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
+      signal: ctl.signal
+    });
+    const json = await res.json();
+    if (json && json.error) throw new Error(json.error.message || 'RPC error');
+    return json.result;
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || e.code === 20)) throw new Error('RPC timeout');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** 单次 eth_call */
@@ -57,7 +71,7 @@ export async function ethCall(to, data) {
  * 六个独立请求在移动网络上的差别不是带宽，是 6 个 RTT —— 400ms 起。
  * 每项可以是 { to, data }（eth_call），也可以是 { method, params }（自定义）。
  */
-export async function ethBatch(calls) {
+export async function ethBatch(calls, timeoutMs = 12000) {
   const payload = calls.map((c, i) => ({
     jsonrpc: '2.0',
     id: i + 1,
@@ -65,12 +79,24 @@ export async function ethBatch(calls) {
     params: c.params || [{ to: c.to, data: c.data }, 'latest']
   }));
 
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const json = await res.json();
+  // 同 rpcCall：没有超时就是「偶尔永远转圈」
+  const ctl = new AbortController();
+  const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
+  let json;
+  try {
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctl.signal
+    });
+    json = await res.json();
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || e.code === 20)) throw new Error('RPC timeout');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!Array.isArray(json)) throw new Error('RPC batch rejected');
 
   const byId = {};

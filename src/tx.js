@@ -180,8 +180,11 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
 
   let hash = '';
   let receipt = null;
-  let paid = parseFloat(formatUnits(amountWei, 18)).toFixed(6);
-  let received = null;
+  // 初值只作为事件解析失败时的兜底：买的时候知道付出的是 amountWei（USDT），
+  // 卖的时候 amountWei 是 UFO 数量，不能拿来当「已支付」——旧代码两个分支
+  // 共用这一行，卖出且日志解析失败时会把 UFO 数量显示成美元金额。
+  let paid = isBuy ? parseFloat(formatUnits(amountWei, 18)).toFixed(6) : '0.000000';
+  let received = '0.000000';
   // 本次流程用到的 nonce 下界，见 sendTx 的注释
   let nonceFloor = 0;
 
