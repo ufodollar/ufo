@@ -270,6 +270,14 @@ async function attachAccount(w, pin) {
   // openVault 迁移时已经把 v2 记录写回去了，这里读到的就是最新形状。
   const base = read() || { v: 2, salt, accounts: [], active: null };
 
+  // 地址不是另起的随机串：它由这把私钥经 secp256k1 公钥 + keccak256 推导。
+  // 这里显式再验一次，防止以后有人为了「快一点」把地址和私钥分开生成 ——
+  // 那样得到的是一把打不开任何地址的私钥，用户资产会直接打进去再也拿不出来。
+  const { Wallet: Check } = await import('ethers/wallet');
+  if (new Check(w.privateKey).address !== w.address) {
+    throw new Error('Key and address do not match.');
+  }
+
   const packed = await encryptPrivateKey(w.privateKey, key);
   const acct = {
     id: randHex(8),
@@ -358,6 +366,28 @@ export async function unlockLocalWallet(pin) {
   return { address: w.address };
 }
 
+/**
+ * 删除一个账户（只删本机的密文，链上资产不受影响）。
+ * 删掉最后一个账户等于删掉整个钱包。
+ */
+export function removeAccount(id) {
+  const store = read();
+  if (!store) return { removed: false, remaining: 0 };
+
+  const accounts = store.accounts.filter((a) => a.id !== id);
+  if (session) delete session.cache[id];
+
+  if (!accounts.length) {
+    destroyLocalWallet();
+    return { removed: true, remaining: 0, empty: true };
+  }
+
+  const active = store.active === id ? accounts[0].id : store.active;
+  write({ v: 2, salt: store.salt, accounts, active });
+  if (session) session.active = active;
+  return { removed: true, remaining: accounts.length, active };
+}
+
 /** 切到另一个账户。已解锁时不需要 PIN；未解锁会抛 4100。 */
 export async function switchAccount(id) {
   if (!session) {
@@ -418,9 +448,19 @@ function makeProvider() {
     (listeners[event] || []).forEach((fn) => { try { fn(payload); } catch (e) { /* noop */ } });
   };
 
-  const activeWallet = () => {
+  // 当前账户的 Wallet。缓存里没有就按需解一次 —— 删掉当前账户后
+  // 新的当前账户还没解过，不解就会让签名报「wallet is locked」。
+  const activeWallet = async () => {
     if (!session) return null;
-    return session.cache[session.active] || null;
+    const cached = session.cache[session.active];
+    if (cached) return cached;
+
+    const store = read();
+    const acct = store && store.accounts.find((a) => a.id === session.active);
+    if (!acct) return null;
+    const w = await decryptWallet(acct, session.key);
+    session.cache[session.active] = w;
+    return w;
   };
 
   return {
@@ -433,7 +473,7 @@ function makeProvider() {
         err.code = 4100;
         throw err;
       }
-      const wallet = activeWallet();
+      const wallet = await activeWallet();
       if (!wallet) {
         const err = new Error('Wallet is locked.');
         err.code = 4100;
@@ -461,6 +501,8 @@ function makeProvider() {
           const a = params[0];
           const b = params[1];
           const msgHex = /^0x[0-9a-fA-F]*$/.test(a) ? a : b;
+          const who = /^0x[0-9a-fA-F]{40}$/.test(a) ? a : b;
+          assertSameAccount(who, wallet.address);
           return wallet.signMessage(new Uint8Array(fromB64Hex(msgHex)));
         }
 
@@ -477,6 +519,9 @@ function makeProvider() {
 
         case 'eth_sendTransaction': {
           const tx = params[0] || {};
+          // 切账户之后最容易出的错，是页面还拿着旧地址去签新账户的余额：
+          // 签名会成功，但花的是另一个地址的钱。这里直接拦下来。
+          assertSameAccount(tx.from, wallet.address);
           const raw = await wallet.signTransaction({
             to: tx.to,
             data: tx.data || tx.input || '0x',
@@ -504,6 +549,13 @@ function makeProvider() {
       listeners[event] = (listeners[event] || []).filter((x) => x !== fn);
     }
   };
+}
+
+function assertSameAccount(from, actual) {
+  if (!from) return; // 交易没带 from 时以当前账户为准
+  if (String(from).toLowerCase() !== String(actual).toLowerCase()) {
+    throw new Error('This request is for a different account. Switch back and try again.');
+  }
 }
 
 function fromB64Hex(hex) {

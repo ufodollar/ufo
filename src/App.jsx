@@ -46,6 +46,14 @@ const FONT_STYLE = {
 };
 
 /* Swap / Wallet / History 三个页面共用的白色容器，样式只在这里写一次 */
+const HEAD_BTN = {
+  appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  width: '34px', height: '34px', padding: 0, borderRadius: '11px',
+  background: '#fff', border: '1px solid #e2e8f0', color: '#334155',
+  cursor: 'pointer', lineHeight: 1
+};
+
 const SUB_CARD = {
   background: '#fff',
   borderRadius: '24px',
@@ -134,9 +142,9 @@ function App() {
   // 在 Wallet 标签页生成一个，之后每次进来输 PIN 解锁（见 useWallet.js）。
   const {
     address, provider: walletProvider, isConnected,
-    busy: walletBusy, hasWallet, backedUp, accounts, activeId,
+    busy: walletBusy, hasWallet, accounts, activeId,
     create: createWallet, importKey, unlock: unlockWallet, lock: lockWallet,
-    switchTo: switchAccount, viewKey, confirmBackup, fixChain
+    switchTo: switchAccount, viewKey, removeAccount, confirmBackup, fixChain
   } = useWallet();
 
   // '' | 'create' | 'import' | 'unlock' | 'viewkey' | 'accounts'
@@ -144,18 +152,9 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
-  const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [copiedAddr, setCopiedAddr] = useState(false);
-
-  // 地址是公开信息，随手可复制；私钥是另一回事 —— 只有「查看私钥」那条路能出，
-  // 而且每次都要重输 PIN。两件事在 UI 上必须区分。
-  const copyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(address || '');
-      setCopiedAddr(true);
-      setTimeout(() => setCopiedAddr(false), 1600);
-    } catch (e) { /* 非安全上下文没有 clipboard，忽略 */ }
-  };
+  // 顶部只显示「是第几个账户」，地址不在页面上出现（只在账户管理弹窗里）。
+  const activeIdx = accounts.findIndex((a) => a.id === activeId);
+  const accountNo = activeIdx >= 0 ? activeIdx + 1 : 1;
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
@@ -360,7 +359,6 @@ function App() {
     setTxMsg('');
     setErrorMsg('');
     setShowTokenMenu(false);
-    setShowAccountMenu(false);
     txErrorRef.current = false;
   }, [isConnected]);
 
@@ -595,77 +593,29 @@ function App() {
           </div>
           <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
         </div>
-        <div style={{ position: 'relative' }}>
+        {/* 右上角：账户号 → 锁定 → 账户管理。
+            账户号只显示「是第几个」，不再显示地址尾号；地址只在账户管理里出现。 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {isConnected ? (
             <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '34px',
+                            background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                            padding: '0 11px', borderRadius: '17px', fontWeight: 700, fontSize: '12.5px',
+                            lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                Account {accountNo}
+              </div>
               <button
-                onClick={() => setShowAccountMenu(v => !v)}
-                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                         display: 'flex', alignItems: 'center', gap: '6px',
-                         background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
-                         padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
-                         lineHeight: 1.2, cursor: 'pointer' }}
+                onClick={lockWallet}
+                aria-label="Lock wallet"
+                title="Lock wallet"
+                style={HEAD_BTN}
               >
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
-                {address.slice(0, 6)}…{address.slice(-4)}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
+                  <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+                </svg>
               </button>
-              {showAccountMenu && (
-                <>
-                  <div onClick={() => setShowAccountMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }} />
-                  {/* 每一项都写死 height：部分 Android 浏览器和 WebView 会忽略 button 的
-                      padding、只按文字行高算高度，之前 Disconnect 就是这样从 44px 塌到 19px
-                      并被容器裁掉的。显式高度不依赖任何盒模型默认值。 */}
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '200px',
-                                background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                                border: '1px solid #e2e8f0', zIndex: 100, overflow: 'hidden', padding: '6px' }}>
-                    <a
-                      href={`https://bscscan.com/address/${address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setShowAccountMenu(false)}
-                      style={{ display: 'flex', alignItems: 'center', height: '44px', padding: '0 14px',
-                               fontSize: '13px', lineHeight: 1.2, color: '#1e293b', textDecoration: 'none', borderRadius: '8px' }}
-                    >
-                      View on BscScan
-                    </a>
-                    <button
-                      onClick={() => { setShowAccountMenu(false); setWalletPanel('accounts'); }}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                               width: '100%', height: '44px',
-                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
-                               color: '#1e293b', background: 'transparent', border: 'none',
-                               borderRadius: '8px', cursor: 'pointer' }}
-                    >
-                      <span>Switch account</span>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8',
-                                     background: '#eff6ff', borderRadius: '20px', padding: '3px 8px' }}>
-                        {accounts.length}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => { setShowAccountMenu(false); setWalletPanel('viewkey'); }}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               display: 'flex', alignItems: 'center', width: '100%', height: '44px',
-                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
-                               color: '#1e293b', background: 'transparent', border: 'none',
-                               borderRadius: '8px', cursor: 'pointer' }}
-                    >
-                      View private key
-                    </button>
-                    <button
-                      onClick={() => { setShowAccountMenu(false); lockWallet(); }}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               display: 'flex', alignItems: 'center', width: '100%', height: '44px',
-                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
-                               color: '#334155', background: 'transparent', border: 'none',
-                               borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
-                    >
-                      Lock wallet
-                    </button>
-                  </div>
-                </>
-              )}
             </>
           ) : (
             <button
@@ -673,13 +623,26 @@ function App() {
               disabled={walletBusy}
               style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
                        background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
-                       padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
-                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer',
+                       padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '12.5px',
+                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap',
                        boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
               {walletBusy ? 'Working…' : hasWallet ? 'Unlock' : 'Create Wallet'}
             </button>
           )}
+
+          <button
+            onClick={() => setWalletPanel('accounts')}
+            aria-label="Accounts"
+            title="Accounts"
+            style={HEAD_BTN}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 7h10M4 12h16M4 17h7" />
+              <circle cx="18" cy="7" r="2.2" />
+              <circle cx="14" cy="17" r="2.2" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -823,132 +786,7 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ marginTop: '10px' }}>
-            {/* 官方钱包本体。这里不再有「连接钱包」，只有三种状态：
-                没有钱包 / 已锁定 / 已解锁。 */}
-            <div style={{
-              borderRadius: '20px', padding: '18px', color: '#fff',
-              background: isConnected
-                ? 'linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%)'
-                : 'linear-gradient(135deg,#0f172a 0%,#1e293b 100%)',
-              boxShadow: '0 10px 26px rgba(29,78,216,0.18)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '10.5px', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700, opacity: 0.72 }}>
-                  Official UFO Wallet
-                </div>
-                {isConnected && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 600, opacity: 0.9 }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
-                    Unlocked
-                  </div>
-                )}
-              </div>
-
-              {isConnected ? (
-                <>
-                  <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '12.5px',
-                                marginTop: '10px', lineHeight: 1.6, wordBreak: 'break-all', opacity: 0.95 }}>
-                    {address}
-                  </div>
-                  <div style={{ fontSize: '12px', opacity: 0.78, marginTop: '6px', lineHeight: 1.6 }}>
-                    This wallet lives in this browser. It issues and redeems UFO at the protocol NAV —
-                    no app, no bridge, no third party.
-                  </div>
-                  {!backedUp && (
-                    <div style={{ marginTop: '10px', padding: '9px 10px', borderRadius: '10px',
-                                  background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(253,230,138,0.5)',
-                                  fontSize: '11.5px', lineHeight: 1.6, color: '#fef3c7' }}>
-                      You have not saved this private key yet. Copy it now — if this browser’s
-                      data is cleared, this address and its funds are gone with it.
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '7px', marginTop: '14px', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={copyAddress}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
-                    >
-                      {copiedAddr ? 'Copied' : 'Copy address'}
-                    </button>
-                    <button
-                      onClick={() => setWalletPanel('viewkey')}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
-                    >
-                      View private key
-                    </button>
-                    <button
-                      onClick={() => setWalletPanel('accounts')}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
-                    >
-                      Accounts · {accounts.length}
-                    </button>
-                    <button
-                      onClick={lockWallet}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
-                    >
-                      Lock
-                    </button>
-                  </div>
-                </>
-              ) : hasWallet ? (
-                <>
-                  <div style={{ fontSize: '17px', fontWeight: 700, marginTop: '8px' }}>Wallet locked</div>
-                  <div style={{ fontSize: '12.5px', opacity: 0.8, marginTop: '5px', lineHeight: 1.65 }}>
-                    Your key is still on this device. Enter your PIN to sign again.
-                  </div>
-                  <button
-                    onClick={() => setWalletPanel('unlock')}
-                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
-                             marginTop: '14px', padding: '13px', borderRadius: '12px', border: 'none',
-                             background: '#fff', color: '#1d4ed8', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Unlock wallet
-                  </button>
-                  <button
-                      onClick={() => setWalletPanel('accounts')}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
-                               marginTop: '8px', padding: '11px', borderRadius: '12px',
-                               border: '1px solid rgba(255,255,255,0.35)',
-                               background: 'transparent', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Accounts · {accounts.length}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: '17px', fontWeight: 700, marginTop: '8px' }}>No wallet on this device yet</div>
-                  <div style={{ fontSize: '12.5px', opacity: 0.82, marginTop: '5px', lineHeight: 1.65 }}>
-                    Generate one here. The address and its key are created on this device and never leave it.
-                  </div>
-                  <button
-                    onClick={() => setWalletPanel('create')}
-                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
-                             marginTop: '14px', padding: '13px', borderRadius: '12px', border: 'none',
-                             background: '#fff', color: '#1d4ed8', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Generate wallet
-                  </button>
-                  <button
-                    onClick={() => setWalletPanel('import')}
-                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
-                             marginTop: '8px', padding: '12px', borderRadius: '12px',
-                             border: '1px solid rgba(255,255,255,0.35)',
-                             background: 'transparent', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Import private key
-                  </button>
-                </>
-              )}
-            </div>
-
-          <div style={{ ...SUB_CARD, marginTop: '12px' }}>
+          <div style={{ ...SUB_CARD }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
@@ -1009,14 +847,35 @@ function App() {
 
         {activeTab === 'history' && (
           <div style={{ marginTop: '10px' }}>
-            {/* 页头 */}
-            <div style={{ marginBottom: '16px', padding: '0 4px' }}>
-              <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.3px' }}>
-                UFO Chain History
-              </h2>
-              <p style={{ fontSize: '12.5px', color: '#64748b', marginTop: '5px', lineHeight: 1.6 }}>
-                Every line below leads to the chain itself.
-              </p>
+            {/* 页头。链上明细的入口放这里：钱包页已经不再展示地址， */}
+            {/* 想知道这个账户在链上发生过什么，就来 History 的右上角。 */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px',
+                          marginBottom: '16px', padding: '0 4px' }}>
+              <div>
+                <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.3px' }}>
+                  UFO Chain History
+                </h2>
+                <p style={{ fontSize: '12.5px', color: '#64748b', marginTop: '5px', lineHeight: 1.6 }}>
+                  Every line below leads to the chain itself.
+                </p>
+              </div>
+              {isConnected && (
+                <a
+                  href={`https://bscscan.com/address/${address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '5px',
+                           height: '32px', padding: '0 11px', borderRadius: '10px',
+                           border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
+                           fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2, textDecoration: 'none',
+                           whiteSpace: 'nowrap' }}
+                >
+                  BscScan
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 17 17 7" /><path d="M8 7h9v9" />
+                  </svg>
+                </a>
+              )}
             </div>
 
             <div style={SUB_CARD}>
@@ -1162,6 +1021,7 @@ function App() {
         onUnlock={unlockWallet}
         onViewKey={viewKey}
         onSwitch={switchAccount}
+        onRemove={removeAccount}
         onBackedUp={confirmBackup}
       />
 

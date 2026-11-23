@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 
 // ============================================================================
-// 钱包面板：生成 / 导入 / 解锁 / 查看私钥 / 切换账户
+// 钱包面板：生成 / 导入 / 解锁 / 账户管理（查看私钥、删除账户、切换账户）
 // ----------------------------------------------------------------------------
-// 五种模式共用一套壳，因为它们的形状高度相似：先过 PIN，再做一件事。
-//
 // 密钥形态：**裸私钥**，不是助记词。
 //   · 生成后立刻给出完整私钥，允许复制 —— 用户必须能把它带走；
-//   · 关掉之后想再看，必须重新输 6 位 PIN（钱包已解锁也不例外）；
-//   · 查看私钥是唯一能拿到明文的入口，所以它永远需要一次显式验证。
+//   · 之后只有「Accounts → View private key」能看到，且每次都要重输 6 位 PIN；
+//   · 删除账户只删本机密文，链上资产不动，但没保存私钥的人会永久失去这个地址。
+//
+// 账户管理是唯一的账户入口：切换、查看私钥、删除、新增、导入都在这里，
+// 免得同一件事散落在三四个按钮上。
 // ============================================================================
 
 const FONT = {
@@ -42,6 +43,15 @@ const label = {
   letterSpacing: '0.6px', textTransform: 'uppercase'
 };
 
+const chip = (tone) => ({
+  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+  padding: '7px 10px', borderRadius: '9px',
+  border: '1px solid ' + (tone === 'danger' ? '#fecaca' : '#e2e8f0'),
+  background: tone === 'danger' ? '#fef2f2' : '#fff',
+  color: tone === 'danger' ? '#b91c1c' : '#334155',
+  fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2, cursor: 'pointer', whiteSpace: 'nowrap'
+});
+
 /** 老 WebView 里 navigator.clipboard 常常不存在，必须留 execCommand 兜底 */
 async function copyText(text) {
   try {
@@ -68,20 +78,19 @@ async function copyText(text) {
   }
 }
 
-const short = (a) => (a ? a.slice(0, 6) + '…' + a.slice(-4) : '');
-
 export default function WalletSetup({
-  mode, onClose, address, accounts = [], activeId, hasWallet, unlocked,
-  onCreate, onImport, onUnlock, onViewKey, onSwitch, onBackedUp, onNavigate
+  mode, onClose, onNavigate, accounts = [], activeId, hasWallet, unlocked,
+  onCreate, onImport, onUnlock, onViewKey, onSwitch, onRemove, onBackedUp
 }) {
   const open = !!mode;
 
-  const [step, setStep] = useState('pin');       // 'pin' | 'form' | 'reveal' | 'list' | 'done'
+  const [step, setStep] = useState('pin');    // pin | form | reveal | list | done | viewgate | confirm
   const [pin, setPin] = useState('');
   const [keyInput, setKeyInput] = useState('');
-  const [secret, setSecret] = useState('');      // 展示中的私钥
+  const [secret, setSecret] = useState('');   // 展示中的私钥
   const [shownAddress, setShownAddress] = useState('');
-  const [copied, setCopied] = useState('');      // '' | 'ok' | 'fail'
+  const [target, setTarget] = useState(null); // 正在查看 / 删除的账户 id
+  const [copied, setCopied] = useState('');   // '' | 'ok' | 'fail'
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -92,12 +101,12 @@ export default function WalletSetup({
 
   useEffect(() => {
     if (!open) return;
-    setPin(''); setKeyInput(''); setSecret(''); setShownAddress('');
+    setPin(''); setKeyInput(''); setSecret(''); setShownAddress(''); setTarget(null);
     setCopied(''); setBusy(false); setErr('');
 
     if (mode === 'create') {
       if (needGate) { setStep('pin'); return; }
-      // 已解锁时点「生成钱包」不该再问一次 PIN：直接生成，然后展示私钥。
+      // 已解锁时点「生成账户」不该再问一次 PIN：直接生成，然后展示私钥。
       // 生成必须放在这个 effect 里、且只依赖 [open, mode] —— 如果把
       // needGate 放进依赖，创建成功后它从 true 变 false 会再触发一次，
       // 一按生成就多出一个空账户。
@@ -119,15 +128,15 @@ export default function WalletSetup({
     }
 
     if (mode === 'import') setStep('form');
-    else if (mode === 'accounts') setStep(needGate ? 'pin' : 'list');
-    else setStep('pin'); // unlock / viewkey
+    else if (mode === 'accounts') setStep(needGate && hasWallet ? 'pin' : 'list');
+    else setStep('pin'); // unlock
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode]);
 
   if (!open) return null;
 
   // 新 PIN 必须正好 6 位；解锁路径允许 6–8 位，避免把旧版本设了 7–8 位的人锁在门外
-  const pinOk = settingPin || mode === 'create' || mode === 'import'
+  const pinOk = (settingPin || mode === 'create' || mode === 'import')
     ? pin.length === 6
     : pin.length >= 6;
   const pinMax = settingPin ? 6 : 8;
@@ -135,16 +144,17 @@ export default function WalletSetup({
   const errText = (e) => {
     if (!e) return 'Something went wrong.';
     if (e.code === 'BAD_PIN') return 'Wrong PIN. Try again.';
-    if (e.code === 'BAD_KEY') return e.message;
-    if (e.code === 'DUP') return e.message;
     return e.message || String(e);
   };
 
+  const idxOf = (id) => accounts.findIndex((a) => a.id === id);
+  const addrOf = (id) => (accounts.find((a) => a.id === id) || {}).address || '';
+
   const doGenerate = async () => {
     if (busy) return;
+    if (settingPin && pin.length !== 6) { setErr('Choose a 6-digit PIN.'); return; }
     setBusy(true); setErr('');
     try {
-      if (settingPin && pin.length !== 6) { setErr('Choose a 6-digit PIN.'); setBusy(false); return; }
       const r = await onCreate(pin);
       setSecret(r.privateKey);
       setShownAddress(r.address);
@@ -177,25 +187,9 @@ export default function WalletSetup({
     if (!pinOk) { setErr('Enter your 6-digit PIN.'); return; }
     setBusy(true); setErr('');
     try {
-      if (mode === 'viewkey') {
-        const k = await onViewKey(pin, activeId);
-        setSecret(k);
-        setShownAddress(address || '');
-        setStep('reveal');
-      } else if (mode === 'accounts') {
-        await onUnlock(pin);
-        setStep('list');
-      } else if (mode === 'create') {
-        // 已有钱包但本次未解锁：PIN 验过之后接着生成，不再问第二遍
-        await onUnlock(pin);
-        const r = await onCreate(undefined);
-        setSecret(r.privateKey);
-        setShownAddress(r.address);
-        setStep('reveal');
-      } else {
-        await onUnlock(pin);
-        onClose();
-      }
+      await onUnlock(pin);
+      if (mode === 'accounts') setStep('list');
+      else onClose();
     } catch (e) {
       setErr(errText(e));
     } finally {
@@ -215,6 +209,37 @@ export default function WalletSetup({
     }
   };
 
+  const doReveal = async () => {
+    if (busy) return;
+    if (pin.length < 6) { setErr('Enter your 6-digit PIN.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const k = await onViewKey(pin, target);
+      setSecret(k);
+      setShownAddress(addrOf(target));
+      setStep('reveal');
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    try {
+      const r = onRemove(target);
+      setTarget(null);
+      if (!r || !r.remaining) { onClose(); return; }
+      setStep('list');
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const doCopy = async () => {
     const ok = await copyText(secret);
     setCopied(ok ? 'ok' : 'fail');
@@ -223,14 +248,14 @@ export default function WalletSetup({
   };
 
   const title =
-    mode === 'accounts' ? 'Accounts'
-      : mode === 'import' ? 'Import private key'
-        : mode === 'viewkey' ? 'View private key'
+    step === 'confirm' ? 'Delete account'
+      : mode === 'accounts' ? 'Accounts'
+        : mode === 'import' ? 'Import private key'
           : mode === 'create' ? 'Create UFO wallet'
             : 'Unlock wallet';
 
   // 创建结果的 reveal 不允许点遮罩关闭：私钥只在这里出现一次
-  const lockOverlay = step === 'reveal' && (mode === 'create');
+  const lockOverlay = step === 'reveal' && mode === 'create';
 
   return (
     <div
@@ -274,11 +299,9 @@ export default function WalletSetup({
                 ? 'Enter your wallet PIN. The new account is added to this same wallet.'
                 : mode === 'create'
                   ? 'This wallet is created here, inside this page. Choose a 6-digit PIN — it encrypts the private key before it is stored on this device.'
-                  : mode === 'viewkey'
-                    ? 'Enter your 6-digit PIN to reveal the private key. Make sure nobody is looking at your screen.'
-                    : mode === 'accounts'
-                      ? 'Enter your PIN to unlock the wallet before switching accounts.'
-                      : 'Enter the 6-digit PIN you set when you created this wallet.'}
+                  : mode === 'accounts'
+                    ? 'Enter your PIN to manage accounts.'
+                    : 'Enter the 6-digit PIN you set when you created this wallet.'}
             </div>
 
             <input
@@ -302,9 +325,7 @@ export default function WalletSetup({
               style={{ ...primaryBtn(busy || !pinOk), marginTop: '16px' }}
             >
               {busy ? 'Working…'
-                : mode === 'create' ? (settingPin ? 'Generate wallet' : 'Add account')
-                  : mode === 'viewkey' ? 'Reveal key'
-                    : mode === 'accounts' ? 'Unlock' : 'Unlock'}
+                : mode === 'create' ? (settingPin ? 'Generate wallet' : 'Add account') : 'Unlock'}
             </button>
 
             {mode === 'create' && (
@@ -314,7 +335,7 @@ export default function WalletSetup({
               </div>
             )}
 
-            {mode !== 'create' && mode !== 'accounts' && (
+            {mode === 'unlock' && (
               <button onClick={onClose} style={{ ...ghostBtn, marginTop: '6px' }}>Cancel</button>
             )}
           </>
@@ -406,22 +427,23 @@ export default function WalletSetup({
               </div>
             </div>
 
-            <button
-              onClick={doCopy}
-              style={{ ...primaryBtn(false), marginTop: '12px' }}
-            >
+            <button onClick={doCopy} style={{ ...primaryBtn(false), marginTop: '12px' }}>
               {copied === 'ok' ? 'Copied to clipboard' : copied === 'fail' ? 'Select the key and copy it manually' : 'Copy private key'}
             </button>
 
             <button
-              onClick={() => { if (onBackedUp) onBackedUp(); onClose(); }}
+              onClick={() => {
+                if (onBackedUp) onBackedUp();
+                if (mode === 'accounts') setStep('list');
+                else onClose();
+              }}
               style={{ ...secBtn, marginTop: '9px' }}
             >
-              {mode === 'create' ? 'Done — open my wallet' : 'Done'}
+              {mode === 'create' ? 'Done — open my wallet' : mode === 'accounts' ? 'Back to accounts' : 'Done'}
             </button>
 
             <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>
-              You can see this key again at any time from Wallet → View private key,
+              You can see this key again from Accounts → View private key,
               but only by entering your PIN.
             </div>
           </>
@@ -447,45 +469,137 @@ export default function WalletSetup({
           </>
         )}
 
-        {/* ---------------- 账户列表 ---------------- */}
+        {/* ---------------- 查看私钥：先验证 PIN ---------------- */}
+        {step === 'viewgate' && (
+          <>
+            <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
+              Enter your 6-digit PIN to reveal the private key of Account {idxOf(target) + 1}.
+              Make sure nobody is looking at your screen.
+            </div>
+
+            <div style={{ marginTop: '12px', padding: '10px 11px', borderRadius: '10px',
+                          background: '#f8fafc', border: '1px solid #e2e8f0',
+                          fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px',
+                          lineHeight: 1.6, wordBreak: 'break-all', color: '#475569' }}>
+              {addrOf(target)}
+            </div>
+
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={pin}
+              onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 8)); setErr(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') doReveal(); }}
+              placeholder="6-digit PIN"
+              style={{ width: '100%', boxSizing: 'border-box', marginTop: '14px', padding: '14px 16px',
+                       fontSize: '17px', letterSpacing: '7px', textAlign: 'center', borderRadius: '13px',
+                       border: '1px solid #e2e8f0', background: '#f8fafc', color: '#0f172a', outline: 'none' }}
+            />
+
+            {err && <ErrBox>{err}</ErrBox>}
+
+            <button onClick={doReveal} disabled={busy || pin.length < 6}
+              style={{ ...primaryBtn(busy || pin.length < 6), marginTop: '16px' }}>
+              {busy ? 'Working…' : 'Reveal key'}
+            </button>
+            <button onClick={() => { setErr(''); setPin(''); setStep('list'); }}
+              style={{ ...ghostBtn, marginTop: '6px' }}>
+              Back to accounts
+            </button>
+          </>
+        )}
+
+        {/* ---------------- 删除确认 ---------------- */}
+        {step === 'confirm' && (
+          <>
+            <div style={{ marginTop: '12px', fontSize: '13px', color: '#b91c1c', background: '#fef2f2',
+                          border: '1px solid #fecaca', borderRadius: '11px', padding: '11px 12px', lineHeight: 1.7 }}>
+              This removes the account from this browser. The funds stay on-chain, but if you have
+              not saved the private key you will <b>never</b> be able to reach this address again.
+            </div>
+
+            <div style={{ marginTop: '12px' }}>
+              <div style={label}>Account {idxOf(target) + 1}</div>
+              <div style={{ marginTop: '4px', padding: '10px 11px', borderRadius: '10px',
+                            background: '#f8fafc', border: '1px solid #e2e8f0',
+                            fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
+                            lineHeight: 1.6, wordBreak: 'break-all' }}>
+                {addrOf(target)}
+              </div>
+            </div>
+
+            {err && <ErrBox>{err}</ErrBox>}
+
+            <button onClick={doDelete} disabled={busy}
+              style={{ ...primaryBtn(false), marginTop: '16px', background: '#dc2626', boxShadow: '0 4px 14px rgba(220,38,38,0.25)' }}>
+              {busy ? 'Deleting…' : 'Delete account'}
+            </button>
+            <button onClick={() => { setTarget(null); setErr(''); setStep('list'); }}
+              style={{ ...secBtn, marginTop: '9px' }}>
+              Cancel
+            </button>
+          </>
+        )}
+
+        {/* ---------------- 账户管理 ---------------- */}
         {step === 'list' && mode === 'accounts' && (
           <>
             <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
               Switching changes which account signs issuance and burn transactions.
             </div>
 
-            <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-              {accounts.map((a, i) => {
-                const isActive = a.id === activeId;
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => doSwitch(a.id)}
-                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                             width: '100%', padding: '13px 14px', textAlign: 'left', cursor: 'pointer',
-                             background: isActive ? '#eff6ff' : '#fff', border: 'none',
-                             borderTop: i === 0 ? 'none' : '1px solid #f1f5f9' }}
-                  >
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                      <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '12.5px',
-                                     color: '#0f172a', wordBreak: 'break-all' }}>
-                        {short(a.address)}
-                      </span>
-                      <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>Account {i + 1}</span>
-                    </span>
-                    {isActive ? (
-                      <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 700, color: '#1d4ed8',
-                                     background: '#dbeafe', borderRadius: '20px', padding: '4px 9px' }}>
-                        Active
-                      </span>
-                    ) : (
-                      <span style={{ flexShrink: 0, fontSize: '11px', color: '#64748b' }}>Switch</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {accounts.length === 0 ? (
+              <div style={{ marginTop: '16px', padding: '22px 14px', textAlign: 'center',
+                            border: '1px dashed #cbd5e1', borderRadius: '14px',
+                            fontSize: '12.5px', color: '#64748b', lineHeight: 1.7 }}>
+                No account on this device yet.
+              </div>
+            ) : (
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {accounts.map((a, i) => {
+                  const isActive = a.id === activeId;
+                  return (
+                    <div key={a.id} style={{ border: '1px solid ' + (isActive ? '#bfdbfe' : '#e2e8f0'),
+                                             background: isActive ? '#f5f9ff' : '#fff',
+                                             borderRadius: '14px', padding: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
+                          Account {i + 1}
+                        </span>
+                        {isActive ? (
+                          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 700, color: '#1d4ed8',
+                                         background: '#dbeafe', borderRadius: '20px', padding: '4px 9px' }}>
+                            Active
+                          </span>
+                        ) : (
+                          <button onClick={() => doSwitch(a.id)} disabled={busy} style={chip()}>
+                            Switch
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: '7px', fontFamily: 'ui-monospace, Menlo, monospace',
+                                    fontSize: '11px', lineHeight: 1.6, color: '#475569', wordBreak: 'break-all',
+                                    userSelect: 'all', WebkitUserSelect: 'all' }}>
+                        {a.address}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '7px', marginTop: '10px' }}>
+                        <button onClick={() => { setTarget(a.id); setErr(''); setPin(''); setSecret(''); setCopied(''); setStep('viewgate'); }}
+                                style={chip()}>
+                          View private key
+                        </button>
+                        <button onClick={() => { setTarget(a.id); setErr(''); setStep('confirm'); }}
+                                style={chip('danger')}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {err && <ErrBox>{err}</ErrBox>}
 

@@ -7,6 +7,7 @@ import {
   importLocalWallet,
   unlockLocalWallet,
   switchAccount as switchLocalAccount,
+  removeAccount as removeLocalAccount,
   restoreLocalWallet,
   destroyLocalWallet,
   exportPrivateKey,
@@ -174,6 +175,26 @@ export function useWallet() {
     setError('');
   }, []);
 
+  /**
+   * 删除单个账户。删掉最后一个等于删掉整个钱包。
+   * 只是删本机的密文，链上资产不受影响 —— 但没保存私钥的人会永久失去这个地址，
+   * 所以 UI 上必须二次确认。
+   */
+  const removeAccount = useCallback((id) => {
+    const r = removeLocalAccount(id);
+    refreshAccounts();
+    if (!r.remaining) {
+      setAccount(null);
+      setHasWallet(false);
+      setLocked(false);
+      setBackedUp(false);
+      setAccounts([]);
+    } else {
+      bindActive();
+    }
+    return r;
+  }, [refreshAccounts, bindActive]);
+
   /** 删除钱包。私钥一旦没保存，这里就是永久丢失，UI 必须二次确认。 */
   const remove = useCallback(() => {
     destroyLocalWallet();
@@ -210,6 +231,7 @@ export function useWallet() {
     unlock,
     lock,
     remove,
+    removeAccount,
     switchTo,
     viewKey,
     confirmBackup,
