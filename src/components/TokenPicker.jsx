@@ -1,33 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { TokenIcon, BnbIcon } from '../icons';
+import { TokenIcon } from '../icons';
 
 // ============================================================================
 // 代币选择弹窗（bottom sheet）
 // ----------------------------------------------------------------------------
-// 形状对齐主流钱包：顶部拖拽条、搜索框、链筛选胶囊、双列表头（代币 / 余额），
+// 形状对齐主流钱包：顶部拖拽条、搜索框、双列表头（代币 / 余额），
 // 每行 = 图标 + 代号 + 认证标 + 全名 + 余额 + 折美元。
 //
 // 两条设计约束：
 //   1. 余额与美元估值必须来自真实读数。读不到就写 "—"，不写 0.00 —— 对一个
 //      钱包来说，"0" 和 "读不到" 是两件事，把后者显示成前者会让人以为币没了。
-//   2. 当前金库只给 USDT / USDC / UFO 报价。其余币种照样列出（持有就能看见、
-//      能转出），但点选做兑换会明确提示不支持的币对，而不是让交易在链上 revert。
+//   2. 这张表只覆盖一条链（BNB Chain），所以不再放链筛选胶囊 —— 一排点不动
+//      的「全部链 / 收藏」只是装饰，占掉首屏最好的一块位置。
 // ============================================================================
 
 const SHEET_MAX = 480;
 
 export default function TokenPicker({
   open, tokens = [], balances = {}, prices = {}, selectedSymbol = '',
-  onSelect, onClose, onBlocked
+  otherSymbol = '', onSelect, onClose
 }) {
   const [q, setQ] = useState('');
-  const [note, setNote] = useState('');
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     setQ('');
-    setNote('');
     const t = setTimeout(() => { try { inputRef.current?.focus(); } catch (e) {} }, 220);
     return () => clearTimeout(t);
   }, [open]);
@@ -51,14 +49,9 @@ export default function TokenPicker({
 
   if (!open) return null;
 
-  const pick = (t) => {
-    if (!t.tradable) {
-      setNote(`${t.symbol} is not priced by the Vault. Swaps settle in USDT, USDC or UFO.`);
-      return;
-    }
-    setNote('');
-    onSelect(t);
-  };
+  // 不再在这里拦「不可兑换」：能不能换由链上有没有流动性决定，
+  // 选完之后报价那一步会说清楚。选到对侧已有的币则对调两侧，由调用方处理。
+  const pick = (t) => onSelect(t);
 
   return (
     <div
@@ -98,7 +91,7 @@ export default function TokenPicker({
         </div>
 
         {/* 搜索 */}
-        <div style={{ padding: '14px 16px 10px' }}>
+        <div style={{ padding: '14px 16px 12px' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '9px',
             background: '#f4f5f7', borderRadius: '14px', padding: '0 12px', height: '44px'
@@ -138,52 +131,6 @@ export default function TokenPicker({
             )}
           </div>
         </div>
-
-        {/* 链筛选：只保留有语义的三颗，不做点不动的装饰 */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '9px', padding: '0 16px 12px',
-          overflowX: 'auto', scrollbarWidth: 'none'
-        }}>
-          <Chip aria-label="Favourites">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#F5B82E" stroke="#F5B82E" strokeWidth="1.6" strokeLinejoin="round">
-              <path d="m12 3.6 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z" />
-            </svg>
-          </Chip>
-          <Chip aria-label="All chains">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.8" strokeLinecap="round">
-              <circle cx="12" cy="12" r="8.6" /><path d="M3.4 12h17.2" />
-              <path d="M12 3.4c2.4 2.4 3.6 5.4 3.6 8.6s-1.2 6.2-3.6 8.6c-2.4-2.4-3.6-5.4-3.6-8.6s1.2-6.2 3.6-8.6z" />
-            </svg>
-          </Chip>
-
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0,
-            height: '36px', padding: '0 14px 0 9px', borderRadius: '18px',
-            background: '#fff', border: '1.5px solid #38BDF8',
-            boxShadow: '0 4px 12px -6px rgba(56,189,248,0.9)'
-          }}>
-            <BnbIcon size={19} />
-            <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>BNB Chain</span>
-          </div>
-
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            height: '36px', minWidth: '36px', padding: '0 10px', borderRadius: '18px',
-            background: '#f4f5f7', color: '#64748b', fontSize: '12.5px', fontWeight: 800
-          }}>
-            {tokens.length}
-          </div>
-        </div>
-
-        {note && (
-          <div style={{
-            margin: '0 16px 10px', padding: '9px 11px', borderRadius: '11px',
-            background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412',
-            fontSize: '11.5px', fontWeight: 600, lineHeight: 1.5
-          }}>
-            {note}
-          </div>
-        )}
 
         {/* 表头 */}
         <div style={{
@@ -236,6 +183,14 @@ export default function TokenPicker({
                         <path d="m8.4 12.2 2.4 2.4 4.8-4.9" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     )}
+                    {/* 另一侧正在用的币：点它会直接把两侧对调，这里先给个暗示 */}
+                    {t.symbol === otherSymbol && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c0c8d2"
+                           strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M7 4v13" /><path d="M4 14l3 3 3-3" />
+                        <path d="M17 20V7" /><path d="M14 10l3-3 3 3" />
+                      </svg>
+                    )}
                   </div>
                   <div style={{
                     fontSize: '11.5px', color: '#94a3b8', marginTop: '2px', fontWeight: 500,
@@ -277,20 +232,6 @@ export default function TokenPicker({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Chip({ children, ...rest }) {
-  return (
-    <div
-      {...rest}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        width: '36px', height: '36px', borderRadius: '18px', background: '#f4f5f7'
-      }}
-    >
-      {children}
     </div>
   );
 }

@@ -161,16 +161,87 @@ export async function readVaultBalances() {
 // 超了整批返回错误，一个余额都读不到。
 // ============================================================================
 
-const SEL_DECIMALS = '0x313ce567';       // decimals()
-const SEL_GET_RESERVES = '0x0902f1ac';   // getReserves()
-const SEL_GET_PAIR = '0xe6a43905';       // getPair(address,address)
+const SEL_DECIMALS = '0x313ce567';        // decimals()
+const SEL_GET_AMOUNTS_OUT = '0xd06ca61f'; // getAmountsOut(uint256,address[])
 
-// PancakeSwap V2。选它做报价源不是为了交易，而是因为它有 BSC 上最全的
-// 代币/稳定币交易对：一个只读的、无需许可的价格来源，不依赖任何 API key。
-const PANCAKE_FACTORY = '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73';
-const WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+// PancakeSwap V2 Router02 与 WBNB。不涉及 UFO 的币对从这里直接成交，
+// 报价也从同一个合约读 —— 报价和成交用同一个来源，界面上显示的数才不会
+// 和用户实际拿到的数差一个池子。
+export const PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+export const WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
 
 const padWord = (n) => BigInt(n).toString(16).padStart(64, '0');
+
+/** 原生 BNB 在 AMM 里是 WBNB；其余代币就是自己的合约地址 */
+export const routeAddress = (t) => {
+  if (!t) return null;
+  if (t.symbol === 'BNB' || t.native) return WBNB_ADDRESS;
+  return t.address || null;
+};
+
+/**
+ * 候选路径。先试直接交易对，再试经 WBNB / USDT 中转。
+ * 没有工厂合约的 getPair 预检：getAmountsOut 在不存在的池子上会直接 revert，
+ * 批量里表现为该项返回 null，代价相同但少一轮往返。
+ */
+export function candidatePaths(from, to) {
+  const a = routeAddress(from);
+  const b = routeAddress(to);
+  if (!a || !b || a.toLowerCase() === b.toLowerCase()) return [];
+  const paths = [[a, b]];
+  for (const mid of [WBNB_ADDRESS, CONFIG.USDT_ADDRESS]) {
+    if (mid.toLowerCase() !== a.toLowerCase() && mid.toLowerCase() !== b.toLowerCase()) {
+      paths.push([a, mid, b]);
+    }
+  }
+  return paths;
+}
+
+/** getAmountsOut(uint256,address[]) 的 calldata（动态数组，两段偏移） */
+export function encodeGetAmountsOut(amountIn, path) {
+  let data = SEL_GET_AMOUNTS_OUT + padWord(amountIn) + padWord(64) + padWord(path.length);
+  for (const addr of path) data += padAddress(addr);
+  return data;
+}
+
+/** 解析 uint256[]：offset + length + 逐项 */
+function decodeAmounts(hex) {
+  if (!hex || hex === '0x') return null;
+  const body = hex.slice(2);
+  if (body.length < 128) return null;
+  const len = Number(BigInt('0x' + body.slice(64, 128)));
+  if (!len || len > 8) return null;
+  const out = [];
+  for (let i = 0; i < len; i++) {
+    const word = body.slice(128 + i * 64, 192 + i * 64);
+    if (word.length < 64) return null;
+    out.push(BigInt('0x' + word));
+  }
+  return out;
+}
+
+/**
+ * 一笔 PancakeSwap 报价：候选路径一次批量问完，取第一条有结果的。
+ * @returns {Promise<null|{path:string[], amounts:bigint[], amountOutWei:bigint}>}
+ */
+export async function quotePancake(from, to, amountInWei, timeoutMs = 12000) {
+  const paths = candidatePaths(from, to);
+  if (!paths.length || BigInt(amountInWei) <= 0n) return null;
+
+  const res = await ethBatch(
+    paths.map((p) => ({ to: PANCAKE_ROUTER, data: encodeGetAmountsOut(amountInWei, p) })),
+    timeoutMs
+  );
+
+  for (let i = 0; i < paths.length; i++) {
+    const amounts = decodeAmounts(res[i]);
+    if (!amounts || amounts.length !== paths[i].length) continue;
+    const out = amounts[amounts.length - 1];
+    if (out <= 0n) continue;
+    return { path: paths[i], amounts, amountOutWei: out };
+  }
+  return null;
+}
 
 async function inChunks(calls, size = 12) {
   const out = [];
@@ -246,74 +317,79 @@ export async function readTokenBalances(owner, tokens) {
   return out;
 }
 
-// ---- 价格：PancakeSwap V2 的 USDT 交易对储备 ----
+// ---- 价格：链上单价，统一用 PancakeSwap 的 USDT 报价 ----
 // 只给「真的持有」的代币取价。余额为 0 的币估值必然是 0，没必要问链。
+//
+// 为什么要走 Router 的 getAmountsOut 而不是自己算储备：钱包页显示的是
+// 「1 个币值多少美元」，用户拿这个数去决定卖不卖；而成交也在同一个 Router
+// 上。两边用同一个来源，显示的价格才不会和实际成交价差一截。直接对 <币/ USDT>
+// 取价，没有直接交易对就走 WBNB 中转（BSC 上几乎所有币都有 WBNB 池）。
 let priceMemo = { at: 0, key: '', map: {} };
+
+const PRICE_TTL_MS = 60000;
+const USDT_ADDRESS = CONFIG.USDT_ADDRESS.toLowerCase();
 
 /**
  * @returns {Promise<Object>} { SYMBOL: usdPrice }，取不到的币不会出现在结果里
  */
-export async function readTokenPrices(tokens, ttlMs = 60000) {
-  const key = tokens.map((t) => t.symbol).join(',');
+export async function readTokenPrices(tokens, ttlMs = PRICE_TTL_MS) {
+  // UFO 用金库净值（getExchangeRate），不在这里询价：链上没有它的池子，
+  // 硬询只会拿到 null，然后钱包页把它显示成「—」。
+  const targets = tokens.filter((t) => {
+    if (t.symbol === 'UFO' || t.symbol === 'USDT') return false;
+    const addr = routeAddress(t);
+    return addr && addr.toLowerCase() !== USDT_ADDRESS;
+  });
+
+  const key = targets.map((t) => t.symbol).join(',');
   if (priceMemo.key === key && Date.now() - priceMemo.at < ttlMs) return priceMemo.map;
+  if (!targets.length) {
+    priceMemo = { at: Date.now(), key, map: {} };
+    return {};
+  }
 
   const decOf = await readDecimals(tokens);
-  const usdt = tokens.find((t) => t.symbol === 'USDT');
-  if (!usdt) return {};
-
-  // 统一把 BNB 折成 WBNB 一起询价（原生币没有自己的交易对）
-  const quoted = tokens
-    .filter((t) => t.symbol !== 'USDT' && t.symbol !== 'UFO')
-    .map((t) => ({ ...t, pairToken: t.symbol === 'BNB' ? { ...t, address: WBNB_ADDRESS, native: false, decimals: 18, symbol: 'WBNB' } : t }));
-
-  if (!quoted.length) return {};
-
-  const pairCalls = quoted.map((t) => ({
-    to: PANCAKE_FACTORY,
-    data: SEL_GET_PAIR + padAddress(t.pairToken.address) + padAddress(usdt.address)
-  }));
-
-  let pairs;
-  try {
-    pairs = await inChunks(pairCalls);
-  } catch (e) {
-    return priceMemo.map;
-  }
-
-  const live = quoted
-    .map((t, i) => ({ t, pair: pairs[i] && pairs[i] !== '0x' ? '0x' + pairs[i].slice(-40) : null }))
-    .filter((x) => x.pair && x.pair !== '0x0000000000000000000000000000000000000000');
-
-  if (!live.length) return {};
-
-  let reserves;
-  try {
-    reserves = await inChunks(live.map((x) => ({ to: x.pair, data: SEL_GET_RESERVES })));
-  } catch (e) {
-    return priceMemo.map;
-  }
+  const oneUnit = (t) => 10n ** BigInt(decOf(t));
 
   const map = {};
-  live.forEach((x, i) => {
-    const hex = reserves[i];
-    if (!hex || hex.length < 2 + 192) return;
-    const r0 = BigInt('0x' + hex.slice(2, 66));
-    const r1 = BigInt('0x' + hex.slice(66, 130));
-    if (r0 === 0n || r1 === 0n) return;
+  const readOut = (t, hex) => {
+    const amounts = decodeAmounts(hex);
+    if (!amounts || amounts.length < 2) return;
+    // USDT 是 18 位，amounts 的最后一项就是美元数 × 1e18
+    const price = Number(amounts[amounts.length - 1]) / 1e18;
+    if (!isFinite(price) || price <= 0 || price > 1e9) return;
+    map[t.symbol] = price;
+  };
 
-    // token0 是地址较小的那个，和传参顺序无关
-    const tokenIsToken0 = x.t.pairToken.address.toLowerCase() < usdt.address.toLowerCase();
-    const tokenReserve = tokenIsToken0 ? r0 : r1;
-    const usdtReserve = tokenIsToken0 ? r1 : r0;
+  // 第一轮：直接与 USDT 组成交易对
+  let direct = [];
+  try {
+    direct = await inChunks(targets.map((t) => ({
+      to: PANCAKE_ROUTER,
+      data: encodeGetAmountsOut(oneUnit(t), [routeAddress(t), CONFIG.USDT_ADDRESS])
+    })));
+  } catch (e) {
+    return priceMemo.map;
+  }
 
-    const tokenAmount = Number(tokenReserve) / 10 ** decOf(x.t.pairToken);
-    const usdtAmount = Number(usdtReserve) / 1e18;
-    if (!(tokenAmount > 0) || !(usdtAmount > 0)) return;
-
-    const price = usdtAmount / tokenAmount;
-    if (!isFinite(price) || price <= 0) return;
-    map[x.t.symbol] = price;
+  const missed = [];
+  targets.forEach((t, i) => {
+    if (!direct[i] || direct[i] === '0x') { missed.push(t); return; }
+    const before = map[t.symbol];
+    readOut(t, direct[i]);
+    if (map[t.symbol] === before) missed.push(t);
   });
+
+  // 第二轮：经 WBNB 中转（原生 BNB 也在这里取价）
+  if (missed.length) {
+    try {
+      const hop = await inChunks(missed.map((t) => ({
+        to: PANCAKE_ROUTER,
+        data: encodeGetAmountsOut(oneUnit(t), [routeAddress(t), WBNB_ADDRESS, CONFIG.USDT_ADDRESS])
+      })));
+      missed.forEach((t, i) => readOut(t, hop[i]));
+    } catch (e) { /* 保留第一轮的结果 */ }
+  }
 
   priceMemo = { at: Date.now(), key, map };
   return map;

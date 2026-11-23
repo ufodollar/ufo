@@ -13,8 +13,9 @@ import { CONFIG } from './config';
 // decimals 只作为读到链上 decimals() 之前的占位；真实精度在运行时读合约，
 // 因为同一个代币在不同链上精度可能不同，写死会差 10^12 倍。
 //
-// tradable = 金库合约能为它报价，也就是能真正走闪兑。其余币种只用于展示与
-// 转账 —— 选它做兑换会让交易在链上 revert，那比直接说清楚更糟。
+// 路由：USDT/UFO、USDC/UFO 走金库（按 NAV 结算），其余任意币对走 BNB Chain
+// 上的 PancakeSwap V2。因此「能不能兑换」不再由这张表决定，而是由链上有没有
+// 流动性决定 —— 没有路由时弹窗照常可选，报错发生在报价那一步，说清楚是哪一对。
 // ============================================================================
 
 export const CHAIN_NAME = 'BNB Chain';
@@ -22,19 +23,19 @@ export const CHAIN_NAME = 'BNB Chain';
 export const TOKENS = [
   {
     symbol: 'BNB', name: 'BNB Chain', native: true, decimals: 18,
-    verified: true, tradable: false, color: '#F0B90B'
+    verified: true, color: '#F0B90B'
   },
   {
     symbol: 'USDT', name: 'Tether', address: CONFIG.USDT_ADDRESS, decimals: 18,
-    verified: true, tradable: true, color: '#26A69A'
+    verified: true, color: '#26A69A'
   },
   {
     symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, decimals: 18,
-    verified: true, tradable: true, color: '#2775CA'
+    verified: true, color: '#2775CA'
   },
   {
     symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, decimals: 18,
-    verified: true, tradable: true, color: '#3B82F6'
+    verified: true, color: '#3B82F6'
   },
   {
     symbol: 'BTCB', name: 'Binance Bitcoin', address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', decimals: 18,
@@ -84,12 +85,19 @@ export const TOKENS = [
 
 export const TOKEN_BY_SYMBOL = TOKENS.reduce((m, t) => { m[t.symbol] = t; return m; }, {});
 
-/** 金库能为这些币报价，因而是真正可兑换的 */
-export const SWAP_TOKENS = TOKENS.filter((t) => t.tradable);
-
 export const UFO_TOKEN = TOKEN_BY_SYMBOL.UFO;
 export const BNB_TOKEN = TOKEN_BY_SYMBOL.BNB;
 export const STABLECOINS = [TOKEN_BY_SYMBOL.USDT, TOKEN_BY_SYMBOL.USDC];
+
+/** 金库只为这两种币对报价，其余币对一律走 BNB Chain 上的 AMM */
+export const isVaultPair = (a, b) => {
+  if (!a || !b) return false;
+  const s1 = a.symbol, s2 = b.symbol;
+  if (s1 === s2) return false;
+  if (s1 !== 'UFO' && s2 !== 'UFO') return false;
+  const other = s1 === 'UFO' ? s2 : s1;
+  return other === 'USDT' || other === 'USDC';
+};
 
 /** 稳定币在无行情时按 1 美元显示 —— 这是唯一允许的「假定价格」 */
 export const isStable = (symbol) => symbol === 'USDT' || symbol === 'USDC' || symbol === 'BUSD' ||

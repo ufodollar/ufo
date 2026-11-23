@@ -71,8 +71,18 @@
 <p><b>发送</b>支持 BNB（原生币，走 <code>value</code> 转账）与 USDT / USDC / UFO（BEP-20，走 <code>transfer</code>）。收款地址先做 EIP-55 校验和检查——形如 40 位十六进制但大小写 checksum 不对的地址会被拦下，因为那通常意味着抄错了字符，而这样的地址能把钱打进一个谁都没有私钥的位置。余额在签名前先查（BNB 还要留 gas），gas 由公共 RPC 估好，钱包只签名，成功后立刻重读余额并写一条 <code>Sent</code> 本地流水。</p>
 <p><b>接收</b>展示当前账户地址与二维码。二维码用 <code>qrcode-generator</code> 在<b>本地</b>生成（打开时才按需下载约 21 KB），不请求任何外部图床——地址是敏感信息，不该出现在第三方日志里。二维码内容是裸地址，主流钱包扫码即可识别。</p>
 
+<h3>兑换怎么走</h3>
+<p>闪兑有两条路，按币对自动选，界面上写清楚走的是哪条：</p>
+<table>
+  <tr><th>币对</th><th>通道</th><th>价格来源</th><th>费用</th></tr>
+  <tr><td>USDT / UFO、USDC / UFO</td><td>金库合约 <code>deposit</code> / <code>withdraw</code></td><td>金库 <code>getExchangeRate</code>（NAV）</td><td>0.5% 结算费</td></tr>
+  <tr><td>其余任意币对</td><td>PancakeSwap V2 Router</td><td><code>getAmountsOut</code> 实时报价</td><td>0.25% 池费 × 跳数</td></tr>
+</table>
+<p>路由判断只有一处实现（<code>tokens.isVaultPair</code>），界面文案、报价和真正提交的合约都读它，不会出现「写着金库、实际走 AMM」。没有流动性的币对（例如任何非稳定币 → UFO）不会在选币时被拦下，而是在报价那一步直接说「No swap route」——链上有没有池子是链说了算，前端不该假装知道。</p>
+<p>报价带滑点保护：一端是稳定币或 BNB 时最小到账按 0.5% 下浮，两个波动币之间按 1%。成交用 <code>*SupportingFeeOnTransferTokens</code> 系列函数，收转账税的代币不会因为「实际到账略少于报价」整笔 revert。到账数量按回执里的 <code>Transfer</code> 日志求和，历史记录写真实值，不写报价。</p>
+
 <h3>页面结构</h3>
-<p>底部五个入口：<b>Issuance</b>（发行 / 销毁）、<b>Wallet</b>（余额 + 发送 / 接收）、<b>Readme</b>、<b>History</b>、<b>Contact</b>。</p>
+<p>底部五个入口：<b>Wallet</b>（余额 + 发送 / 接收）、<b>Readme</b>、<b>Trade</b>（闪兑）、<b>History</b>、<b>Contact</b>。</p>
 <p><b>Readme</b> 是 Guide 与 Rules 的合并页：顶部一个 segmented 切换，两块内容各自保留原来的条款编号（引用时仍然说「Guide §2.1」），只是翻页成本从一个底部 tab 变成一个点击。合并的原因是底部六个入口在 412px 上每个只剩 68px，标签已经挤到不好点。</p>
 
 <h3>签名怎么发生</h3>

@@ -45,6 +45,16 @@ const CHAIN_ID_HEX = '0x38';
 const CONFIRM_TIMEOUT_MS = 180000;
 const POLL_INTERVAL_MS = 2000;
 
+// PancakeSwap V2 Router02。不涉及 UFO 的币对直接在这里成交。
+const ROUTER_ADDRESS = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+
+const ROUTER_ABI = [
+  'function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[])',
+  'function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)',
+  'function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline)',
+  'function swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)'
+];
+
 let libPromise = null;
 
 function loadLibs() {
@@ -60,9 +70,9 @@ function loadLibs() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 输入框里的金额 → 最小单位。末尾小数点会让解析失败，先清掉。 */
-export function toWei(input) {
+export function toWei(input, decimals = 18) {
   const clean = String(input == null ? '' : input).replace(/\.$/, '');
-  return parseUnits(clean || '0', 18);
+  return parseUnits(clean || '0', decimals);
 }
 
 /** 读一个 view 函数，返回解码后的第一个值 */
@@ -242,6 +252,107 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
   }
 
   return { hash, paid, received };
+}
+
+/**
+ * 走 PancakeSwap 的兑换：不涉及 UFO 的币对都从这里成交。
+ *
+ * 与金库那条路的区别：
+ *   · 价格由 Router 的储备决定，不是 NAV；
+ *   · BNB 是原生币，进出都要分别用 swapExactETHForTokens / swapExactTokensForETH，
+ *     路径里写的是 WBNB，value 才是真的 BNB；
+ *   · 用 *SupportingFeeOnTransferTokens 系列：收转账税的代币不会因为
+ *     「实际到账少于报价」而整笔 revert，用户至少能换出来，只是数量少一点。
+ *
+ * 参数全部预先算好（路径、最小到账、deadline），钱包只签一次名。
+ */
+export async function submitPancakeSwap({
+  walletProvider, owner, payToken, receiveToken,
+  amountWei, path, minOutWei, inDecimals = 18, outDecimals = 18, onStage
+}) {
+  if (!path || path.length < 2) throw new Error('No swap route for this pair.');
+
+  const { Interface } = await loadLibs();
+  const erc20 = new Interface(ERC20_ABI);
+  const router = new Interface(ROUTER_ABI);
+
+  const nativeIn = payToken.symbol === 'BNB' || payToken.native === true;
+  const nativeOut = receiveToken.symbol === 'BNB' || receiveToken.native === true;
+  const amount = BigInt(amountWei);
+  if (amount <= 0n) throw new Error('Enter an amount greater than zero.');
+
+  // gas 预检与网络检查：与金库那条路同样的两道闸，理由见 submitSwap
+  const [bnbHex, allowance, walletChain] = await Promise.all([
+    rpcCall('eth_getBalance', [owner, 'latest']),
+    nativeIn
+      ? Promise.resolve(null)
+      : readView(erc20, payToken.address, 'allowance', [owner, ROUTER_ADDRESS]),
+    walletProvider.request({ method: 'eth_chainId' }).catch(() => null)
+  ]);
+
+  if (walletChain && String(walletChain).toLowerCase() !== CHAIN_ID_HEX) {
+    throw new Error('Your wallet is on a different network. Switch to BNB Smart Chain and try again.');
+  }
+  if (Number(BigInt(bnbHex)) / 1e18 < 0.0005) {
+    throw new Error('Insufficient BNB for gas.');
+  }
+
+  let nonceFloor = 0;
+  if (!nativeIn && allowance < amount) {
+    onStage('Approving…');
+    const approved = await sendTx(walletProvider, {
+      from: owner,
+      to: payToken.address,
+      data: erc20.encodeFunctionData('approve', [ROUTER_ADDRESS, amount])
+    });
+    nonceFloor = approved.nonce + 1;
+  }
+
+  const deadline = Math.floor(Date.now() / 1000) + 1200;
+  const minOut = BigInt(minOutWei);
+
+  let data;
+  if (nativeIn) {
+    data = router.encodeFunctionData('swapExactETHForTokensSupportingFeeOnTransferTokens', [
+      minOut, path, owner, deadline
+    ]);
+  } else if (nativeOut) {
+    data = router.encodeFunctionData('swapExactTokensForETHSupportingFeeOnTransferTokens', [
+      amount, minOut, path, owner, deadline
+    ]);
+  } else {
+    data = router.encodeFunctionData('swapExactTokensForTokensSupportingFeeOnTransferTokens', [
+      amount, minOut, path, owner, deadline
+    ]);
+  }
+
+  onStage('Swapping…');
+  const { hash, receipt } = await sendTx(walletProvider, {
+    from: owner,
+    to: ROUTER_ADDRESS,
+    data,
+    value: nativeIn ? amount : 0n,
+    nonceFloor
+  });
+
+  // 到账数量按日志里转给本人的 Transfer 求和。报价与实际成交之间可能因为
+  // 池子变动或转账税有差额，历史记录里应该写真实到账，不是报价。
+  let received = null;
+  if (!nativeOut && receiveToken.address) {
+    let sum = 0n;
+    for (const log of receipt.logs || []) {
+      if (String(log.address || '').toLowerCase() !== receiveToken.address.toLowerCase()) continue;
+      try {
+        const parsed = erc20.parseLog({ topics: log.topics, data: log.data });
+        if (parsed && parsed.name === 'Transfer' && String(parsed.args[1]).toLowerCase() === owner.toLowerCase()) {
+          sum += parsed.args[2];
+        }
+      } catch (e) { /* 不是 Transfer，跳过 */ }
+    }
+    if (sum > 0n) received = parseFloat(formatUnits(sum, outDecimals)).toFixed(6);
+  }
+
+  return { hash, paid: parseFloat(formatUnits(amount, inDecimals)).toFixed(6), received };
 }
 
 /** 用户开始输金额就把 ABI 模块拉下来，点按钮时不用等下载 */

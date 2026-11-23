@@ -5,16 +5,16 @@ import { CONFIG } from './config';
 import { formatUnits, parseUnits } from './units';
 import {
   readNav, readPrice, readBnbPrice, readVaultBalances,
-  readTokenBalances, readTokenPrices
+  readTokenBalances, readTokenPrices, readDecimals, quotePancake, PANCAKE_ROUTER
 } from './chain';
-import { submitSwap, toWei, prefetchTxLibs } from './tx';
+import { submitSwap, submitPancakeSwap, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
 import WalletSetup from './components/WalletSetup';
 import TokenPicker from './components/TokenPicker';
 import TransferSheet from './components/TransferSheet';
 import ReadmeTab from './components/ReadmeTab';
 import { TokenIcon, UfoIcon } from './icons';
-import { TOKENS, STABLECOINS, UFO_TOKEN, isStable, formatAmount } from './tokens';
+import { TOKENS, TOKEN_BY_SYMBOL, UFO_TOKEN, isStable, isVaultPair, formatAmount } from './tokens';
 import { skyBtn, skyLink } from './ui';
 
 // Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
@@ -84,6 +84,14 @@ const SUB_CARD = {
   padding: '20px',
   boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)',
   border: '1px solid #f1f5f9'
+};
+
+// 空报价。这是只读常量：每次更新都必须新建对象，别就地改字段 ——
+// 就地改不会触发重渲染，界面会停在上一笔的数字上。
+const EMPTY_QUOTE = {
+  out: '0.000000', fee: '0.000000',
+  amountInWei: 0n, minOutWei: 0n,
+  path: null, kind: 'vault', hops: 1, loading: false
 };
 
 // ================= 3. 读链逻辑 =================
@@ -157,7 +165,10 @@ function App() {
   const [transferMode, setTransferMode] = useState('');
 
   const [activeTab, setActiveTab] = useState('assets');
-  const [isBuyingUFO, setIsBuyingUFO] = useState(true);
+  // 闪兑两侧的代币，用 symbol 存。存对象会在每次读余额后被替换成新引用，
+  // 「显示的币」和「提交的币」就有机会不是同一个 —— 那是最难查的一类 bug。
+  const [paySym, setPaySym] = useState('USDT');
+  const [recvSym, setRecvSym] = useState('UFO');
   // 顶部只显示账户编号，地址不在页面上出现（只在账户管理弹窗里）。
   // 编号取记录里的 a.no，永远不用数组下标：删掉账户 1 之后账户 2 仍叫账户 2。
   const addrKey = (address || '').toLowerCase();
@@ -167,15 +178,16 @@ function App() {
     null;
   const accountNo = activeAcct ? activeAcct.no : null;
 
-  const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   // '' | 'pay' | 'receive' —— 点哪一侧的胶囊，弹窗就替哪一侧选币
   const [pickerSide, setPickerSide] = useState('');
 
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
   const [inputAmount, setInputAmount] = useState('');
-  const [outputAmount, setOutputAmount] = useState('0.000000');
-  const [feeAmount, setFeeAmount] = useState('0.000000');
+  // 报价是一次异步结果（Pancake 那条路要问链），所以整包存在一个对象里：
+  // 输出数量、手续费、路径、最小到账、成交额。拆成五个 state 会出现
+  // 「输出已经更新、路径还是上一对币」这种半新半旧的画面。
+  const [quote, setQuote] = useState(EMPTY_QUOTE);
 
   const [currentNav, setCurrentNav] = useState(1);
   const [navStatus, setNavStatus] = useState('loading'); 
@@ -207,6 +219,9 @@ function App() {
 
   // 全部代币的余额（含 BNB），键是 symbol
   const [tokenBalances, setTokenBalances] = useState({});
+  // 链上真实精度。代币表里的 decimals 只是占位，DOGE 这类 8 位的币
+  // 按 18 位换算会差 10^10 倍 —— 报价和成交都必须用这里读回来的值。
+  const [tokenDecimals, setTokenDecimals] = useState({});
   // 链上询价结果（symbol → USD）。没询到的币不写默认值，
   // 界面上显示 "—" 而不是把它当成 0 美元。
   const [prices, setPrices] = useState({});
@@ -225,6 +240,23 @@ function App() {
   // 旧代码用 `|| errorMsg` 一刀切，导致被拒一次之后再点毫无反应 —— 这个
   // 现象很难归因，用户只会说「按钮坏了」。
   const txErrorRef = useRef(false);
+
+  // ---- 闪兑的两枚代币与路由 ----
+  // 路由规则只有一条：一端是 UFO、另一端是 USDT/USDC 时走金库（按 NAV 结算），
+  // 其余任意币对走 PancakeSwap。isVaultPair 就是这条规则的唯一实现，
+  // 界面上的路径文案和真正提交的合约都读它，不可能各说各话。
+  const payToken = TOKEN_BY_SYMBOL[paySym] || TOKEN_BY_SYMBOL.USDT;
+  const receiveToken = TOKEN_BY_SYMBOL[recvSym] || UFO_TOKEN;
+  const vaultRoute = isVaultPair(payToken, receiveToken);
+  // 金库那一侧一定是稳定币（isVaultPair 已保证），它的报价与偏差检查都来自金库
+  const vaultStable = vaultRoute ? (paySym === 'UFO' ? receiveToken : payToken) : null;
+  const stablePriceData = vaultStable ? stablecoinPrices[vaultStable.symbol] : null;
+  const stablePriceError = vaultStable
+    ? stablecoinPrices.errors.find((e) => e.token === vaultStable.symbol)
+    : null;
+  const globalPriceError = stablecoinPrices.errors.find((e) => e.token === 'GLOBAL');
+  const decIn = tokenDecimals[paySym] || payToken.decimals || 18;
+  const decOut = tokenDecimals[recvSym] || receiveToken.decimals || 18;
 
   useEffect(() => {
     const saved = localStorage.getItem('ufo_tx_history');
@@ -327,6 +359,14 @@ function App() {
       const bal = await readTokenBalances(address, TOKENS);
       setTokenBalances(bal);
 
+      // 精度和余额同源：readDecimals 有 localStorage 记忆，第二次以后不再发请求
+      try {
+        const decOf = await readDecimals(TOKENS);
+        const decs = {};
+        TOKENS.forEach((t) => { decs[t.symbol] = decOf(t); });
+        setTokenDecimals(decs);
+      } catch (e) { /* 用代币表的声明值兜底 */ }
+
       // 只给「真的持有」的币询价。余额为 0 的币估值必然是 0，
       // 为它们各发一次 getPair + getReserves 是纯粹的浪费。
       const held = TOKENS.filter((t) => Number(bal[t.symbol] || 0) > 0);
@@ -377,6 +417,24 @@ function App() {
     txErrorRef.current = false;
   }, [isConnected]);
 
+  // 闪兑页的两个币也要有美元价。用户不一定持有它们（比如拿 BNB 换 USDT），
+  // 而钱包页那套询价只覆盖「真的持有」的币 —— 不补这一层，面板上的
+  // 「≈ $」就会空着，或者退回去用预言机价、和上面的汇率对不上。
+  useEffect(() => {
+    if (activeTab !== 'trade') return undefined;
+    const need = [payToken, receiveToken].filter((t) =>
+      t && t.symbol !== 'UFO' && !isStable(t.symbol) && prices[t.symbol] == null
+    );
+    if (!need.length) return undefined;
+    let alive = true;
+    readTokenPrices(need)
+      .then((m) => {
+        if (alive && m && Object.keys(m).length) setPrices((prev) => ({ ...prev, ...m }));
+      })
+      .catch(() => { /* 拿不到就显示 "—" */ });
+    return () => { alive = false; };
+  }, [activeTab, paySym, recvSym, prices]);
+
   // 回到前台补一次：后台期间三个轮询都停着，切回来不能还显示十分钟前的余额。
   useEffect(() => {
     const onVisible = () => {
@@ -389,106 +447,148 @@ function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refreshPrices, fetchVaultBalances, fetchUserBalances]);
 
-  const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
-  const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
-  const globalPriceError = stablecoinPrices.errors.find(e => e.token === 'GLOBAL');
-  const priceReady = !!currentPriceData && !globalPriceError;
+  // ============ 报价 ============
+  // 两条路合并成同一个出口（quote），界面不需要知道钱从哪个合约走：
+  //   vault  ：按金库 NAV 同步算，输入即出结果，费率 0.5%；
+  //   pancake：要问链，350ms 防抖，并丢弃过期结果 —— 用户完全可能在
+  //            报价回来之前就换成另一对币，那笔迟到的结果不能盖在新界面上。
+  const priceReady = !globalPriceError && (!vaultRoute || !!stablePriceData);
 
   useEffect(() => {
-    const input = parseFloat(inputAmount);
-    // 每次重新计算都把「上一次交易失败」的标记清掉：只要输入或价格变了，
-    // 旧的失败结论就不再适用，不该继续影响按钮。
+    let dead = false;
+    // 输入或币对一变，上一次「交易失败」的结论就失效了，不该继续把按钮锁住
     txErrorRef.current = false;
-    // 已经开始输金额，就说明下一秒可能要签交易了 —— 此刻把 ethers 拉下来，
-    // 等真正点按钮时不必再等 100KB 的下载
-    if (isConnected && input > 0) prefetchTxLibs();
-    if (isNaN(input) || input <= 0 || !isFinite(input)) {
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
+
+    const amt = parseFloat(inputAmount);
+    if (!inputAmount || isNaN(amt) || amt <= 0 || !isFinite(amt)) {
+      setQuote(EMPTY_QUOTE);
       setErrorMsg('');
-      return;
+      return undefined;
+    }
+    if (isConnected) prefetchTxLibs();
+
+    if (paySym === recvSym) {
+      setQuote(EMPTY_QUOTE);
+      setErrorMsg('Pick two different tokens.');
+      return undefined;
     }
 
-    if (globalPriceError) {
-      setErrorMsg('Network error. Please retry.');
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
-    }
-
-    // 价格数据没到手时不要往下算：currentPriceData 可能是 null（比如
-    // 两个稳定币的报价都没读回来），旧代码在这里直接取 price18 会抛，
-    // 抛在 effect 里就会把整棵 React 树卸载 —— 表现和「页面崩溃」一样。
-    const price18 = currentPriceData && currentPriceData.price18;
-    if (!price18) {
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
-    }
-    const deviation = price18 > 10n ** 18n ? price18 - 10n ** 18n : 10n ** 18n - price18;
-    if (Number(deviation * 10000n / 10n ** 18n) > CONFIG.MAX_PRICE_DEVIATION * 10000) {
-      setErrorMsg(`${selectedStablecoin.symbol} price deviation exceeds 2%. Trading paused.`);
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
-    }
-
-    // 输入金额清洗：末尾小数点（"1."）会让 parseUnits 报错；
-    // 科学计数法（"1e5"，number 输入框允许）同样会抛异常 —— 一旦在 effect 里抛出，
-    // 整棵 React 树会被卸载，页面直接变成不可交互的白屏。这里兜住并提示。
-    const cleanInput = inputAmount.toString().replace(/\.$/, '');
-    let inputWei;
+    // 末尾小数点（"1."）会让解析失败；科学计数法（"1e5"）同理。
+    // 抛出发生在 effect 里会把整棵 React 树卸载，这里必须兜住。
+    let amountInWei;
     try {
-      inputWei = parseUnits(cleanInput || '0', 18);
-    } catch (err) {
-      setErrorMsg('Invalid amount');
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
-      return;
+      amountInWei = parseUnits(String(inputAmount).replace(/\.$/, ''), decIn);
+    } catch (e) {
+      setQuote(EMPTY_QUOTE);
+      setErrorMsg('Invalid amount.');
+      return undefined;
+    }
+    if (amountInWei <= 0n) {
+      setQuote(EMPTY_QUOTE);
+      setErrorMsg('');
+      return undefined;
     }
 
-    if (isBuyingUFO) {
-      const usdValue = (inputWei * price18) / 10n ** 18n;
-      const feeUsd = (usdValue * 50n) / 10000n;
-      const feeTokens = feeUsd === 0n ? 0n : (feeUsd * 10n ** 18n) / price18;
-      const ufoAmount = usdValue - feeUsd;
+    const balanceMsg = isConnected && amt > Number(tokenBalances[paySym] || 0)
+      ? `Insufficient ${paySym} balance`
+      : '';
 
-      const currentBal = parseFloat(tokenBalances[selectedStablecoin.symbol] || '0');
-      if (isConnected && input > currentBal) {
-        setErrorMsg(`Insufficient ${selectedStablecoin.symbol} balance`);
-      } else {
+    if (vaultRoute) {
+      const price18 = stablePriceData && stablePriceData.price18;
+      if (globalPriceError) {
+        setQuote(EMPTY_QUOTE);
+        setErrorMsg('Network error. Please retry.');
+        return undefined;
+      }
+      // 报价没到手时不要硬算：price18 为 null 时直接取会把 effect 抛穿
+      if (!price18) {
+        setQuote({ ...EMPTY_QUOTE, loading: true });
         setErrorMsg('');
+        return undefined;
+      }
+      const deviation = price18 > 10n ** 18n ? price18 - 10n ** 18n : 10n ** 18n - price18;
+      if (Number(deviation * 10000n / 10n ** 18n) > CONFIG.MAX_PRICE_DEVIATION * 10000) {
+        setQuote(EMPTY_QUOTE);
+        setErrorMsg(`${vaultStable.symbol} price deviation exceeds 2%. Trading paused.`);
+        return undefined;
       }
 
-      setFeeAmount(parseFloat(formatUnits(feeUsd, 18)).toFixed(6));
-      setOutputAmount(parseFloat(formatUnits(ufoAmount, 18)).toFixed(6));
-    } else {
-      const feeUfo = (inputWei * 50n) / 10000n;
-      // 1 UFO = 1 USD 面值，因此 UFO 计价的费用数值上等于 USD 金额
-      const feeUsd = feeUfo;
-      const netUfo = inputWei - feeUfo;
-      const tokenOut = (netUfo * 10n ** 18n) / price18;
-      // 合约实际转出 = 净额 + 以稳定币扣除的手续费（与 withdraw() 的 totalOut 对齐）
-      const feeTokens = (feeUfo * 10n ** 18n) / price18;
-      const totalOut = tokenOut + feeTokens;
-
-      const currentVaultBal = vaultBalances[selectedStablecoin.symbol] || 0;
-      const tokenOutFloat = parseFloat(formatUnits(totalOut, 18));
-      if (tokenOutFloat > currentVaultBal) {
-        setErrorMsg(`Insufficient ${selectedStablecoin.symbol} in Vault. Available: ${currentVaultBal.toFixed(2)}`);
+      if (paySym !== 'UFO') {
+        // 稳定币 → UFO：美元金额扣 0.5% 后按 1:1 铸造
+        const usdValue = (amountInWei * price18) / 10n ** 18n;
+        const feeUsd = (usdValue * 50n) / 10000n;
+        const ufoOut = usdValue - feeUsd;
+        setQuote({
+          out: parseFloat(formatUnits(ufoOut, 18)).toFixed(6),
+          fee: parseFloat(formatUnits(feeUsd, 18)).toFixed(6),
+          amountInWei, minOutWei: ufoOut,
+          path: null, kind: 'vault', hops: 1, loading: false
+        });
+        setErrorMsg(balanceMsg);
       } else {
-        const currentBal = parseFloat(tokenBalances['UFO'] || '0');
-        if (isConnected && input > currentBal) {
-          setErrorMsg('Insufficient UFO balance');
-        } else {
-          setErrorMsg('');
-        }
-      }
+        // UFO → 稳定币：UFO 面值即美元，扣 0.5% 后按 NAV 折回代币
+        const feeUfo = (amountInWei * 50n) / 10000n;
+        const netUfo = amountInWei - feeUfo;
+        const tokenOut = (netUfo * 10n ** 18n) / price18;
+        // 合约实际转出 = 净额 + 以稳定币扣除的那份手续费（与 withdraw 的 totalOut 对齐）
+        const feeTokens = (feeUfo * 10n ** 18n) / price18;
+        const totalOut = tokenOut + feeTokens;
 
-      setFeeAmount(parseFloat(formatUnits(feeUsd, 18)).toFixed(6));
-      setOutputAmount(parseFloat(formatUnits(tokenOut, 18)).toFixed(6));
+        const vaultBal = vaultBalances[vaultStable.symbol] || 0;
+        let msg = balanceMsg;
+        if (parseFloat(formatUnits(totalOut, 18)) > vaultBal) {
+          msg = `Insufficient ${vaultStable.symbol} in Vault. Available: ${vaultBal.toFixed(2)}`;
+        }
+        setQuote({
+          out: parseFloat(formatUnits(tokenOut, 18)).toFixed(6),
+          fee: parseFloat(formatUnits(feeUfo, 18)).toFixed(6),
+          amountInWei, minOutWei: tokenOut,
+          path: null, kind: 'vault', hops: 1, loading: false
+        });
+        setErrorMsg(msg);
+      }
+      return undefined;
     }
-  }, [inputAmount, isBuyingUFO, tokenBalances, isConnected, selectedStablecoin, vaultBalances, currentPriceData, currentPriceError, globalPriceError]);
+
+    // ---- BNB Chain 上的 AMM 报价 ----
+    setQuote({ ...EMPTY_QUOTE, loading: true, amountInWei });
+    setErrorMsg(balanceMsg);
+
+    const timer = setTimeout(async () => {
+      try {
+        const q = await quotePancake(payToken, receiveToken, amountInWei);
+        if (dead) return;
+        if (!q) {
+          setQuote({ ...EMPTY_QUOTE, amountInWei });
+          setErrorMsg(`No swap route for ${paySym} → ${recvSym} on BNB Chain.`);
+          return;
+        }
+        // 滑点：一端是稳定币或 BNB 时 0.5%，两个波动币之间 1%。
+        // 定太紧会因为一笔大额买单把池子推过线而 revert，定太松等于不设保护。
+        const volatile = !isStable(paySym) && !isStable(recvSym) &&
+          paySym !== 'BNB' && recvSym !== 'BNB';
+        const slipBps = volatile ? 100n : 50n;
+        const minOut = (q.amountOutWei * (10000n - slipBps)) / 10000n;
+        setQuote({
+          out: parseFloat(formatUnits(q.amountOutWei, decOut)).toFixed(6),
+          fee: '0.000000',
+          amountInWei, minOutWei: minOut,
+          path: q.path, kind: 'pancake', hops: q.path.length - 1, loading: false
+        });
+        setErrorMsg(balanceMsg);
+      } catch (e) {
+        if (dead) return;
+        setQuote({ ...EMPTY_QUOTE, amountInWei });
+        setErrorMsg('Price feed unreachable. Please retry.');
+      }
+    }, 350);
+
+    return () => { dead = true; clearTimeout(timer); };
+  }, [
+    inputAmount, paySym, recvSym, decIn, decOut, payToken, receiveToken,
+    vaultRoute, vaultStable, tokenBalances, vaultBalances, isConnected,
+    stablePriceData, globalPriceError
+  ]);
 
   const handleAction = async () => {
     if (isProcessing) return;
@@ -516,39 +616,67 @@ function App() {
     setTxMsg('');
     setErrorMsg('');
 
-    const currentTime = new Date().toLocaleString();
+    // 报价可能刚好在点击的瞬间过期（比如用户改了金额还没等新的回来）。
+    // 没有 amountInWei 就不发交易 —— 宁可让按钮再点一次，也不签一笔金额为 0 的。
+    if (!quote.amountInWei || quote.amountInWei <= 0n) {
+      setErrorMsg('Still pricing. Give it a second and try again.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setTxMsg('');
+    setErrorMsg('');
+
+    const routeLabel = quote.kind === 'vault'
+      ? (paySym === 'UFO' ? 'Burn' : 'Issuance')
+      : 'Swap';
+
     const txRecord = {
-      time: currentTime,
-      type: isBuyingUFO ? 'Issuance' : 'Burn',
+      time: new Date().toLocaleString(),
+      type: routeLabel,
       payAmount: inputAmount,
-      paySymbol: isBuyingUFO ? selectedStablecoin.symbol : 'UFO',
-      receiveAmount: outputAmount,
-      receiveSymbol: isBuyingUFO ? 'UFO' : selectedStablecoin.symbol,
+      paySymbol: paySym,
+      receiveAmount: quote.out,
+      receiveSymbol: recvSym,
       status: 'Pending',
       txHash: ''
     };
 
     try {
       // ethers 在这一刻才被下载，且只在第一次点按钮时发生
-      const result = await submitSwap({
-        walletProvider,
-        owner: address,
-        tokenAddress: selectedStablecoin.address,
-        amountWei: toWei(inputAmount),
-        isBuy: isBuyingUFO,
-        onStage: setTxMsg
-      });
+      const result = quote.kind === 'vault'
+        ? await submitSwap({
+            walletProvider,
+            owner: address,
+            tokenAddress: vaultStable.address,
+            amountWei: quote.amountInWei,
+            isBuy: paySym !== 'UFO',
+            onStage: setTxMsg
+          })
+        : await submitPancakeSwap({
+            walletProvider,
+            owner: address,
+            payToken,
+            receiveToken,
+            amountWei: quote.amountInWei,
+            path: quote.path,
+            minOutWei: quote.minOutWei,
+            inDecimals: decIn,
+            outDecimals: decOut,
+            onStage: setTxMsg
+          });
 
       txRecord.txHash = result.hash;
       txRecord.payAmount = result.paid;
       if (result.received) txRecord.receiveAmount = result.received;
       txRecord.status = 'Success';
-      setTxMsg(isBuyingUFO ? 'Issuance cleared.' : 'Burn cleared.');
+      setTxMsg(quote.kind === 'vault'
+        ? (paySym === 'UFO' ? 'Burn cleared.' : 'Issuance cleared.')
+        : 'Swap cleared.');
 
       saveTxToHistory(txRecord);
       setInputAmount('');
-      setOutputAmount('0.000000');
-      setFeeAmount('0.000000');
+      setQuote(EMPTY_QUOTE);
       fetchUserBalances();
       fetchVaultBalances();
       fetchNav();
@@ -597,38 +725,42 @@ function App() {
   };
 
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const currentPayPrice = isBuyingUFO
-    ? (currentPriceData?.priceFloat ?? null)
-    : currentNav;
 
   // ============ 闪兑面板的派生值 ============
-  // 面板只有两种方向：稳定币 → UFO（买），UFO → 稳定币（卖）。
-  // 两侧的代币都由这两个状态决定，不额外存一份，避免出现「显示的币」和
-  // 「实际提交的币」不一致这种最难查的 bug。
-  const payToken = isBuyingUFO ? selectedStablecoin : UFO_TOKEN;
-  const receiveToken = isBuyingUFO ? UFO_TOKEN : selectedStablecoin;
-  const payBal = isConnected ? Number(tokenBalances[payToken.symbol] || 0) : 0;
+  // 两侧代币只有一个来源（paySym / recvSym），显示的币和提交的币不可能分叉。
+  const payBal = isConnected ? Number(tokenBalances[paySym] || 0) : 0;
   const inputNum = parseFloat(inputAmount) || 0;
-  const outNum = parseFloat(outputAmount) || 0;
-  const payUsd = inputNum * (isBuyingUFO ? (currentPriceData?.priceFloat ?? 1) : currentNav);
-  const outUsd = outNum * (isBuyingUFO ? currentNav : (currentPriceData?.priceFloat ?? 1));
+  const outNum = parseFloat(quote.out) || 0;
+  // 两种币的美元估值都走同一张价格表，面板上的 $ 数和钱包页的总额不会打架
+  const payUsd = inputNum * (priceOf(paySym) ?? 0);
+  const outUsd = outNum * (priceOf(recvSym) ?? 0);
 
   // 钱包里这个币为 0：按钮改成充值，点了直接去钱包页的收款面板。
   // 这不是「禁用态」—— 空钱包配一个灰按钮等于让人卡在这里。
   const needTopUp = isConnected && payBal <= 0;
+  // 报价还没回来、或金额为 0 时不能点：那不是「禁用态」，是「还没到能签的时候」。
   const swapDisabled = isProcessing || (isConnected && !needTopUp && (
-    !!errorMsg || !inputAmount || parseFloat(inputAmount) <= 0 || !priceReady
+    !!errorMsg || !inputAmount || parseFloat(inputAmount) <= 0 ||
+    !priceReady || quote.loading || !(quote.amountInWei > 0n)
   ));
 
-  // 代币 → 美元。UFO 用金库 NAV，稳定币按 1，其余用链上报价。
+  // 代币 → 美元，全部来自链上：
+  //   · UFO 取金库净值 getExchangeRate（它的赎回价就是 NAV，链上没有池子）；
+  //   · 其余币种取 PancakeSwap 的 USDT 报价（见 chain.readTokenPrices）；
+  //   · 稳定币硬编码 1 —— 它们本身就是计价单位；
+  //   · BNB 在询价失败时退回 Chainlink 预言机。
   // 拿不到就返回 null，界面显示 "—" —— 一个钱包不能把「读不到」写成 0。
-  const priceOf = (symbol) => {
-    if (symbol === 'UFO') return currentNav;
+  // 用函数声明而不是 const 箭头：它被下面的 payUsd 先用、后定义，
+  // const 会落在 TDZ 里直接抛 ReferenceError（整页白屏）。
+  function priceOf(symbol) {
+    // NAV 没读回来之前不能拿初始值 1 顶上去 —— 那会把「还没读到」显示成
+    // 一个确定的 $1.00 估值，等于编了一个数
+    if (symbol === 'UFO') return navStatus === 'ready' ? currentNav : null;
     if (prices[symbol] != null) return prices[symbol];
     if (isStable(symbol)) return 1;
     if (symbol === 'BNB' && bnbPrice != null) return bnbPrice;
     return null;
-  };
+  }
 
   // 钱包资产列表：只列真的有钱的币，按美元估值从大到小。
   // 这里不按「代币表顺序」排 —— 用户关心的是哪一笔最值钱，不是我们的配置顺序。
@@ -650,22 +782,47 @@ function App() {
     return m;
   }, {});
 
+  // ---- 报价明细的两行文案 ----
+  // Rate 用「1 个付款币能换多少收款币」表达，和面板上两个数字同源，
+  // 不会出现「面板写 1.02、明细写 0.98」这种自相矛盾。
+  const rateLine = (() => {
+    if (!(inputNum > 0) || !(outNum > 0)) return '—';
+    const r = outNum / inputNum;
+    const dp = r >= 100 ? 2 : r >= 1 ? 4 : 6;
+    return `1 ${paySym} = ${r.toLocaleString('en-US', { maximumFractionDigits: dp })} ${recvSym}`;
+  })();
+
+  const routeLine = (() => {
+    if (quote.kind === 'vault') return `Vault · ${paySym} → ${recvSym}`;
+    if (!quote.path) return 'Pancake V2';
+    const name = (addr) => {
+      const a = String(addr).toLowerCase();
+      const hit = TOKENS.find((t) => (t.address || '').toLowerCase() === a);
+      return hit ? hit.symbol : a.slice(0, 6) + '…';
+    };
+    return 'Pancake V2 · ' + quote.path.map(name).join(' → ');
+  })();
+
   const openAccounts = () => setWalletPanel('accounts');
 
-  // 点哪一侧的胶囊，弹窗就替哪一侧选币。选到另一侧已有的币，等价于交换方向。
-  // 只有金库能报价的币（USDT / USDC / UFO）会真正改变方向，其余在弹窗里
-  // 由 TokenPicker 明确拒绝并说明原因。
+  // 点哪一侧的胶囊，弹窗就替哪一侧选币。
+  // 选到另一侧已经占着的币，直接对调两侧 —— 用户的意图显然是「换过来」，
+  // 而不是把两边都选成同一个币（那样永远换不成）。
   const pickToken = (side, coin) => {
-    if (!coin || !coin.tradable) return;
-    if (coin.symbol === 'UFO') {
-      setIsBuyingUFO(side !== 'pay');
+    if (!coin || !TOKEN_BY_SYMBOL[coin.symbol]) return;
+    const next = coin.symbol;
+    if (side === 'pay') {
+      if (next === recvSym) { setPaySym(recvSym); setRecvSym(paySym); }
+      else setPaySym(next);
     } else {
-      setSelectedStablecoin(coin);
-      setIsBuyingUFO(side === 'pay');
+      if (next === paySym) { setRecvSym(paySym); setPaySym(recvSym); }
+      else setRecvSym(next);
     }
     setPickerSide('');
     setInputAmount('');
+    setQuote(EMPTY_QUOTE);
     setErrorMsg('');
+    setTxMsg('');
   };
 
   const setMax = () => {
@@ -675,8 +832,10 @@ function App() {
   };
 
   const flipDirection = () => {
-    setIsBuyingUFO(!isBuyingUFO);
+    setPaySym(recvSym);
+    setRecvSym(paySym);
     setInputAmount('');
+    setQuote(EMPTY_QUOTE);
     setTxMsg('');
     setErrorMsg('');
     setPickerSide('');
@@ -806,11 +965,11 @@ function App() {
               Instant Swap
             </div>
 
-            {currentPriceError && (
+            {(stablePriceError || globalPriceError) && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                             fontSize: '11px', marginBottom: '12px', fontWeight: 600, color: '#ef4444' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
-                {currentPriceError.message}
+                {(stablePriceError || globalPriceError).message}
               </div>
             )}
 
@@ -858,7 +1017,9 @@ function App() {
                      strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4v13" /><path d="M4 14l3 3 3-3" /><path d="M17 20V7" /><path d="M14 10l3-3 3 3" />
                 </svg>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>${formatUsd(payUsd)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {priceOf(paySym) == null ? '≈ —' : '$' + formatUsd(payUsd)}
+                </span>
               </div>
             </div>
 
@@ -897,10 +1058,12 @@ function App() {
                   <div style={{ ...UI_FONT, fontSize: '17px', fontWeight: 700, lineHeight: 1.25,
                                 color: outNum > 0 ? SWAP_TINT.ink : SWAP_TINT.mute,
                                 fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all' }}>
-                    {outNum > 0 ? outputAmount : '—'}
+                    {outNum > 0 ? quote.out : (quote.loading && inputNum > 0 ? 'Quoting…' : '—')}
                   </div>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: SWAP_TINT.mute, marginTop: '3px' }}>
-                    {outNum > 0 ? '≈ $' + formatUsd(outUsd) : '—'}
+                    {outNum > 0
+                      ? (priceOf(recvSym) == null ? '≈ —' : '≈ $' + formatUsd(outUsd))
+                      : '—'}
                   </div>
                 </div>
               </div>
@@ -932,26 +1095,47 @@ function App() {
               {ctaLabel}
             </button>
 
-            {/* 价格与手续费放在按钮下方：面板本身保持截图里的留白 */}
+            {/* 明细放在按钮下方：面板本身保持截图里的留白。
+                两条路显示的东西不同 —— 金库是手收费，Pancake 是池子费 + 滑点 ——
+                但版式统一成「左边名目、右边值」。 */}
             <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px',
                           fontSize: '12px', fontWeight: 600, color: SWAP_TINT.mute }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-                <span>Pay price</span>
-                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums' }}>
-                  1 {payToken.symbol} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'}
+                <span>Rate</span>
+                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                  {rateLine}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-                <span>UFO price (on-chain)</span>
-                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums' }}>
-                  1 UFO = ${currentNav.toFixed(4)}{navStatus === 'error' ? ' (read failed)' : ''}
+                <span>Route</span>
+                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+                               wordBreak: 'break-word' }}>
+                  {routeLine}
                 </span>
               </div>
+              {quote.kind === 'pancake' && outNum > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <span>Minimum received</span>
+                  <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                    {formatAmount(Number(formatUnits(quote.minOutWei, decOut)), 6)} {recvSym}
+                  </span>
+                </div>
+              )}
+              {(paySym === 'UFO' || recvSym === 'UFO') && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <span>UFO price (on-chain)</span>
+                  <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums' }}>
+                    1 UFO = ${currentNav.toFixed(4)}{navStatus === 'error' ? ' (read failed)' : ''}
+                  </span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-                <span>Fee (0.5%)</span>
-                <span style={{ color: inputNum > 0 ? '#ef4444' : SWAP_TINT.mute,
+                <span>{quote.kind === 'vault' ? 'Fee (0.5%)' : 'Pool fee'}</span>
+                <span style={{ color: inputNum > 0 && quote.kind === 'vault' ? '#ef4444' : SWAP_TINT.mute,
                                fontVariantNumeric: 'tabular-nums' }}>
-                  {inputNum > 0 ? `-${feeAmount} USD` : '—'}
+                  {inputNum > 0
+                    ? (quote.kind === 'vault' ? `-${quote.fee} USD` : `0.25% × ${quote.hops} hop${quote.hops > 1 ? 's' : ''}`)
+                    : '—'}
                 </span>
               </div>
             </div>
@@ -1245,6 +1429,7 @@ function App() {
         balances={tokenBalances}
         prices={priceMap}
         selectedSymbol={(pickerSide === 'receive' ? receiveToken : payToken).symbol}
+        otherSymbol={(pickerSide === 'receive' ? payToken : receiveToken).symbol}
         onSelect={(coin) => pickToken(pickerSide, coin)}
         onClose={() => setPickerSide('')}
       />
