@@ -13,7 +13,7 @@ const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
  * 桌面端：优先列出 EIP-6963 发现到的扩展（一列，图标+名字），
  *        一个扩展都没有时才给二维码，让用户用手机接着走上面的流程。
  */
-export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, wcReady, wcBlocked, busy, error }) {
+export default function WalletPicker({ open, onClose, injectedWallets, onPick, onOkxConnect, onWcConnect, onMmConnect, wcReady, wcBlocked, busy, error }) {
   const [opening, setOpening] = useState('');
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -73,7 +73,9 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const handleApp = async (wallet) => {
     // 这个钱包能不能走 WalletConnect：配了 Project ID、有入口前缀、
     // 且这条入口不在本会话的失败名单里。
-    const useWc = !!(wcReady && wallet.wcPrefix && wallet.connect !== 'okx' && !wcBroken.current.has(wallet.id));
+    // 已经有私有通道（OKX / MetaMask）的钱包不走 WC —— 那条路更短，
+    // 也不会被 WC 中继的封锁牵连。
+    const useWc = !!(wcReady && wallet.wcPrefix && wallet.connect !== 'okx' && wallet.connect !== 'mm' && !wcBroken.current.has(wallet.id));
 
     // iOS 上 Trust Wallet 已经没有内置浏览器，跳转只会把 App 拉到首页，
     // 用户回来时看到的是「什么都没发生」。与其演一次失败的跳转，不如直接说清。
@@ -152,6 +154,28 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
           wcBroken.current.add(wallet.id);
           setManualOpen(null);
           setNotice(`${wallet.name}: ${msg || 'the WalletConnect request did not complete'}. Opening its in-app browser instead.`);
+          setTimeout(() => { openInWallet(wallet); }, 1200);
+        }
+      } finally {
+        setOpening('');
+      }
+      return;
+    }
+
+    // MetaMask 走官方 Connect 协议：浏览器里发起会话，App 弹「连接」，
+    // 确认后自动回到本页 —— 与 OKX 那条完全同构，区别只是中继是 MetaMask 自家的。
+    // 失败时退回 Branch 链接，至少能把用户送进 App 的内置浏览器。
+    if (wallet.connect === 'mm' && onMmConnect) {
+      setHint('Approve the request in MetaMask. This page stays open and you come straight back to it.');
+      setPasteUrl('');
+      try {
+        await onMmConnect();
+      } catch (e) {
+        const code = e && e.code;
+        const msg = String((e && (e.message || e.reason)) || '');
+        const cancelled = code === 4001 || code === 'ACTION_REJECTED' || /reject|cancel|denied/i.test(msg);
+        if (!cancelled) {
+          setNotice(`MetaMask Connect did not complete: ${msg || 'unknown error'}. Opening MetaMask instead.`);
           setTimeout(() => { openInWallet(wallet); }, 1200);
         }
       } finally {

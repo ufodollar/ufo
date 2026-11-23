@@ -136,7 +136,7 @@ function App() {
     address, provider: walletProvider, isConnected,
     busy: walletBusy, autoConnecting, error: walletError,
     chainIssue, fixChain,
-    connect, disconnect, connectOkxWallet, connectWcWallet, wcReachable,
+    connect, disconnect, connectOkxWallet, connectWcWallet, connectMetaMaskWallet, wcReachable,
     pickerOpen, closePicker, connectWith, injectedWallets
   } = useWallet();
 
@@ -989,6 +989,7 @@ function App() {
         onPick={connectWith}
         onOkxConnect={connectOkxWallet}
         onWcConnect={connectWcWallet}
+        onMmConnect={connectMetaMaskWallet}
         wcReady={wcReachable === true}
         wcBlocked={wcReachable === false}
         busy={walletBusy}

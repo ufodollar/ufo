@@ -128,8 +128,13 @@ export function walletList() {
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
-      // Branch 通用链接。文档现在主推 link.metamask.io/dapp/…，但 app.link
-      // 这条在真机上验证过可用，没有理由冒险换。
+      // 走 MetaMask Connect（src/metamaskconnect.js），和 OKX 同一条思路：
+      // 浏览器里发起会话 → App 弹「连接」→ 确认后自动跳回本页。
+      // 不经过 WalletConnect，用的是 MetaMask 自家的 multichain 中继。
+      //
+      // 下面这条 Branch 链接保留为兜底：SDK 加载失败或会话建不起来时，
+      // WalletPicker 会退回它，至少把用户送进 MetaMask 的内置浏览器。
+      connect: 'mm',
       url: `https://metamask.app.link/dapp/${bare}`,
       fallback: 'https://metamask.io/download/'
     },

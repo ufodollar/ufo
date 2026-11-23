@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { watchInjectedWallets, isMobile, AUTOCONNECT_PARAM } from './wallets';
 import { hasOkxPending, clearOkxPending, hasStoredOkxSession } from './okxpending';
 import { hasWcPending, clearWcPending, hasStoredWcSession } from './wcpending';
+import { hasMmPending, clearMmPending, hasMmSeen } from './mmpending';
 import { WC_PROJECT_ID } from './config';
 
 // 本会话主动断开后，不要再用注入式自动连回去
@@ -20,6 +21,10 @@ const OKX_RETURN_PARAM = 'okx';
 // WalletConnect 回跳标记。和 okx 分开，理由同 okxpending.js 的注释：
 // 两条通道恢复方式不同，混在一起会互相触发对方的恢复流程。
 const WC_RETURN_PARAM = 'wc';
+
+// MetaMask Connect 回跳标记。同上：会话存在 MetaMask SDK 自己的存储里，
+// 与 okx / wc 都不是一回事，必须各有各的入口。
+const MM_RETURN_PARAM = 'mm';
 
 // 地址统一小写。
 // 不用 ethers 的 getAddress：它会对混合大小写做 EIP-55 校验和验证，
@@ -210,11 +215,13 @@ export function useWallet() {
     let fromWallet = false;
     let okxReturn = false;
     let wcReturn = false;
+    let mmReturn = false;
     try {
       const params = new URL(location.href).searchParams;
       fromWallet = params.get(AUTOCONNECT_PARAM) === '1';
       okxReturn = params.get(OKX_RETURN_PARAM) === '1';
       wcReturn = params.get(WC_RETURN_PARAM) === '1';
+      mmReturn = params.get(MM_RETURN_PARAM) === '1';
     } catch (e) { /* 地址异常，按普通访问处理 */ }
 
     // 地址栏里没有标记也要恢复，两种很常见的情形：
@@ -223,17 +230,21 @@ export function useWallet() {
     // 这两种情况下，*pending.js 里的本地标记是唯一的线索。
     if (hasOkxPending()) okxReturn = true;
     if (hasWcPending()) wcReturn = true;
+    if (hasMmPending()) mmReturn = true;
 
     // 连过一次之后，这个浏览器里就存着一条会话：以后每次打开页面都该是
     // 已连接状态，而不是让用户再点一次。判断只看 localStorage 的键名，
     // 不下载 SDK —— 没连过的人一分钱都不用付。
     const okxStored = okxReturn || hasStoredOkxSession();
     const wcStored = !!(WC_PROJECT_ID && (wcReturn || hasStoredWcSession()));
+    // MetaMask 的会话键名属于 SDK 内部实现，不去猜；只认「这个浏览器里用过」，
+    // 有标记才值得把 SDK 拉下来问一次。
+    const mmStored = mmReturn || hasMmSeen();
 
     // 参数一旦读进变量就没有用了，立刻从地址栏抹掉。
     // 放在这里而不是各个分支结尾：无论后面走静默恢复、主动授权还是无声退出，
     // 用户复制网址、刷新页面时都不会再看到它，也不会因此重复弹授权框。
-    if (fromWallet || okxReturn || wcReturn) clearAutoconnectParam();
+    if (fromWallet || okxReturn || wcReturn || mmReturn) clearAutoconnectParam();
 
     const seenBefore = readFlag(localStorage, SEEN_KEY);
     let cancelled = false;
@@ -245,13 +256,33 @@ export function useWallet() {
     const inWalletBrowser = isMobile();
 
     (async () => {
+      // MetaMask Connect 回跳：页面里没有 window.ethereum，会话在 MetaMask SDK
+      // 自己的存储里。放在最前面，因为它是最新加入的一条通道，用户点完
+      // 回来时等的是它 —— 先让别的通道白等一轮没有意义。
+      if (mmStored && !okxReturn && !wcReturn) {
+        if (mmReturn && !cancelled) setAutoConnecting(true);
+        try {
+          const { restoreMetaMask } = await import('./metamaskconnect');
+          const restored = await restoreMetaMask({ windowMs: mmReturn ? 10000 : 2500 });
+          if (!cancelled && restored) {
+            clearMmPending();
+            accept(restored.accounts, restored.provider);
+            return;
+          }
+        } catch (e) { /* 恢复失败就当普通访问，页面上的 Connect 按钮仍然在 */ }
+        finally {
+          if (!cancelled) setAutoConnecting(false);
+        }
+        if (!cancelled) clearMmPending();
+      }
+
       // OKX Connect 回跳：这个页面的浏览器里没有 window.ethereum，
       // 会话保存在 OKX SDK 自己的存储里，要单独去问它一句。
       // 动态 import 保证那块 SDK 只在真的需要时才下载。
       //
       // 刚从 WalletConnect 回来时跳过：用户这一次等的是 WC 的会话，
       // 为 OKX 白下 200KB 再失败一次，只会让「回来就已经连上」变成「回来等三秒」。
-      if (okxStored && !wcReturn) {
+      if (okxStored && !wcReturn && !mmReturn) {
         // 刚从 App 回来才提示进度；普通刷新时安静恢复，别让用户看到一闪而过的状态。
         if (okxReturn && !cancelled) setAutoConnecting(true);
         try {
@@ -503,6 +534,33 @@ export function useWallet() {
   }, [busy, accept]);
 
   /**
+   * 钱包墙上点 MetaMask：走 MetaMask Connect，不经过 WalletConnect。
+   *
+   * 和 connectOkxWallet 同构 —— 拿到的都是 EIP-1193 provider，
+   * accept() 之后的逻辑一行都不用改。差别只在谁在中继：OKX 用自家 Connect，
+   * MetaMask 用自家的 multichain relay。
+   *
+   * 这条路的价值在于：它是唯一不依赖 WalletConnect 的公共钱包通道。
+   * WC 的中继被网络封掉时，OKX 和它是仅剩的两个还能「授权完自动回来」的入口。
+   */
+  const connectMetaMaskWallet = useCallback(async () => {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    try {
+      const { connectMetaMask } = await import('./metamaskconnect');
+      const { accounts, provider } = await connectMetaMask();
+      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      return false;
+    } catch (e) {
+      if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return false;
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, accept]);
+
+  /**
    * 提示条上那个「Switch」按钮：再试一次。
    * 用户可能在钱包里手动改了网络，或者刚才只是点错了「拒绝」。
    */
@@ -569,6 +627,11 @@ export function useWallet() {
   // 否则点击之后才开始生成，跳转落在用户手势窗口之外，浏览器会静默丢弃。
   const openPicker = useCallback(() => {
     import('./okxconnect').then((m) => m.prefetchOkx()).catch(() => {});
+    // MetaMask 那块比 OKX 还大，只在「这个浏览器用过」时才提前下 ——
+    // 没用过的人不该为它付流量。
+    if (hasMmSeen()) {
+      import('./metamaskconnect').then((m) => m.prefetchMetaMask()).catch(() => {});
+    }
     if (WC_PROJECT_ID) {
       import('./walletconnect')
         .then(async (m) => {
@@ -601,6 +664,7 @@ export function useWallet() {
     connect,
     connectWith,
     connectOkxWallet,
+    connectMetaMaskWallet,
     connectWcWallet,
     wcReachable,
     disconnect,
