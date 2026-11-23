@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>中继诊断</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;padding:18px 16px 48px;background:#0b1020;color:#e6edf7;
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  h1{font-size:19px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:#8b9bb4;font-size:13px;margin:0 0 6px}
+  .sub b{color:#c7d3e6}
+  .row{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border-radius:11px;
+       background:#141a2e;margin-bottom:6px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#3a465f;margin-top:6px;flex:0 0 auto;
+       transition:background .2s}
+  .dot.run{background:#f0b429;animation:pl 1.1s ease-in-out infinite}
+  .dot.ok{background:#22c55e}
+  .dot.bad{background:#ef4444}
+  @keyframes pl{50%{opacity:.25}}
+  .body{flex:1;min-width:0}
+  .name{font-size:13.5px;font-weight:600;word-break:break-all;line-height:1.4}
+  .meta{font-size:12px;color:#8b9bb4;margin-top:3px;word-break:break-all;font-variant-numeric:tabular-nums}
+  .sum{margin-top:18px;padding:14px 15px;border-radius:11px;background:#141a2e;
+       border-left:3px solid #3b82f6;font-size:13.5px;line-height:1.75;white-space:pre-wrap}
+  .sum b{color:#fff}
+</style>
+</head>
+<body>
+<h1>中继可达性诊断</h1>
+<p class="sub">自动跑，约 <b>30 秒</b>，不用点。</p>
+<p class="sub">测的是：WalletConnect 的中继在当前网络下，究竟卡在哪一层。</p>
+<div id="out"></div>
+<div class="sum" id="sum" style="display:none"></div>
+<script>
+(function () {
+  var out = document.getElementById('out');
+
+  function add(name) {
+    var r = document.createElement('div'); r.className = 'row';
+    var d = document.createElement('div'); d.className = 'dot';
+    var b = document.createElement('div'); b.className = 'body';
+    var n = document.createElement('div'); n.className = 'name'; n.textContent = name;
+    var m = document.createElement('div'); m.className = 'meta'; m.textContent = '等待中';
+    b.appendChild(n); b.appendChild(m); r.appendChild(d); r.appendChild(b); out.appendChild(r);
+    return { dot: d, meta: m };
+  }
+
+  function setState(it, st, txt) {
+    it.dot.className = 'dot ' + st;
+    it.meta.textContent = txt;
+  }
+
+  // HTTP 探测：no-cors 只关心 TCP + TLS 是否建起来。
+  // 服务端返回什么状态码都无所谓，能 resolve 就说明网络层通。
+  function httpProbe(url, ms) {
+    return new Promise(function (res) {
+      var t0 = Date.now(), done = false, timer = null, ctl = null;
+      function fin(ok, note) {
+        if (done) return; done = true;
+        if (timer) clearTimeout(timer);
+        res({ ok: ok, ms: Date.now() - t0, note: note || '' });
+      }
+      try {
+        if (typeof AbortController === 'function') {
+          ctl = new AbortController();
+          timer = setTimeout(function () { try { ctl.abort(); } catch (e) {} fin(false, '超时'); }, ms);
+        } else {
+          timer = setTimeout(function () { fin(false, '超时'); }, ms);
+        }
+        fetch(url, {
+          mode: 'no-cors', cache: 'no-store', redirect: 'follow',
+          signal: ctl ? ctl.signal : undefined
+        }).then(function () { fin(true, ''); })
+          ['catch'](function (e) { fin(false, (e && e.name) || '失败'); });
+      } catch (e) { fin(false, '异常'); }
+    });
+  }
+
+  // WS 探测：比 HTTP 更严格，要完成 WebSocket 升级。
+  // relay 要求子协议，裸连会被关掉，但「多久关」能区分网络层与应用层。
+  function wsProbe(url, ms) {
+    return new Promise(function (res) {
+      var t0 = Date.now(), done = false, ws = null, timer = null;
+      function fin(ok, note) {
+        if (done) return; done = true;
+        if (timer) clearTimeout(timer);
+        try {
+          if (ws) { ws.onopen = null; ws.onerror = null; ws.onclose = null; ws.close(); }
+        } catch (e) {}
+        res({ ok: ok, ms: Date.now() - t0, note: note || '' });
+      }
+      timer = setTimeout(function () { fin(false, '超时'); }, ms);
+      try {
+        ws = new WebSocket(url);
+        ws.onopen = function () { fin(true, '握手成功'); };
+        ws.onerror = function () { fin(false, '失败'); };
+        ws.onclose = function (ev) { fin(false, '被关闭 ' + (ev && ev.code)); };
+      } catch (e) { fin(false, '异常'); }
+    });
+  }
+
+  // DoH：绕开系统 DNS 直接问 Cloudflare。
+  // 如果系统 DNS 被污染，这里能拿到真实 IP，两者不一致就说明是污染。
+  function doh(name, ms) {
+    return new Promise(function (res) {
+      var t0 = Date.now(), done = false, timer = null;
+      function fin(ips, note) {
+        if (done) return; done = true;
+        if (timer) clearTimeout(timer);
+        res({ ips: ips, ms: Date.now() - t0, note: note || '' });
+      }
+      timer = setTimeout(function () { fin(null, '超时'); }, ms);
+      fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(name) + '&type=A',
+        { headers: { 'accept': 'application/dns-json' }, cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var ips = (j.Answer || []).filter(function (a) { return a.type === 1; })
+            .map(function (a) { return a.data; });
+          fin(ips, ips.length ? '' : '无 A 记录');
+        })
+        ['catch'](function () { fin(null, '查询受阻'); });
+    });
+  }
+
+  var tests = [
+    { n: '基线 · example.com（HTTPS）', k: 'http', u: 'https://example.com/', ms: 8000 },
+    { n: 'relay.walletconnect.org · HTTPS', k: 'http', u: 'https://relay.walletconnect.org/', ms: 8000 },
+    { n: 'relay.walletconnect.com · HTTPS', k: 'http', u: 'https://relay.walletconnect.com/', ms: 8000 },
+    { n: 'relay.walletconnect.org · WebSocket', k: 'ws', u: 'wss://relay.walletconnect.org/', ms: 9000 },
+    { n: 'relay.walletconnect.com · WebSocket', k: 'ws', u: 'wss://relay.walletconnect.com/', ms: 9000 },
+    { n: '对照 · OKX 私有中继（已知可用）', k: 'ws', u: 'wss://wsdexpri.okx.com/ws/v1/wallet-connect-relay', ms: 9000 },
+    { n: '对照 · 公开 WebSocket 回显', k: 'ws', u: 'wss://echo.websocket.events', ms: 9000 }
+  ];
+
+  function done(t, r) {
+    setState(t.it, r.ok ? 'ok' : 'bad',
+      (r.ok ? '通' : '不通') + ' · ' + r.ms + ' ms' + (r.note ? ' · ' + r.note : ''));
+    t.res = r;
+  }
+
+  function verdict() {
+    var base = tests[0].res, orgHttp = tests[1].res, comHttp = tests[2].res;
+    var orgWs = tests[3].res, comWs = tests[4].res;
+    var okx = tests[5].res, echo = tests[6].res;
+
+    if (!base || !base.ok) {
+      return '网络本身有问题：连 example.com 都不通。先确认这行 Wi-Fi / 流量正常，再重测。';
+    }
+    if (orgHttp && orgHttp.ok && orgWs && orgWs.ok) {
+      return 'relay.walletconnect.org 全通。\n\n这条通道可以直接启用——问题不在网络，在别处，我来查。';
+    }
+    if (comHttp && comHttp.ok && comWs && comWs.ok) {
+      return '只有 .com 通，.org 不通。\n\n换一个域名就能解决，一行配置的事。';
+    }
+    if ((orgHttp && orgHttp.ok) || (comHttp && comHttp.ok)) {
+      return 'HTTPS 能到 relay，WebSocket 升级被挡。\n\n这是中间设备只放行普通网页、拦长连接的典型表现。\n网页侧无法绕过——浏览器不允许把 WebSocket 伪装成普通请求。';
+    }
+    if (okx && okx.ok) {
+      return '三个 relay 都不通，但 OKX 的私有中继通。\n\n说明不是「所有 WebSocket 被禁」，而是针对 walletconnect 域名的定点封锁。\n这类封锁网页侧绕不过去：换域名、加参数、改端口都无效，因为挡的是目的地本身。';
+    }
+    if (!echo || !echo.ok) {
+      return '公开 echo 也不通，说明当前网络对 WebSocket 整体限制。\n\n所有依赖长连接的方案都会失败。';
+    }
+    return '综合结果见上方各行。把这一屏截图发我即可。';
+  }
+
+  var i = 0;
+  function step() {
+    if (i >= tests.length) { finish(); return; }
+    var t = tests[i++];
+    t.it = add(t.n);
+    setState(t.it, 'run', '测试中…');
+    var p = t.k === 'http' ? httpProbe(t.u, t.ms) : wsProbe(t.u, t.ms);
+    p.then(function (r) { done(t, r); step(); });
+  }
+
+  function finish() {
+    var d = add('DoH 解析 relay.walletconnect.org');
+    setState(d, 'run', '查询中…');
+    doh('relay.walletconnect.org', 8000).then(function (dr) {
+      if (dr.ips && dr.ips.length) setState(d, 'ok', dr.ips.join(' , '));
+      else setState(d, 'bad', dr.note + (dr.ms ? ' · ' + dr.ms + ' ms' : ''));
+      var s = document.getElementById('sum');
+      s.style.display = 'block';
+      s.innerHTML = '<b>结论</b>\n' + verdict();
+    });
+  }
+
+  step();
+})();
+</script>
+</body>
+</html>

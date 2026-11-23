@@ -123,7 +123,12 @@ export function walletList() {
     bitget: 'bitkeep://wc?uri=',
     tokenpocket: 'tpdapp://wc?uri=',
     imtoken: 'imtokenv2://wc?uri=',
-    phantom: 'phantom://wc?uri='
+    phantom: 'phantom://wc?uri=',
+    // Coin98 的包名是 coin98.crypto.finance.media，注册的 scheme 就是 coin98，
+    // 所以 WC 入口是 coin98://wc?uri=；它另有 coin98://browser?url= 走内置
+    // 浏览器，两条互不相干。Coin98 自己的集成文档也写着「跨平台优先用
+    // WalletConnect v2」，说明这条路是官方认可的主路径。
+    coin98: 'coin98://wc?uri='
   };
   return [
     {
