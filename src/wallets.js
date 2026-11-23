@@ -162,15 +162,22 @@ export function walletList() {
       //      自动连接本来也不需要这个标记：页面检测到 window.ethereum
       //      就会自己走 eth_requestAccounts（见 useWallet.js 的 inWalletBrowser）。
       //
-      //   4. coin_id 是「进 App 后先停在哪个网络」，不是装饰参数。
-      //      SLIP-44：60 = Ethereum，714 = BNB。写 60 会让 DApp 浏览器落在
-      //      以太坊主网，我们的页面随后要再弹一次 wallet_switchEthereumChain
-      //      求用户切到 BSC —— 多一道确认，多一次被拒的机会。写 714 直接
-      //      落在 BNB Smart Chain，页面加载完就能签名。
+      //   4. coin_id 是「进 App 后先停在哪个网络」，不是装饰参数 —— 但它的
+      //      取值只有一个正确答案：60。
+      //
+      //      上一版我按 SLIP-44 把 BNB 的 714 填进来，想着「直接落在 BSC，
+      //      省一次切网确认」。真机结果反了：传 714 时 Trust 只停在首页，
+      //      连浏览器都没开；传 60 时浏览器正常打开。说明它的路由是按
+      //      coin_id 去查内置资产表的，查不到就静默退回首页 —— 而它表里
+      //      登记的 DApp 浏览器网络只有 Ethereum。这是一个「看起来更对、
+      //      实际更糟」的改动，回滚。
+      //
+      //      切网交给页面自己：落地后 ensureBscChain 会发
+      //      wallet_switchEthereumChain，用户确认一次即可。
       //
       // 官方文档注明 DApp 浏览器是 Android Only —— iOS 版已移除该功能，
       // 所以 iOS 上不显示这个入口（noBrowser）。
-      url: `trust://open_url?coin_id=714&url=${currentUrl().replace(/\/+$/, '')}`,
+      url: `trust://open_url?coin_id=60&url=${currentUrl().replace(/\/+$/, '')}`,
       fallback: 'https://trustwallet.com/download',
       direct: true,
       scheme: true,
@@ -178,6 +185,11 @@ export function walletList() {
       // Trust 冷启动经常超过 1.8 秒，自动兜底会把已经进 App 的用户甩到
       // 下载站。没装 App 的情况由面板上的手动按钮接住。
       manual: true,
+      // 真机上确实会出现的失败：新版本 Trust 的底部栏只剩首页/行情/探索/搜索，
+      // 浏览器入口不再露在导航里，open_url 偶尔会静默退回首页。这时候用户
+      // 手上必须有一条能立刻走通的路 —— 链接已经替他复制好了，只要点底部
+      // 那个放大镜粘进去，就一定落在内置浏览器里，且带着 ?c=1 自动授权。
+      pasteHint: 'Link copied. If Trust only shows its home screen, tap the search icon at the bottom right, paste the link, and open it.',
       noBrowser: platform() === 'ios'
     },
     {
