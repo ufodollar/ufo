@@ -91,6 +91,67 @@
       </div>
     </noscript>
     <script>
+      // ---------------------------------------------------------------------
+      // 老 WebView 的运行时垫片（ES5 写，任何浏览器都能执行）
+      // ---------------------------------------------------------------------
+      // 语法降级（见 vite.config.js 的 build.target）只能保证「解析得过」。
+      // 还有一类坑是「解析得过、调用时才炸」：这些 API 属于 Chrome 71–98
+      // 才有的东西，而钱包内置浏览器长期停在 Chrome 70–79。少一个，整个
+      // 页面就在某个不经意的调用处停住，表现同样是白屏或按钮失灵。
+      //
+      // 全部用 typeof 判断，现代浏览器上这段等于空转。
+      (function () {
+        if (typeof globalThis === 'undefined') {
+          try { window.globalThis = window; } catch (e) {}
+        }
+
+        if (typeof Promise !== 'undefined' && typeof Promise.allSettled !== 'function') {
+          Promise.allSettled = function (list) {
+            return Promise.all((list || []).map(function (p) {
+              return Promise.resolve(p).then(
+                function (v) { return { status: 'fulfilled', value: v }; },
+                function (r) { return { status: 'rejected', reason: r }; }
+              );
+            }));
+          };
+        }
+
+        if (typeof queueMicrotask !== 'function') {
+          window.queueMicrotask = function (fn) {
+            Promise.resolve().then(fn).catch(function (err) {
+              setTimeout(function () { throw err; }, 0);
+            });
+          };
+        }
+
+        if (typeof String.prototype.replaceAll !== 'function') {
+          String.prototype.replaceAll = function (search, replacement) {
+            var s = String(this);
+            if (search instanceof RegExp) {
+              if (!search.global) throw new TypeError('replaceAll requires a global RegExp');
+              return s.replace(search, replacement);
+            }
+            return s.split(String(search)).join(String(replacement));
+          };
+        }
+
+        if (typeof Object.fromEntries !== 'function') {
+          Object.fromEntries = function (entries) {
+            var o = {};
+            var list = entries || [];
+            for (var i = 0; i < list.length; i++) o[list[i][0]] = list[i][1];
+            return o;
+          };
+        }
+
+        // Chrome 98。只用于普通对象（钱包 SDK 内部传的都是 plain object），
+        // 不做完整语义还原 —— 有 BigInt/函数时会抛，比静默返回错值好。
+        if (typeof structuredClone !== 'function') {
+          window.structuredClone = function (v) { return JSON.parse(JSON.stringify(v)); };
+        }
+      })();
+    </script>
+    <script>
       // 运行时错误记录：钱包内置浏览器没有控制台，出错时只能靠页面自己说出来。
       // 只存最近几条，任何报错都会出现在下面的兜底界面里。
       window.__ufoBoot = { t0: Date.now(), mounted: false, errors: [] };
