@@ -556,7 +556,9 @@ function App() {
 
     const timer = setTimeout(async () => {
       try {
-        const q = await quotePancake(payToken, receiveToken, amountInWei);
+        // 6 秒上限：报价不是网络测速，挂太久只会让按钮一直停在 Quoting…。
+        // 超时就报「读不到」，让用户自己决定要不要再点一次。
+        const q = await quotePancake(payToken, receiveToken, amountInWei, 6000);
         if (dead) return;
         if (!q) {
           setQuote({ ...EMPTY_QUOTE, amountInWei });
