@@ -323,7 +323,11 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
           <div>
             <div style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.3px' }}>Connect a wallet</div>
             <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '5px', lineHeight: 1.5 }}>
-              {subtitle}
+              {localStep
+                ? (localStep === 'backup'
+                    ? 'Save the phrase, then connect. This wallet never leaves the page.'
+                    : 'This one stays in the page — no app opens at any point.')
+                : subtitle}
             </div>
           </div>
           <button
