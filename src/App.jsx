@@ -54,16 +54,67 @@ const FONT_STYLE = {
 };
 
 /* Swap / Wallet / History 三个页面共用的白色容器，样式只在这里写一次 */
-// 头部操作按钮：文字 + 图标。原来是两个纯图标方块，手机上要靠猜 ——
-// 「锁」和「滑块」在没有上下文时并不自明。
-const HEAD_BTN = {
+// 头部操作按钮：天蓝底、白字、比原来大一档。
+// 合并之后只剩两个：Lock 与 Account N。后者既是身份也是账户管理入口
+// （原来是「Account 3」只读标签 + 一个 Accounts 按钮，同一件事占两个位置）。
+const SKY_BTN = {
   appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-  height: '32px', padding: '0 clamp(6px, 1.8vw, 9px)', borderRadius: '10px',
-  background: '#fff', border: '1px solid #e2e8f0', color: '#334155',
-  fontSize: 'clamp(9.5px, 2.6vw, 11.5px)', fontWeight: 700,
-  whiteSpace: 'nowrap', cursor: 'pointer', lineHeight: 1
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+  height: '38px', padding: '0 clamp(9px, 2.8vw, 13px)', borderRadius: '13px',
+  border: 'none', color: '#fff',
+  background: 'linear-gradient(180deg, #5CCBEC 0%, #38BDF8 100%)',
+  fontSize: 'clamp(11px, 3vw, 12.5px)', fontWeight: 700,
+  whiteSpace: 'nowrap', cursor: 'pointer', lineHeight: 1,
+  boxShadow: '0 5px 14px -4px rgba(56,189,248,0.75)'
 };
+
+// 闪兑面板的配色：与截图同源的一套中性灰 + 天蓝
+const SWAP_TINT = {
+  card: '#f4f5f7',
+  ink: '#0f172a',
+  mute: '#98a2b3',
+  line: '#e9ecf1',
+  accent: '#38bdf8'
+};
+
+// 闪兑面板自己的字体：金额和按钮一律无衬线。全站的 Lora 衬线是品牌调性，
+// 但交易所面板里的「0」和「Swap」用衬线会显得像公告，也不利于对齐位数。
+const UI_FONT = {
+  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  WebkitFontSmoothing: 'antialiased'
+};
+
+/* 代币胶囊：白底圆角、图标 + 代码 + 折叠箭头，两张卡片共用 */
+function TokenChip({ token, size = 28, chevron = true, onClick }) {
+  const clickable = typeof onClick === 'function';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      style={{
+        appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+        display: 'flex', alignItems: 'center', gap: '8px',
+        background: '#fff', border: 'none', borderRadius: '22px',
+        padding: '5px 12px 5px 5px', cursor: clickable ? 'pointer' : 'default',
+        boxShadow: '0 1px 3px rgba(16,24,40,0.07)', flexShrink: 0
+      }}
+    >
+      {token.symbol === 'UFO'
+        ? <UfoIcon size={size} />
+        : <img src={token.icon} alt="" style={{ width: size, height: size, borderRadius: '50%' }} />}
+      <span style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.2px', color: SWAP_TINT.ink }}>
+        {token.symbol}
+      </span>
+      {chevron && (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#667085"
+             strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 const SUB_CARD = {
   background: '#fff',
@@ -163,7 +214,7 @@ function App() {
   // '' | 'send' | 'receive'
   const [transferMode, setTransferMode] = useState('');
 
-  const [activeTab, setActiveTab] = useState('swap');
+  const [activeTab, setActiveTab] = useState('assets');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
   // 顶部只显示账户编号，地址不在页面上出现（只在账户管理弹窗里）。
   // 编号取记录里的 a.no，永远不用数组下标：删掉账户 1 之后账户 2 仍叫账户 2。
@@ -175,7 +226,8 @@ function App() {
   const accountNo = activeAcct ? activeAcct.no : null;
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
-  const [showTokenMenu, setShowTokenMenu] = useState(false);
+  // '' | 'pay' | 'receive' —— 两枚代币胶囊各有自己的菜单
+  const [showTokenMenu, setShowTokenMenu] = useState('');
 
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
@@ -376,7 +428,7 @@ function App() {
     setInputAmount('');
     setTxMsg('');
     setErrorMsg('');
-    setShowTokenMenu(false);
+    setShowTokenMenu('');
     txErrorRef.current = false;
   }, [isConnected]);
 
@@ -605,18 +657,118 @@ function App() {
     return Number(val).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
   };
 
-  const isButtonDisabled =
-    isProcessing ||
-    (isConnected && (
-      errorMsg !== '' ||
-      !inputAmount ||
-      parseFloat(inputAmount) <= 0 ||
-      !priceReady
-    ));
-
   const currentPayPrice = isBuyingUFO
     ? (currentPriceData?.priceFloat ?? null)
     : currentNav;
+
+  // ============ 闪兑面板的派生值 ============
+  // 面板只有两种方向：稳定币 → UFO（买），UFO → 稳定币（卖）。
+  // 两侧的代币都由这两个状态决定，不额外存一份，避免出现「显示的币」和
+  // 「实际提交的币」不一致这种最难查的 bug。
+  const payToken = isBuyingUFO ? selectedStablecoin : UFO_TOKEN;
+  const receiveToken = isBuyingUFO ? UFO_TOKEN : selectedStablecoin;
+  const payBal = isConnected ? Number(tokenBalances[payToken.symbol] || 0) : 0;
+  const inputNum = parseFloat(inputAmount) || 0;
+  const outNum = parseFloat(outputAmount) || 0;
+  const payUsd = inputNum * (isBuyingUFO ? (currentPriceData?.priceFloat ?? 1) : currentNav);
+  const outUsd = outNum * (isBuyingUFO ? currentNav : (currentPriceData?.priceFloat ?? 1));
+
+  // 钱包里这个币为 0：按钮改成充值，点了直接去钱包页的收款面板。
+  // 这不是「禁用态」—— 空钱包配一个灰按钮等于让人卡在这里。
+  const needTopUp = isConnected && payBal <= 0;
+  const swapDisabled = isProcessing || (isConnected && !needTopUp && (
+    !!errorMsg || !inputAmount || parseFloat(inputAmount) <= 0 || !priceReady
+  ));
+
+  // 钱包页顶部总额：BNB 按行情折算，稳定币 1:1，UFO 按链上 NAV。
+  const totalUsd = isConnected
+    ? (Number(bnbBal || 0) * (bnbPrice || 0))
+      + Number(tokenBalances.USDT || 0)
+      + Number(tokenBalances.USDC || 0)
+      + Number(tokenBalances.UFO || 0) * currentNav
+    : 0;
+
+  const openAccounts = () => setWalletPanel('accounts');
+
+  // 两枚代币胶囊的菜单：点哪一侧就是「这一侧换成什么」。
+  // 选到另一侧已有的币，等价于交换方向 —— 面板上看到的结果与点选一致。
+  const tokenMenuItems = (side) => [STABLECOINS[0], STABLECOINS[1], UFO_TOKEN].map((coin) => {
+    const isPay = side === 'pay';
+    const selected = (isPay ? payToken : receiveToken).symbol === coin.symbol;
+    let meta = '';
+    if (coin.symbol === 'UFO') meta = `$${currentNav.toFixed(4)}`;
+    else if (coin.symbol === 'USDT') meta = `$${(stablecoinPrices.USDT?.priceFloat ?? 1).toFixed(4)}`;
+    else meta = `$${(stablecoinPrices.USDC?.priceFloat ?? 1).toFixed(4)}`;
+    return { symbol: coin.symbol, icon: coin.icon, meta, selected, coin };
+  });
+
+  const pickToken = (side, item) => {
+    const coin = item.coin;
+    if (coin.symbol === 'UFO') {
+      // 这一侧要 UFO：若选的是付款侧，方向变卖；选的是收款侧，方向变买
+      if (side === 'pay') setIsBuyingUFO(false);
+      else setIsBuyingUFO(true);
+    } else {
+      setSelectedStablecoin(coin);
+      if (side === 'pay') setIsBuyingUFO(true);
+      else setIsBuyingUFO(false);
+    }
+    setShowTokenMenu(false);
+    setInputAmount('');
+  };
+
+  const setMax = () => {
+    if (payBal <= 0) return;
+    const v = Math.floor(payBal * 1e6) / 1e6;
+    setInputAmount(v ? String(v) : '');
+  };
+
+  const flipDirection = () => {
+    setIsBuyingUFO(!isBuyingUFO);
+    setInputAmount('');
+    setTxMsg('');
+    setErrorMsg('');
+    setShowTokenMenu('');
+  };
+
+  // 一颗按钮担三种意思，顺序不能换：
+  // 没解锁先解锁 → 这个币没钱就充值 → 有钱才真的下单。
+  const onSwapCta = () => {
+    if (isProcessing) return;
+    if (!isConnected) { setWalletPanel(hasWallet ? 'unlock' : 'create'); return; }
+    if (needTopUp) { setActiveTab('assets'); setTransferMode('receive'); return; }
+    handleAction();
+  };
+
+  const ctaLabel = isProcessing ? 'Processing…'
+    : !isConnected ? (hasWallet ? 'Unlock Wallet' : 'Create Wallet')
+      : needTopUp ? 'Top Up'
+        : 'Swap';
+
+  // 底部五个入口，顺序就是产品的主线：先看钱（Wallet）→ 看规则（Readme）
+  // → 干活（Trade）→ 查账（History）→ 找人（Contact）。
+  const TABS = [
+    {
+      id: 'assets', label: 'Wallet',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
+    },
+    {
+      id: 'readme', label: 'Readme',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /><path d="M12 9.5v8" /></svg>
+    },
+    {
+      id: 'trade', label: 'Trade',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20V5" /><path d="M3.5 8.5L7 5l3.5 3.5" /><path d="M17 4v15" /><path d="M20.5 15.5L17 19l-3.5-3.5" /></svg>
+    },
+    {
+      id: 'history', label: 'History',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3.2 1.9" /></svg>
+    },
+    {
+      id: 'contact', label: 'Contact',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+    }
+  ];
 
   return (
     <div style={{ ...FONT_STYLE, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', backgroundColor: '#f8fafc', color: '#1e293b' }}>
@@ -643,201 +795,265 @@ function App() {
             UFO<span style={{ color: '#3b82f6' }}> Wallet</span>
           </span>
         </div>
-        {/* 右上角：账户号 → 锁定 → 账户管理。
-            账户号只显示「是第几个」，不再显示地址尾号；地址只在账户管理里出现。 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+        {/* 右上角：Lock → Account N。
+            「Account 3」既是身份（是第几个账户，地址不显示）也是账户管理入口，
+            点它直接进账户面板；Lock 只做一件事：把私钥从内存里清掉。 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {isConnected ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '32px',
-                            background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
-                            padding: '0 clamp(6px, 1.8vw, 8px)', borderRadius: '16px', fontWeight: 700,
-                            fontSize: 'clamp(9.5px, 2.6vw, 11.5px)', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                Account {accountNo ?? '—'}
-              </div>
-              <button
-                onClick={lockWallet}
-                aria-label="Lock wallet"
-                title="Lock wallet"
-                style={HEAD_BTN}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
-                  <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
-                </svg>
-                Lock
-              </button>
-            </>
+            <button
+              onClick={lockWallet}
+              aria-label="Lock wallet"
+              title="Lock wallet"
+              style={SKY_BTN}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
+                <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+              </svg>
+              Lock
+            </button>
           ) : (
             <button
               onClick={() => setWalletPanel(hasWallet ? 'unlock' : 'create')}
               disabled={walletBusy}
-              style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                       background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
-                       padding: '8px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '12.5px',
-                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap',
-                       boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+              style={{ ...SKY_BTN, opacity: walletBusy ? 0.7 : 1, cursor: walletBusy ? 'wait' : 'pointer' }}
             >
               {walletBusy ? 'Working…' : hasWallet ? 'Unlock' : 'Create Wallet'}
             </button>
           )}
 
-          <button
-            onClick={() => setWalletPanel('accounts')}
-            aria-label="Accounts"
-            title="Accounts"
-            style={HEAD_BTN}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 7h10M4 12h16M4 17h7" />
-              <circle cx="18" cy="7" r="2.2" />
-              <circle cx="14" cy="17" r="2.2" />
-            </svg>
-            Accounts
-          </button>
+          {/* 账户入口在锁定时也在：点它先进 PIN，再看得到地址与私钥。
+              否则「锁上之后想切账户」就只剩重新解锁一条路。 */}
+          {hasWallet && accounts.length > 0 && (
+            <button
+              onClick={() => setWalletPanel('accounts')}
+              aria-label={`Account ${accountNo ?? ''} — manage accounts`}
+              title="Accounts"
+              style={SKY_BTN}
+            >
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff', display: 'inline-block', flexShrink: 0 }} />
+              Account {accountNo ?? '—'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 104px 20px', zIndex: 10 }}>
 
-        {activeTab === 'swap' && (
-          <div style={{ ...SUB_CARD, marginTop: '10px' }}>
-            <h3 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', marginBottom: '18px', lineHeight: 1.35 }}>Self-service issuance machine</h3>
+        {/* ================= 闪兑 ================= */}
+        {/* 版式与截图一致：两张灰卡、居中大数字、中间翻转钮、一颗天蓝主按钮。
+            差别只在文案（Instant Swap / Swap）和下方不抢留白的价格明细。 */}
+        {activeTab === 'trade' && (
+          <div style={{ marginTop: '2px' }}>
+
+            <div style={{ ...UI_FONT, textAlign: 'center', fontSize: '21px', fontWeight: 800,
+                          letterSpacing: '-0.5px', color: SWAP_TINT.ink, marginBottom: '16px' }}>
+              Instant Swap
+            </div>
 
             {currentPriceError && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', marginBottom: '16px', fontWeight: '600', color: '#ef4444' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            fontSize: '11px', marginBottom: '12px', fontWeight: 600, color: '#ef4444' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
                 {currentPriceError.message}
               </div>
             )}
 
-            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>You Pay</span>
-                <span>Balance: {isConnected ? ((isBuyingUFO ? tokenBalances[selectedStablecoin.symbol] : tokenBalances['UFO']) || '0.000000') : '0.000000'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <input
-                  type="number"
-                  value={inputAmount}
-                  onChange={e => setInputAmount(e.target.value)}
-                  placeholder="0.000000"
-                  style={{ ...FONT_STYLE, background: 'transparent', border: 'none', outline: 'none', fontSize: '28px', fontWeight: '700', color: '#1e293b', width: '100%' }}
-                />
-                <div
-                  onClick={() => { if (isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: isBuyingUFO ? 'pointer' : 'default' }}
-                >
-                  {isBuyingUFO ? (
-                    <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
-                  ) : (
-                    <><UfoIcon size={28} /><span>UFO</span></>
-                  )}
-                  {showTokenMenu && isBuyingUFO && (
+            {/* ---- 付款 ---- */}
+            <div style={{ background: SWAP_TINT.card, borderRadius: '22px', padding: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <div style={{ position: 'relative' }}>
+                  <TokenChip
+                    token={payToken}
+                    onClick={() => setShowTokenMenu(showTokenMenu === 'pay' ? '' : 'pay')}
+                  />
+                  {showTokenMenu === 'pay' && (
                     <TokenMenu
-                      mode="buy"
-                      coins={STABLECOINS}
-                      prices={stablecoinPrices}
-                      vaultBalances={vaultBalances}
-                      onClose={() => setShowTokenMenu(false)}
-                      onSelect={(coin) => { setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }}
+                      align="left"
+                      items={tokenMenuItems('pay')}
+                      onClose={() => setShowTokenMenu('')}
+                      onSelect={(it) => pickToken('pay', it)}
                     />
                   )}
                 </div>
+
+                <button
+                  onClick={setMax}
+                  disabled={payBal <= 0}
+                  title="Use the whole balance"
+                  style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                           display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0,
+                           background: 'transparent', border: 'none', padding: '4px 2px',
+                           cursor: payBal > 0 ? 'pointer' : 'default', lineHeight: 1 }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={SWAP_TINT.mute}
+                       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 8H5a2 2 0 0 0 0 4h11a2 2 0 0 1 0 4H4" /><path d="M17 5l3 3-3 3" />
+                  </svg>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: SWAP_TINT.mute,
+                                 fontVariantNumeric: 'tabular-nums' }}>
+                    {payBal.toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 700,
+                                 color: payBal > 0 ? SWAP_TINT.ink : SWAP_TINT.mute }}>
+                    Max
+                  </span>
+                </button>
               </div>
-              {errorMsg && <div style={{ color: '#ef4444', fontSize: '12px', fontWeight: '600', marginTop: '8px' }}>{errorMsg}</div>}
+
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                spellCheck={false}
+                value={inputAmount}
+                onChange={(e) => setInputAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder="0"
+                aria-label={`Amount of ${payToken.symbol}`}
+                style={{ ...UI_FONT, width: '100%', border: 'none', outline: 'none', background: 'transparent',
+                         textAlign: 'center', fontSize: '46px', fontWeight: 700, color: SWAP_TINT.ink,
+                         letterSpacing: '-1.5px', padding: '16px 0 4px', lineHeight: 1.1 }}
+              />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            fontSize: '12.5px', fontWeight: 600, color: SWAP_TINT.mute }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 4v13" /><path d="M4 14l3 3 3-3" /><path d="M17 20V7" /><path d="M14 10l3-3 3 3" />
+                </svg>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>${formatUsd(payUsd)}</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '-18px 0', position: 'relative', zIndex: 10 }}>
+            {/* ---- 翻转 ---- */}
+            <div style={{ position: 'relative', height: '28px', zIndex: 6 }}>
               <button
-                onClick={() => { setIsBuyingUFO(!isBuyingUFO); setInputAmount(''); setTxMsg(''); setErrorMsg(''); }}
+                onClick={flipDirection}
                 disabled={isProcessing}
-                style={{ background: '#fff', border: '4px solid #f8fafc', width: '48px', height: '48px', borderRadius: '50%', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: isProcessing ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.1)' }}
+                aria-label="Switch direction"
+                title="Switch direction"
+                style={{ position: 'absolute', left: '50%', top: '-8px', transform: 'translateX(-50%)',
+                         width: '44px', height: '44px', borderRadius: '50%',
+                         border: '1px solid #e6f8fd', background: '#fff', color: SWAP_TINT.ink,
+                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         cursor: isProcessing ? 'not-allowed' : 'pointer',
+                         boxShadow: '0 0 0 6px #eaf9fd, 0 6px 14px rgba(56,189,248,0.18)' }}
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20V4" /><path d="M3 8l4-4 4 4" /><path d="M17 4v16" /><path d="M21 16l-4 4-4-4" /></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 4v13" /><path d="M4 14l3 3 3-3" />
+                  <path d="M17 20V7" /><path d="M14 10l3-3 3 3" />
+                </svg>
               </button>
             </div>
 
-            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>
-                <span>You Receive</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ ...FONT_STYLE, fontSize: '28px', fontWeight: '700', color: '#3b82f6' }}>{outputAmount}</div>
-                <div
-                  onClick={() => { if (!isBuyingUFO) setShowTokenMenu(!showTokenMenu); }}
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', fontWeight: '700', cursor: !isBuyingUFO ? 'pointer' : 'default' }}
-                >
-                  {isBuyingUFO ? (
-                    <><UfoIcon size={28} /><span>UFO</span></>
-                  ) : (
-                    <><img src={selectedStablecoin.icon} style={{ width: 24, height: 24 }} alt={selectedStablecoin.symbol} /><span>{selectedStablecoin.symbol}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg></>
-                  )}
-                  {showTokenMenu && !isBuyingUFO && (
+            {/* ---- 收款 ---- */}
+            <div style={{ background: SWAP_TINT.card, borderRadius: '22px', padding: '20px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <div style={{ position: 'relative' }}>
+                  <TokenChip
+                    token={receiveToken}
+                    onClick={() => setShowTokenMenu(showTokenMenu === 'receive' ? '' : 'receive')}
+                  />
+                  {showTokenMenu === 'receive' && (
                     <TokenMenu
-                      mode="sell"
-                      coins={STABLECOINS}
-                      prices={stablecoinPrices}
-                      vaultBalances={vaultBalances}
-                      onClose={() => setShowTokenMenu(false)}
-                      onSelect={(coin) => { setSelectedStablecoin(coin); setShowTokenMenu(false); setInputAmount(''); }}
+                      align="left"
+                      items={tokenMenuItems('receive')}
+                      onClose={() => setShowTokenMenu('')}
+                      onSelect={(it) => pickToken('receive', it)}
                     />
                   )}
                 </div>
-              </div>
 
-              {!isBuyingUFO && parseFloat(inputAmount) > 0 && (
-                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>USDT Pool:</span>
-                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{Number(vaultBalances.USDT || 0).toFixed(2)}</span>
+                <div style={{ textAlign: 'right', minWidth: 0 }}>
+                  <div style={{ ...UI_FONT, fontSize: '17px', fontWeight: 700, lineHeight: 1.25,
+                                color: outNum > 0 ? SWAP_TINT.ink : SWAP_TINT.mute,
+                                fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all' }}>
+                    {outNum > 0 ? outputAmount : '—'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>USDC Pool:</span>
-                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{Number(vaultBalances.USDC || 0).toFixed(2)}</span>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: SWAP_TINT.mute, marginTop: '3px' }}>
+                    {outNum > 0 ? '≈ $' + formatUsd(outUsd) : '—'}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
-            <div style={{ marginTop: '20px', background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
-                <span>Pay Price</span>
-                <span>1 {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'} USD</span>
+            {errorMsg && (
+              <div style={{ marginTop: '12px', color: '#ef4444', fontSize: '12px', fontWeight: 600,
+                            textAlign: 'center', lineHeight: 1.55 }}>
+                {errorMsg}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
-                <span style={{ flexShrink: 0 }}>UFO Price (on-chain)</span>
-                <span style={{ textAlign: 'right' }}>
-                  1 UFO = ${currentNav.toFixed(4)} USD
-                  {navStatus === 'error' && <span style={{ marginLeft: 6 }}>(read failed)</span>}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
-                <span>{isBuyingUFO ? 'Issuance fee (0.5%)' : 'Burn fee (0.5%)'}</span>
-                <span>-{feeAmount} USD</span>
-              </div>
-
-            </div>
+            )}
 
             {txMsg && (
-              <div style={{ marginTop: '15px', padding: '10px', textAlign: 'center', background: txMsg.includes('cleared') ? '#ecfdf5' : '#eff6ff', color: txMsg.includes('cleared') ? '#10b981' : '#3b82f6', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold' }}>{txMsg}</div>
+              <div style={{ marginTop: '12px', padding: '10px', textAlign: 'center',
+                            background: txMsg.includes('cleared') ? '#ecfdf5' : '#eff6ff',
+                            color: txMsg.includes('cleared') ? '#10b981' : '#3b82f6',
+                            borderRadius: '12px', fontSize: '13px', fontWeight: 700 }}>
+                {txMsg}
+              </div>
             )}
 
             <button
-              onClick={handleAction}
-              disabled={isButtonDisabled}
-              style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isButtonDisabled ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isButtonDisabled ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isButtonDisabled ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}
+              onClick={onSwapCta}
+              disabled={swapDisabled}
+              style={{ ...UI_FONT, width: '100%', padding: '17px', marginTop: '18px',
+                       border: 'none', borderRadius: '30px',
+                       background: swapDisabled ? '#e9ecf1' : 'linear-gradient(180deg, #6BDCF0 0%, #4FCDE8 100%)',
+                       color: swapDisabled ? '#a8b0bd' : '#0b1220',
+                       fontSize: '17px', fontWeight: 800, letterSpacing: '0.2px',
+                       cursor: swapDisabled ? 'not-allowed' : 'pointer',
+                       boxShadow: swapDisabled ? 'none' : '0 10px 22px -10px rgba(79,205,232,0.95)' }}
             >
-              {isProcessing ? 'Processing...'
-                : !isConnected ? (hasWallet ? 'Unlock Wallet' : 'Create Wallet')
-                : (isBuyingUFO ? 'Issuance' : 'Burn')}
+              {ctaLabel}
             </button>
+
+            {/* 价格与手续费放在按钮下方：面板本身保持截图里的留白 */}
+            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px',
+                          fontSize: '12px', fontWeight: 600, color: SWAP_TINT.mute }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>Pay price</span>
+                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums' }}>
+                  1 {payToken.symbol} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>UFO price (on-chain)</span>
+                <span style={{ color: '#667085', fontVariantNumeric: 'tabular-nums' }}>
+                  1 UFO = ${currentNav.toFixed(4)}{navStatus === 'error' ? ' (read failed)' : ''}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>Fee (0.5%)</span>
+                <span style={{ color: inputNum > 0 ? '#ef4444' : SWAP_TINT.mute,
+                               fontVariantNumeric: 'tabular-nums' }}>
+                  {inputNum > 0 ? `-${feeAmount} USD` : '—'}
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
         {activeTab === 'assets' && (
-          <div style={{ marginTop: '10px' }}>
+          <div style={{ marginTop: '2px' }}>
+          {/* 总额：钱包页第一眼要看到「我这儿有多少钱」。
+              绿色是这套产品里表示「资产在账上」的颜色，与收发按钮区分开。 */}
+          <div style={{ padding: '12px 4px 18px' }}>
+            <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#94a3b8',
+                          letterSpacing: '0.9px', textTransform: 'uppercase' }}>
+              Total balance
+            </div>
+            <div style={{ marginTop: '4px', fontSize: '40px', fontWeight: 800, color: '#10b981',
+                          letterSpacing: '-1.6px', lineHeight: 1.12, fontVariantNumeric: 'tabular-nums',
+                          wordBreak: 'break-all' }}>
+              $ {formatUsd(totalUsd)}
+            </div>
+          </div>
+
           <div style={{ ...SUB_CARD }}>
             {/* 资产列表上方的两个动作。未连接时点了先走创建/解锁，
                 不在这里另做一套「请先连接钱包」的提示。 */}
@@ -974,7 +1190,7 @@ function App() {
             {history.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px auto' }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p style={{ fontSize: '14px' }}>Nothing yet. Each issuance you make will be written here.</p>
+                <p style={{ fontSize: '14px' }}>Nothing yet. Every swap you make will be written here.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1068,30 +1284,48 @@ function App() {
         )}
       </div>
 
-      {/* Bottom Nav：absolute 而非 fixed —— 相对 #root 停靠，
-          桌面宽屏下不会横跨整个视口（#root 有 max-width 480px） */}
+      {/* Bottom Nav：悬浮胶囊，与截图同款。
+           absolute 而非 fixed —— 相对 #root 停靠，桌面宽屏下不会横跨整个视口。 */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
+        position: 'absolute', bottom: '10px', left: '12px', right: '12px',
         display: 'flex', justifyContent: 'space-around', alignItems: 'center',
-        background: '#ffffff', borderTop: '1px solid #e2e8f0',
-        padding: '8px 0 16px 0', zIndex: 20
+        background: 'linear-gradient(180deg, #ffffff 0%, #edf0f4 100%)',
+        border: '1px solid rgba(255,255,255,0.9)',
+        borderRadius: '26px', padding: '7px 2px',
+        boxShadow: '0 14px 34px -14px rgba(15,23,42,0.3), 0 2px 6px rgba(15,23,42,0.04)',
+        zIndex: 20
       }}>
-        {[
-          { id: 'swap', label: 'Issuance', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg> },
-          { id: 'assets', label: 'Wallet', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
-          { id: 'readme', label: 'Readme', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /><path d="M12 9.5v8" /></svg> },
-          { id: 'history', label: 'History', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3.2 1.9" /></svg> },
-          { id: 'contact', label: 'Contact', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg> }
-        ].map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', color: activeTab === tab.id ? '#0969da' : '#57606a', flex: 1, cursor: 'pointer' }}
-          >
-            <div style={{ transform: activeTab === tab.id ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s' }}>{tab.icon}</div>
-            <span style={{ fontSize: '10px', fontWeight: activeTab === tab.id ? '600' : '500' }}>{tab.label}</span>
-          </div>
-        ))}
+        {TABS.map((tab) => {
+          const on = activeTab === tab.id;
+          return (
+            <div
+              key={tab.id}
+              role="button"
+              tabIndex={0}
+              aria-label={tab.label}
+              aria-current={on ? 'page' : undefined}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id); }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                       justifyContent: 'center', gap: '3px', cursor: 'pointer', padding: '2px 0',
+                       WebkitTapHighlightColor: 'transparent' }}
+            >
+              <div style={{
+                width: '38px', height: '38px', borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: on ? '#111827' : 'transparent',
+                color: on ? '#ffffff' : '#a4adb8',
+                transition: 'background 0.18s ease, color 0.18s ease'
+              }}>
+                {tab.icon}
+              </div>
+              <span style={{ fontSize: '10.5px', fontWeight: on ? 800 : 600,
+                             color: on ? '#111827' : '#a4adb8', letterSpacing: '-0.1px' }}>
+                {tab.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       <TransferSheet

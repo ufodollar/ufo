@@ -1,20 +1,29 @@
 import React from 'react';
 
 /* ============================================================
-   🪙 TokenMenu — 兑换页的代币下拉菜单
-   买/卖两侧原本各抄了一份几乎相同的 JSX，其中一份还会在
-   vaultBalances 缺字段时直接 .toFixed() 抛错。这里合并成一处，
-   差异只有右侧那一列：买入显示稳定币报价，卖出显示池内可用量。
+   🪙 TokenMenu — 闪兑面板的代币菜单
+   两侧胶囊共用一份：调用方把「这一侧能换成什么」算好传进来
+   （items: { symbol, icon, meta, selected }），这里只负责画。
+   之前 meta 文案按 mode 在组件里分支，UFO 混进来之后那种写法
+   会把稳定币的报价贴到 UFO 上去，所以改成由调用方给。
    ============================================================ */
-export default function TokenMenu({ coins, prices, vaultBalances, mode, onSelect, onClose }) {
+
+const UfoMark = ({ size = 20 }) => (
+  <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" style={{ flexShrink: 0 }}>
+    <path d="M 25 52 C 25 15, 75 15, 75 52 Z" fill="#dbeafe" stroke="#3b82f6" strokeWidth="5" />
+    <ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" />
+    <circle cx="35" cy="55" r="4.5" fill="#fff" />
+    <circle cx="50" cy="57" r="4.5" fill="#fff" />
+    <circle cx="65" cy="55" r="4.5" fill="#fff" />
+  </svg>
+);
+
+export default function TokenMenu({ items = [], align = 'left', onSelect, onClose }) {
   return (
     <>
       {/* 全屏透明层：点页面任意位置关闭菜单，避免菜单挡住下方区域后无法操作 */}
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent' }}
       />
 
@@ -22,61 +31,47 @@ export default function TokenMenu({ coins, prices, vaultBalances, mode, onSelect
         style={{
           position: 'absolute',
           top: '100%',
-          right: 0,
-          marginTop: '8px',
-          minWidth: '190px',
+          ...(align === 'right' ? { right: 0 } : { left: 0 }),
+          marginTop: '10px',
+          minWidth: '208px',
           background: '#fff',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          boxShadow: '0 16px 40px -12px rgba(16,24,40,0.28)',
+          border: '1px solid #eef2f6',
           zIndex: 100,
           overflow: 'hidden',
         }}
       >
-        {coins.map((coin) => {
-          const price = prices ? prices[coin.symbol] : null;
-          const failed = !!(prices && prices.errors && prices.errors.some((e) => e.token === coin.symbol));
-          const pool = (vaultBalances && vaultBalances[coin.symbol]) || 0;
-
-          const meta =
-            mode === 'buy'
-              ? failed
-                ? 'Feed down · $1.00'
-                : price
-                  ? `≈ $${price.priceFloat.toFixed(4)}`
-                  : '—'
-              : `Vault ${pool.toFixed(2)}`;
-
-          return (
-            <div
-              key={coin.symbol}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect(coin);
-              }}
+        {items.map((it) => (
+          <div
+            key={it.symbol}
+            onClick={(e) => { e.stopPropagation(); onSelect(it); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '9px',
+              padding: '12px 14px',
+              cursor: 'pointer',
+              background: it.selected ? '#f6f8fa' : '#fff',
+              borderBottom: '1px solid #f4f6f8',
+            }}
+          >
+            {it.icon === 'UFO'
+              ? <UfoMark size={20} />
+              : <img src={it.icon} style={{ width: 20, height: 20, borderRadius: '50%' }} alt="" />}
+            <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>{it.symbol}</span>
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 16px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f1f5f9',
+                fontSize: '11.5px',
+                marginLeft: 'auto',
+                fontWeight: 600,
+                color: it.selected ? '#38bdf8' : '#98a2b3',
               }}
             >
-              <img src={coin.icon} style={{ width: 20, height: 20 }} alt={coin.symbol} />
-              <span style={{ fontSize: '14px', color: '#1e293b' }}>{coin.symbol}</span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  marginLeft: 'auto',
-                  color: failed ? '#ef4444' : '#94a3b8',
-                }}
-              >
-                {meta}
-              </span>
-            </div>
-          );
-        })}
+              {it.selected ? 'Selected' : it.meta}
+            </span>
+          </div>
+        ))}
       </div>
     </>
   );

@@ -53,13 +53,13 @@ export default function GuideTab() {
         <Cl n="1.2">
           <b>Statement.</b> UFO is issued by users themselves.
           <div style={{ marginTop: '7px' }}>
-            <b>Issuance.</b> You deposit USDT or USDC into the self-service
-            issuance machine, click the “Issuance” button, and the tokens are
+            <b>Issuance.</b> You deposit USDT or USDC in the Instant Swap
+            panel on the Trade page, confirm the swap, and the tokens are
             minted to your wallet address.
           </div>
           <div style={{ marginTop: '7px' }}>
-            <b>Burn.</b> After you burn UFO with the self-service issuance
-            machine, you obtain USDT or USDC.
+            <b>Burn.</b> After you swap UFO back through the same panel, you
+            obtain USDT or USDC.
           </div>
         </Cl>
 
@@ -85,7 +85,7 @@ export default function GuideTab() {
         <Note>
           <b>Note:</b> whoever holds UFO can burn it, and the contract has no
           power to freeze any UFO. Both issuance and burning require a 0.5%
-          issuance / burn fee, paid to the self-service issuance machine.
+          issuance / burn fee, paid into the Vault.
         </Note>
       </Card>
 

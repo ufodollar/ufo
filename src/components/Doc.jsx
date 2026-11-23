@@ -52,7 +52,9 @@ export const Cl = ({ n, children }) => (
     >
       {n}
     </span>
-    <p
+    {/* 用 div 不用 p：条款里允许嵌小段落，p 里再放 div 是非法嵌套，
+        浏览器会把 p 提前闭合，版式与语义都会歪 */}
+    <div
       style={{
         margin: 0,
         fontSize: '13.5px',
@@ -61,7 +63,7 @@ export const Cl = ({ n, children }) => (
       }}
     >
       {children}
-    </p>
+    </div>
   </div>
 );
 

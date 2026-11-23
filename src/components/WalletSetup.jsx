@@ -52,6 +52,31 @@ const chip = (tone) => ({
   fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2, cursor: 'pointer', whiteSpace: 'nowrap'
 });
 
+// 账户卡的底色按编号轮换：白字始终压在渐变上，不依赖主题色
+const CARD_TINTS = [
+  'linear-gradient(135deg, #7C6BFF 0%, #A855F7 100%)',
+  'linear-gradient(135deg, #22D3EE 0%, #0E8FE8 100%)',
+  'linear-gradient(135deg, #F59E0B 0%, #F43F5E 100%)',
+  'linear-gradient(135deg, #10B981 0%, #0EA5E9 100%)'
+];
+
+// 渐变卡上的按钮：半透明白 + 白字。实心白块会盖掉卡片本身的颜色
+const glassChip = {
+  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+  padding: '7px 10px', borderRadius: '9px',
+  border: '1px solid rgba(255,255,255,0.45)',
+  background: 'rgba(255,255,255,0.16)',
+  color: '#fff', fontSize: '11.5px', fontWeight: 700,
+  lineHeight: 1.2, cursor: 'pointer', whiteSpace: 'nowrap'
+};
+
+const glassDanger = {
+  ...glassChip,
+  border: '1px solid rgba(255,214,214,0.55)',
+  background: 'rgba(255,255,255,0.10)',
+  color: '#FFE4E6'
+};
+
 /** 老 WebView 里 navigator.clipboard 常常不存在，必须留 execCommand 兜底 */
 async function copyText(text) {
   try {
@@ -98,6 +123,27 @@ export default function WalletSetup({
   const needGate = !unlocked;
   // 是不是在给这个 vault 设第一个 PIN（决定文案：设置 vs 输入）
   const settingPin = !hasWallet;
+
+  // 账户面板用彩色渐变底；PIN、私钥这些表单仍留在白底上，对比度更稳。
+  // 渐变里的文字色集中在这里算，避免散落成一堆魔法值。
+  const themed = mode === 'accounts';
+  const hint = {
+    fontSize: '12.5px',
+    color: themed ? 'rgba(255,255,255,0.9)' : '#64748b',
+    lineHeight: 1.65,
+    marginTop: '8px'
+  };
+  const lbl = { ...label, color: themed ? 'rgba(255,255,255,0.7)' : label.color };
+  const ghost = themed
+    ? { ...ghostBtn, color: '#fff', background: 'rgba(255,255,255,0.14)', borderRadius: '12px' }
+    : ghostBtn;
+  // 渐变底上的主按钮反过来做：白底、深色字。蓝底压紫蓝渐变会糊成一片
+  const primary = (disabled) => (themed
+    ? { ...primaryBtn(disabled),
+        background: disabled ? 'rgba(255,255,255,0.55)' : '#fff',
+        color: disabled ? 'rgba(15,23,42,0.45)' : '#1d4ed8',
+        boxShadow: disabled ? 'none' : '0 10px 24px -14px rgba(15,23,42,0.6)' }
+    : primaryBtn(disabled));
 
   useEffect(() => {
     if (!open) return;
@@ -272,15 +318,19 @@ export default function WalletSetup({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#fff', width: '100%', maxWidth: '420px',
+          background: themed
+            ? 'linear-gradient(155deg, #6D5DF6 0%, #4F4CE8 30%, #2C8FE8 66%, #22D3EE 100%)'
+            : '#fff',
+          width: '100%', maxWidth: '420px',
           borderRadius: '24px', padding: '22px 20px',
           boxShadow: '0 20px 60px rgba(15,23,42,0.28)',
           maxHeight: '88vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-          color: '#1e293b'
+          color: themed ? '#fff' : '#1e293b'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-          <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3 }}>
+          <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3,
+                        color: themed ? '#fff' : '#1e293b' }}>
             {title}
           </div>
           {!lockOverlay && (
@@ -289,7 +339,8 @@ export default function WalletSetup({
               aria-label="Close"
               style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
                        width: '30px', height: '30px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                       background: '#f1f5f9', color: '#64748b', fontSize: '16px', padding: 0 }}
+                       background: themed ? 'rgba(255,255,255,0.18)' : '#f1f5f9',
+                       color: themed ? '#fff' : '#64748b', fontSize: '16px', padding: 0 }}
             >
               ×
             </button>
@@ -299,7 +350,7 @@ export default function WalletSetup({
         {/* ---------------- PIN ---------------- */}
         {step === 'pin' && (
           <>
-            <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
+            <div style={hint}>
               {mode === 'create' && !settingPin
                 ? 'Enter your wallet PIN. The new account is added to this same wallet.'
                 : mode === 'create'
@@ -327,7 +378,7 @@ export default function WalletSetup({
             <button
               onClick={mode === 'create' ? doGenerate : doGate}
               disabled={busy || !pinOk}
-              style={{ ...primaryBtn(busy || !pinOk), marginTop: '16px' }}
+              style={{ ...primary(busy || !pinOk), marginTop: '16px' }}
             >
               {busy ? 'Working…'
                 : mode === 'create' ? (settingPin ? 'Generate wallet' : 'Add account') : 'Unlock'}
@@ -341,7 +392,7 @@ export default function WalletSetup({
             )}
 
             {mode === 'unlock' && (
-              <button onClick={onClose} style={{ ...ghostBtn, marginTop: '6px' }}>Cancel</button>
+              <button onClick={onClose} style={{ ...ghost, marginTop: '6px' }}>Cancel</button>
             )}
           </>
         )}
@@ -349,12 +400,12 @@ export default function WalletSetup({
         {/* ---------------- 导入 ---------------- */}
         {step === 'form' && mode === 'import' && (
           <>
-            <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
+            <div style={hint}>
               Paste a 64-character private key (0x optional). It is encrypted with your PIN and
               stored on this device only.
             </div>
 
-            <div style={{ ...label, marginTop: '16px', marginBottom: '6px' }}>Private key</div>
+            <div style={{ ...lbl, marginTop: '16px', marginBottom: '6px' }}>Private key</div>
             <textarea
               value={keyInput}
               onChange={(e) => { setKeyInput(e.target.value); setErr(''); }}
@@ -370,7 +421,7 @@ export default function WalletSetup({
 
             {needGate && (
               <>
-                <div style={{ ...label, marginTop: '14px', marginBottom: '6px' }}>
+                <div style={{ ...lbl, marginTop: '14px', marginBottom: '6px' }}>
                   {settingPin ? 'Choose a 6-digit PIN' : 'Wallet PIN'}
                 </div>
                 <input
@@ -392,12 +443,12 @@ export default function WalletSetup({
             <button
               onClick={doImport}
               disabled={busy || !keyInput.trim() || (needGate && !pinOk)}
-              style={{ ...primaryBtn(busy || !keyInput.trim() || (needGate && !pinOk)), marginTop: '16px' }}
+              style={{ ...primary(busy || !keyInput.trim() || (needGate && !pinOk)), marginTop: '16px' }}
             >
               {busy ? 'Importing…' : 'Import account'}
             </button>
 
-            <button onClick={onClose} style={{ ...ghostBtn, marginTop: '6px' }}>Cancel</button>
+            <button onClick={onClose} style={{ ...ghost, marginTop: '6px' }}>Cancel</button>
           </>
         )}
 
@@ -412,7 +463,7 @@ export default function WalletSetup({
 
             {shownAddress && (
               <div style={{ marginTop: '12px' }}>
-                <div style={label}>Address</div>
+                <div style={lbl}>Address</div>
                 <div style={{ marginTop: '4px', padding: '10px 11px', borderRadius: '10px',
                               background: '#f8fafc', border: '1px solid #e2e8f0',
                               fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
@@ -423,7 +474,7 @@ export default function WalletSetup({
             )}
 
             <div style={{ marginTop: '14px' }}>
-              <div style={{ ...label, marginBottom: '6px' }}>Private key</div>
+              <div style={{ ...lbl, marginBottom: '6px' }}>Private key</div>
               <div style={{ padding: '12px', borderRadius: '12px', background: '#0f172a',
                             fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '12px',
                             lineHeight: 1.7, color: '#f8fafc', wordBreak: 'break-all',
@@ -432,7 +483,7 @@ export default function WalletSetup({
               </div>
             </div>
 
-            <button onClick={doCopy} style={{ ...primaryBtn(false), marginTop: '12px' }}>
+            <button onClick={doCopy} style={{ ...primary(false), marginTop: '12px' }}>
               {copied === 'ok' ? 'Copied to clipboard' : copied === 'fail' ? 'Select the key and copy it manually' : 'Copy private key'}
             </button>
 
@@ -462,7 +513,7 @@ export default function WalletSetup({
               Account imported and now active. Its key is encrypted on this device with your PIN.
             </div>
             <div style={{ marginTop: '12px' }}>
-              <div style={label}>Address</div>
+              <div style={lbl}>Address</div>
               <div style={{ marginTop: '4px', padding: '10px 11px', borderRadius: '10px',
                             background: '#f8fafc', border: '1px solid #e2e8f0',
                             fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
@@ -470,14 +521,14 @@ export default function WalletSetup({
                 {shownAddress}
               </div>
             </div>
-            <button onClick={onClose} style={{ ...primaryBtn(false), marginTop: '16px' }}>Done</button>
+            <button onClick={onClose} style={{ ...primary(false), marginTop: '16px' }}>Done</button>
           </>
         )}
 
         {/* ---------------- 查看私钥：先验证 PIN ---------------- */}
         {step === 'viewgate' && (
           <>
-            <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
+            <div style={hint}>
               Enter your 6-digit PIN to reveal the private key of Account {noOf(target) ?? '—'}.
               Make sure nobody is looking at your screen.
             </div>
@@ -505,11 +556,11 @@ export default function WalletSetup({
             {err && <ErrBox>{err}</ErrBox>}
 
             <button onClick={doReveal} disabled={busy || pin.length < 6}
-              style={{ ...primaryBtn(busy || pin.length < 6), marginTop: '16px' }}>
+              style={{ ...primary(busy || pin.length < 6), marginTop: '16px' }}>
               {busy ? 'Working…' : 'Reveal key'}
             </button>
             <button onClick={() => { setErr(''); setPin(''); setStep('list'); }}
-              style={{ ...ghostBtn, marginTop: '6px' }}>
+              style={{ ...ghost, marginTop: '6px' }}>
               Back to accounts
             </button>
           </>
@@ -525,7 +576,7 @@ export default function WalletSetup({
             </div>
 
             <div style={{ marginTop: '12px' }}>
-              <div style={label}>Account {noOf(target) ?? '—'}</div>
+              <div style={lbl}>Account {noOf(target) ?? '—'}</div>
               <div style={{ marginTop: '4px', padding: '10px 11px', borderRadius: '10px',
                             background: '#f8fafc', border: '1px solid #e2e8f0',
                             fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
@@ -537,7 +588,7 @@ export default function WalletSetup({
             {err && <ErrBox>{err}</ErrBox>}
 
             <button onClick={doDelete} disabled={busy}
-              style={{ ...primaryBtn(false), marginTop: '16px', background: '#dc2626', boxShadow: '0 4px 14px rgba(220,38,38,0.25)' }}>
+              style={{ ...primary(false), marginTop: '16px', background: '#dc2626', boxShadow: '0 4px 14px rgba(220,38,38,0.25)' }}>
               {busy ? 'Deleting…' : 'Delete account'}
             </button>
             <button onClick={() => { setTarget(null); setErr(''); setStep('list'); }}
@@ -550,53 +601,56 @@ export default function WalletSetup({
         {/* ---------------- 账户管理 ---------------- */}
         {step === 'list' && mode === 'accounts' && (
           <>
-            <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
-              Switching changes which account signs issuance and burn transactions.
+            <div style={hint}>
+              Switching changes which account signs swap transactions.
             </div>
 
             {accounts.length === 0 ? (
               <div style={{ marginTop: '16px', padding: '22px 14px', textAlign: 'center',
-                            border: '1px dashed #cbd5e1', borderRadius: '14px',
-                            fontSize: '12.5px', color: '#64748b', lineHeight: 1.7 }}>
+                            border: '1px dashed rgba(255,255,255,0.45)', borderRadius: '16px',
+                            fontSize: '12.5px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
                 No account on this device yet.
               </div>
             ) : (
-              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '11px' }}>
                 {accounts.map((a) => {
                   const isActive = a.id === activeId;
+                  // 底色由账户编号决定：删掉账户 1 之后，账户 2 的颜色不跟着变。
+                  const tint = CARD_TINTS[(Math.max(a.no, 1) - 1) % CARD_TINTS.length];
                   return (
-                    <div key={a.id} style={{ border: '1px solid ' + (isActive ? '#bfdbfe' : '#e2e8f0'),
-                                             background: isActive ? '#f5f9ff' : '#fff',
-                                             borderRadius: '14px', padding: '12px' }}>
+                    <div key={a.id} style={{ background: tint, borderRadius: '16px', padding: '13px 13px 11px',
+                                             boxShadow: isActive
+                                               ? '0 0 0 2px rgba(255,255,255,0.95), 0 10px 24px -12px rgba(15,23,42,0.55)'
+                                               : '0 8px 20px -14px rgba(15,23,42,0.5)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff', letterSpacing: '0.2px' }}>
                           Account {a.no}
                         </span>
                         {isActive ? (
-                          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 700, color: '#1d4ed8',
-                                         background: '#dbeafe', borderRadius: '20px', padding: '4px 9px' }}>
+                          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 800, color: '#4338ca',
+                                         background: '#fff', borderRadius: '20px', padding: '4px 9px' }}>
                             Active
                           </span>
                         ) : (
-                          <button onClick={() => doSwitch(a.id)} disabled={busy} style={chip()}>
+                          <button onClick={() => doSwitch(a.id)} disabled={busy} style={glassChip}>
                             Switch
                           </button>
                         )}
                       </div>
 
-                      <div style={{ marginTop: '7px', fontFamily: 'ui-monospace, Menlo, monospace',
-                                    fontSize: '11px', lineHeight: 1.6, color: '#475569', wordBreak: 'break-all',
-                                    userSelect: 'all', WebkitUserSelect: 'all' }}>
+                      <div style={{ marginTop: '8px', fontFamily: 'ui-monospace, Menlo, monospace',
+                                    fontSize: '11px', lineHeight: 1.6, color: 'rgba(255,255,255,0.92)',
+                                    wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>
                         {a.address}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '7px', marginTop: '10px' }}>
+                      <div style={{ display: 'flex', gap: '7px', marginTop: '11px' }}>
                         <button onClick={() => { setTarget(a.id); setErr(''); setPin(''); setSecret(''); setCopied(''); setStep('viewgate'); }}
-                                style={chip()}>
+                                style={glassChip}>
                           View private key
                         </button>
                         <button onClick={() => { setTarget(a.id); setErr(''); setStep('confirm'); }}
-                                style={chip('danger')}>
+                                style={glassDanger}>
                           Delete
                         </button>
                       </div>
@@ -614,7 +668,7 @@ export default function WalletSetup({
             <button onClick={() => onNavigate && onNavigate('import')} style={{ ...secBtn, marginTop: '8px' }}>
               Import private key
             </button>
-            <button onClick={onClose} style={{ ...ghostBtn, marginTop: '6px' }}>Close</button>
+            <button onClick={onClose} style={{ ...ghost, marginTop: '6px' }}>Close</button>
           </>
         )}
       </div>
