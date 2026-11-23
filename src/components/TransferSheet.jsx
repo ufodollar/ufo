@@ -108,6 +108,7 @@ export default function TransferSheet({
   const [done, setDone] = useState(null);   // { hash, symbol, amount, to }
   const [copied, setCopied] = useState('');
   const [qr, setQr] = useState(null);       // { n, d }
+  const [qrErr, setQrErr] = useState(false);
 
   // 每次重新打开都回到初始态：上一次的成功页 / 报错不该跟着进来
   useEffect(() => {
@@ -123,8 +124,9 @@ export default function TransferSheet({
 
   // 二维码在本地画。qrcode-generator 只在真正打开接收页时才下载。
   useEffect(() => {
-    if (mode !== 'receive' || !address) { setQr(null); return undefined; }
+    if (mode !== 'receive' || !address) { setQr(null); setQrErr(false); return undefined; }
     let alive = true;
+    setQrErr(false);
     import('qrcode-generator')
       .then((m) => {
         if (!alive) return;
@@ -141,7 +143,7 @@ export default function TransferSheet({
         }
         setQr({ n, d: parts.join('') });
       })
-      .catch(() => setQr(null));
+      .catch(() => { if (alive) { setQr(null); setQrErr(true); } });
     return () => { alive = false; };
   }, [mode, address]);
 
@@ -229,6 +231,12 @@ export default function TransferSheet({
                     <rect width={qr.n} height={qr.n} fill="#fff" />
                     <path d={qr.d} fill="#0f172a" />
                   </svg>
+                ) : qrErr ? (
+                  <div style={{ width: '196px', height: '196px', display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', color: '#b91c1c', fontSize: '12px',
+                                textAlign: 'center', lineHeight: 1.6, padding: '0 16px' }}>
+                    QR code could not be rendered here. Use the address below.
+                  </div>
                 ) : (
                   <div style={{ width: '196px', height: '196px', display: 'flex', alignItems: 'center',
                                 justifyContent: 'center', color: '#94a3b8', fontSize: '12px' }}>
