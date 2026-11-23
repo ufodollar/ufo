@@ -147,7 +147,7 @@ export function walletList() {
       //
       // 三个独立的错，都在 url 这条参数上：
       //
-      //   1. https://link.trustwallet.com —— 该域名在这条网络下 DNS 只返回
+      //   1. https://link.trustwallet.com —— 该域名在本网络下 DNS 只返回
       //      IPv6（2001::a27d:2006），TLS 握手直接失败，实测 code=000。
       //      而 Trust 注册了这个域名的 App Links：系统把链接交给 App 后，
       //      App 仍要拿这个 URL 去加载 —— 连不上，就是白屏。
@@ -162,9 +162,15 @@ export function walletList() {
       //      自动连接本来也不需要这个标记：页面检测到 window.ethereum
       //      就会自己走 eth_requestAccounts（见 useWallet.js 的 inWalletBrowser）。
       //
+      //   4. coin_id 是「进 App 后先停在哪个网络」，不是装饰参数。
+      //      SLIP-44：60 = Ethereum，714 = BNB。写 60 会让 DApp 浏览器落在
+      //      以太坊主网，我们的页面随后要再弹一次 wallet_switchEthereumChain
+      //      求用户切到 BSC —— 多一道确认，多一次被拒的机会。写 714 直接
+      //      落在 BNB Smart Chain，页面加载完就能签名。
+      //
       // 官方文档注明 DApp 浏览器是 Android Only —— iOS 版已移除该功能，
       // 所以 iOS 上不显示这个入口（noBrowser）。
-      url: `trust://open_url?coin_id=60&url=${currentUrl().replace(/\/+$/, '')}`,
+      url: `trust://open_url?coin_id=714&url=${currentUrl().replace(/\/+$/, '')}`,
       fallback: 'https://trustwallet.com/download',
       direct: true,
       scheme: true,

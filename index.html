@@ -162,6 +162,78 @@
         if (typeof structuredClone !== 'function') {
           window.structuredClone = function (v) { return JSON.parse(JSON.stringify(v)); };
         }
+
+        // ------------------------------------------------------------------
+        // 下面四个是「构建期查不出来」的那一类：
+        // esbuild 只降语法（?. / ?? / class fields），从不替换运行时 API。
+        // 源码里 Object.hasOwn(...) 写起来和 obj.hasOwnProperty 没区别，
+        // 但它在 Chrome 93 才落地。Trust 的 WebView 停在 70–79，一调用
+        // 就是 TypeError，整个 bundle 在那一行中止 —— 页面白屏，
+        // 而构建日志里一个字都不会提。上一轮只垫了语法和 5 个 API，
+        // 漏掉的正是这几个，所以「修完语法还白」并不奇怪。
+        // ------------------------------------------------------------------
+
+        // Chrome 93。SDK 里成片使用，用来替代 hasOwnProperty.call。
+        if (typeof Object.hasOwn !== 'function') {
+          Object.hasOwn = function (obj, key) {
+            return Object.prototype.hasOwnProperty.call(Object(obj), key);
+          };
+        }
+
+        // Chrome 97
+        if (typeof Array.prototype.findLast !== 'function') {
+          Array.prototype.findLast = function (fn, thisArg) {
+            for (var i = this.length - 1; i >= 0; i--) {
+              if (fn.call(thisArg, this[i], i, this)) return this[i];
+            }
+            return undefined;
+          };
+        }
+        if (typeof Array.prototype.findLastIndex !== 'function') {
+          Array.prototype.findLastIndex = function (fn, thisArg) {
+            for (var i = this.length - 1; i >= 0; i--) {
+              if (fn.call(thisArg, this[i], i, this)) return i;
+            }
+            return -1;
+          };
+        }
+
+        // Chrome 92。负下标要能绕回尾部 —— WalletConnect 内部用 at(-1) 取
+        // 最新一条历史记录，返回 undefined 会让它自己走进异常分支。
+        if (typeof Array.prototype.at !== 'function') {
+          Array.prototype.at = function (i) {
+            var n = this.length;
+            var k = Math.trunc(i) || 0;
+            if (k < 0) k += n;
+            return (k < 0 || k >= n) ? undefined : this[k];
+          };
+        }
+        if (typeof String.prototype.at !== 'function') {
+          String.prototype.at = function (i) {
+            var s = String(this);
+            var n = s.length;
+            var k = Math.trunc(i) || 0;
+            if (k < 0) k += n;
+            return (k < 0 || k >= n) ? undefined : s.charAt(k);
+          };
+        }
+
+        // Chrome 92。SDK 拿它生成请求 id / 会话 id，缺了直接抛。
+        // 只在安全上下文里有 randomUUID，顺手补一个等价实现。
+        try {
+          if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
+            crypto.randomUUID = function () {
+              var b = new Uint8Array(16);
+              crypto.getRandomValues(b);
+              b[6] = (b[6] & 0x0f) | 0x40; // version 4
+              b[8] = (b[8] & 0x3f) | 0x80; // variant 10
+              var h = [];
+              for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+              return h.slice(0, 4).join('') + '-' + h.slice(4, 6).join('') + '-' +
+                h.slice(6, 8).join('') + '-' + h.slice(8, 10).join('') + '-' + h.slice(10, 16).join('');
+            };
+          }
+        } catch (e) { /* 极老的 WebView 没有 crypto，交给调用处失败 */ }
       })();
     </script>
     <script>
