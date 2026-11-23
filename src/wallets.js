@@ -128,13 +128,12 @@ export function walletList() {
   return [
     {
       id: 'metamask', name: 'MetaMask', direct: true,
-      // 走 MetaMask Connect（src/metamaskconnect.js），和 OKX 同一条思路：
-      // 浏览器里发起会话 → App 弹「连接」→ 确认后自动跳回本页。
-      // 不经过 WalletConnect，用的是 MetaMask 自家的 multichain 中继。
+      // 走 universal link 进 MetaMask 内置浏览器，落地即自动授权。
       //
-      // 下面这条 Branch 链接保留为兜底：SDK 加载失败或会话建不起来时，
-      // WalletPicker 会退回它，至少把用户送进 MetaMask 的内置浏览器。
-      connect: 'mm',
+      // 曾经接过 @metamask/connect-evm（自家中继 socket.api.cx.metamask.io），
+      // 真机结论：中继在本网络下不可达，App 被拉起但停在首页、不弹确认；
+      // 若钱包还停在新手引导（截图里的「1/2 步」），任何 deeplink 都不会
+      // 进 DApp 浏览器。私有通道在两条上都输了，于是退回这条不依赖中继的路。
       url: `https://metamask.app.link/dapp/${bare}`,
       fallback: 'https://metamask.io/download/'
     },

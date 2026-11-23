@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
 import { getWcUri } from '../wclink';
-import { runNetcheck } from '../netcheck';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
 
@@ -25,48 +24,18 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   // WalletConnect 的「手动打开」链接。只在自动跳转不可靠时出现 ——
   // 用户点它是一个全新的用户手势，浏览器不会再拦。
   const [manualOpen, setManualOpen] = useState(null);
-  // 网络自检结果。null = 没跑过；{running:true} = 正在跑；否则是 runNetcheck 的返回值。
-  const [check, setCheck] = useState(null);
-  // 明细是否展开。默认收起：常态只留一行结论，面板才不至于被挤满。
-  const [expanded, setExpanded] = useState(false);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
   // 直接退回该钱包的内置浏览器 —— 否则用户每点一次都要白等一轮。
   const wcBroken = useRef(new Set());
-  // 本次打开是否已经自动跑过自检。用 ref 而不是靠 check 判断：
-  // 后者会让 effect 在 setCheck 之后重入，cleanup 把结果吃掉。
-  const ranCheck = useRef(false);
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); setExpanded(false); ranCheck.current = false; return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
-
-  // 面板一打开就静默跑一次网络自检。
-  //
-  // 之前把入口做成了「点一下才跑」，结果没人点 —— 但这几个通道通不通，
-  // 恰恰是「为什么点钱包连不上」的唯一答案。与其等用户去发现一行小字，
-  // 不如默认就把结论摆出来。
-  //
-  // ★ 必须放在 `if (!open) return null` 之前。
-  //   提前 return 会让下面所有 hook 在 open=false 的那几次渲染里被跳过，
-  //   等 open 变 true 时 hook 数量对不上，React 直接抛错、整页进错误兜底。
-  //
-  // ★ 依赖里绝不能放 check：一旦 setCheck({running:true})，React 会先执行
-  //   上一轮的 cleanup 把 alive 置 false，随后结果回来就被丢掉 ——
-  //   界面永远停在「Checking…」。用 ref 防重入，用 open 当唯一触发条件。
-  useEffect(() => {
-    if (!open || !mobile || ranCheck.current) return;
-    ranCheck.current = true;
-    setCheck({ running: true });
-    runNetcheck({ timeoutMs: 5000 })
-      .then(setCheck)
-      // 失败也给一个非空状态：若置回 null，下次打开又要白等一轮
-      .catch((e) => setCheck({ error: String((e && e.message) || 'The check could not run.') }));
-  }, [open, mobile]);
 
   if (!open) return null;
 
@@ -214,53 +183,55 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
       return;
     }
 
-    // direct:false 的钱包只能拉起 App，不能自带 URL（Trust 属于这一类）。
-    // 它需要用户粘贴一次，所以先把链接放进剪贴板。
+    // 所有钱包都先把链接放进剪贴板，并且都准备一份「没跳走」的退路。
     //
-    // 不加 await：复制是异步的，但跳转不能等它 —— 用户点完要立刻有反应。
-    // 复制必须在手势的同步调用栈里发起，浏览器才认为这是用户意图。
-    if (!wallet.direct) {
-      setPasteUrl(wallet.target);
-      // 指引立刻显示，不等复制结果。clipboard 在部分 WebView 里会静默失败，
-      // 若只在 then 里设 hint，用户就只剩一句 Opening…，不知道该干什么。
-      if (wallet.pasteHint) setHint(wallet.pasteHint);
-      try {
-        navigator.clipboard.writeText(wallet.target)
-          .then(() => setCopied(true))
-          .catch(() => {});
-      } catch (e) { /* 不支持剪贴板时，下面展示的完整链接仍可手动复制 */ }
-    }
+    // 为什么连 direct:true 的也要复制：真机上最常见的失败不是「跳错了」，
+    // 而是「根本没跳」——App 没装、App Links 没注册、或 App 还停在新手引导里
+    // （MetaMask 未完成创建时就是这种，截图里那个「1/2 步」正是）。
+    // 这种情况下页面一动不动，用户手上什么也没有；先给他链接，他就能自己走。
+    setPasteUrl(wallet.target);
+    if (wallet.pasteHint) setHint(wallet.pasteHint);
+    try {
+      navigator.clipboard.writeText(wallet.target).then(() => setCopied(true)).catch(() => {});
+    } catch (e) { /* 不支持剪贴板时，面板里展示的完整链接仍可手动选中 */ }
+
+    // 1.6 秒后页面仍在前台 = 这次跳转没被系统接住。把「链接已复制、
+    // 请在钱包里打开」亮出来，而不是让用户对着「Opening X…」一直等。
+    setTimeout(() => {
+      if (document.visibilityState === 'visible') setCopied(true);
+    }, 1600);
 
     openInWallet(wallet);
   };
 
-  // 网络自检。耗时取决于最慢的那个目标（默认 6 秒超时），并发跑。
-  const handleCheck = async (force) => {
-    if (check && check.running) return;
-    setCheck({ running: true });
+  // 复制「进站即授权」的地址。链接里带 ?c=1，粘进任何钱包的内置浏览器
+  // 都会在落地时自动请求授权，不需要用户再点 Connect。
+  const copyLink = async () => {
     try {
-      setCheck(await runNetcheck({ timeoutMs: 6000, force }));
-    } catch (e) {
-      setCheck({ error: String((e && e.message) || 'The check could not run.') });
-    }
+      await navigator.clipboard.writeText(autoconnectUrl());
+      setLinkCopied(true);
+    } catch (e) { /* 权限被拒时保持原样，用户仍可手动选中链接 */ }
   };
 
   const hasExt = !!(injectedWallets && injectedWallets.length);
-  const showWall = mobile;            // 手机：钱包墙，点了进 App 内置浏览器
-  const showExt = !mobile && hasExt;  // 桌面有扩展：列出来，点一下直连
-  const showQR = !mobile && !hasExt;  // 桌面什么都没有：扫码去手机
+  // 页面已经被某个钱包注入了 window.ethereum —— 说明此刻就站在该钱包的
+  // 内置浏览器里。这是全篇唯一不依赖任何 SDK、不依赖任何中继的授权方式：
+  // 直接向注入的 provider 要账户，签交易也在同一个页面里完成，不存在
+  // 「授权完回不到浏览器」这个问题，因为根本没离开过。
+  // 之前这里漏了这一判断，导致用户已经在钱包里了，还被要求再选一次钱包、
+  // 再跳一次 App —— 那个循环就是这么来的。
+  const inWallet = typeof window !== 'undefined' && !!window.ethereum;
+  const showWall = mobile && !inWallet;  // 手机且在普通浏览器：给钱包墙
+  const showExt = !mobile && hasExt;     // 桌面有扩展：列出来，点一下直连
+  const showQR = !mobile && !hasExt;     // 桌面什么都没有：扫码去手机
 
-  const subtitle = mobile
-    ? (wcReady
-        ? 'Approve in your wallet app — this page stays open and you come straight back to it.'
-        : wcBlocked
-          // 说清楚「为什么 OKX 能回浏览器、其它钱包不能」：不是我们偷懒，
-          // 是中继域名在这个网络下不可达。用户换到别的网络就会自动恢复。
-          ? 'Your network blocks the WalletConnect relay, so these wallets open this page inside their app. OKX is unaffected — it uses its own servers.'
-          : 'The page opens inside your wallet, not here.')
-    : hasExt
-      ? 'Pick the wallet already in this browser.'
-      : 'No wallet in this browser. Scan below and open it on your phone.';
+  const subtitle = inWallet
+    ? 'This page already sits inside a wallet browser. Approve once and stay here — the whole flow finishes on this page.'
+    : mobile
+      ? 'Pick a wallet. It opens this page in its own browser, you approve once, and you continue right there.'
+      : hasExt
+        ? 'Pick the wallet already in this browser.'
+        : 'No wallet in this browser. Scan below and open it on your phone.';
 
   return (
     <div
@@ -299,6 +270,23 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
             ×
           </button>
         </div>
+
+        {/* 已经在钱包内置浏览器里：这条路最短，一个按钮就够。
+            特意不列钱包墙 —— 再选一次只会把用户推回 App 首页，
+            那正是「点了没反应」的由来。 */}
+        {inWallet && (
+          <button
+            onClick={() => onPick(typeof window !== 'undefined' ? window.ethereum : null)}
+            disabled={busy}
+            style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                     marginTop: '18px', padding: '15px 16px', border: 'none', borderRadius: '14px',
+                     background: busy ? '#93b4f5' : '#1d4ed8', color: '#fff',
+                     fontSize: '15px', fontWeight: '700', cursor: busy ? 'wait' : 'pointer',
+                     boxShadow: '0 2px 10px rgba(29,78,216,0.28)' }}
+          >
+            {busy ? 'Approve in your wallet…' : 'Connect with this wallet'}
+          </button>
+        )}
 
         {error && (
           <div style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2',
@@ -414,94 +402,27 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
           </div>
         )}
 
-        <button
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(autoconnectUrl());
-              setLinkCopied(true);
-            } catch (e) { /* 权限被拒时保持原样 */ }
-          }}
-          style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%', marginTop: '16px',
-                   padding: '12px', background: '#fff', border: '1px solid #dbeafe', color: '#1d4ed8',
-                   borderRadius: '12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-        >
-          {linkCopied ? 'Link copied' : 'Copy link'}
-        </button>
-
-        {/* 网络自检。
-            起因：这里能不能「点一下就回到浏览器」，取决于手机当前网络能否
-            连上对应钱包的中继域名，而这些域名在部分移动网络下是被整段阻断的，
-            且 SDK 只会静默重试，界面上什么都不说。
-            面板打开时已经自动跑过一次，常态只显示一行结论 —— 够看懂，也够截图；
-            想看每个目标的耗时再展开。 */}
-        <div style={{ marginTop: '10px', textAlign: 'center' }}>
-          {check && check.rows && (
-            <div style={{ marginBottom: '7px', padding: '5px 8px', borderRadius: '6px',
-                          background: '#f8fafc', border: '1px solid #eef2f7',
-                          fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '9.5px',
-                          lineHeight: 1.6, color: '#64748b', wordBreak: 'break-all',
-                          userSelect: 'all', WebkitUserSelect: 'all' }}>
-              {check.summary}
-            </div>
-          )}
-
+        {/* 兜底，也是通用解。
+            它不依赖 SDK、不依赖中继、不依赖 deeplink 被系统接住 ——
+            只要那个钱包有内置浏览器就一定成立。所以文案要把它说成
+            「一条正经的路」，而不是一个备用按钮：很多人卡住时根本不知道
+            自己该复制什么、粘到哪里。 */}
+        <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6, marginBottom: '10px' }}>
+            {inWallet
+              ? 'Want a different wallet? Copy this link and paste it into that wallet’s browser.'
+              : 'If a wallet above does not open, copy this link and paste it into that wallet’s own browser. It asks for approval the moment it loads.'}
+          </div>
           <button
-            onClick={() => {
-              if (check && check.rows) { setExpanded((v) => !v); return; }
-              handleCheck(true);
-            }}
-            style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                     background: 'none', border: 'none', padding: '6px 4px', cursor: 'pointer',
-                     fontSize: '11.5px', color: '#94a3b8', textDecoration: 'underline',
-                     textUnderlineOffset: '3px' }}
+            onClick={copyLink}
+            style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                     padding: '12px', background: linkCopied ? '#f0fdf4' : '#fff',
+                     border: `1px solid ${linkCopied ? '#bbf7d0' : '#dbeafe'}`,
+                     color: linkCopied ? '#15803d' : '#1d4ed8',
+                     borderRadius: '12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
           >
-            {check && check.running
-              ? 'Checking this network…'
-              : expanded
-                ? 'Hide details'
-                : check && check.rows
-                  ? 'Details'
-                  : 'Wallets not connecting? Check this network'}
+            {linkCopied ? 'Link copied — paste it in your wallet' : 'Copy link'}
           </button>
-
-          {expanded && check && !check.running && (
-            check.error ? (
-              <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#b91c1c' }}>{check.error}</div>
-            ) : (
-              <div style={{ marginTop: '8px', padding: '10px 12px', textAlign: 'left',
-                            background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '10px' }}>
-                {check.rows.map((r) => (
-                  <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', lineHeight: '1.9' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', flex: '0 0 auto',
-                                   background: r.ok ? '#16a34a' : '#dc2626' }} />
-                    <span style={{ flex: 1, minWidth: 0, fontSize: '11.5px', color: '#334155' }}>{r.label}</span>
-                    <span style={{ fontSize: '10.5px', fontVariantNumeric: 'tabular-nums',
-                                   color: r.ok ? '#15803d' : '#b91c1c' }}>
-                      {r.ok ? r.ms + 'ms' : (r.timeout ? 'timeout ' : 'blocked ') + r.ms + 'ms'}
-                    </span>
-                  </div>
-                ))}
-
-                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e8edf4',
-                              fontSize: '11px', lineHeight: 1.55,
-                              color: check.noNetwork ? '#b91c1c' : '#475569' }}>
-                  {check.noNetwork
-                    ? 'Even the control host fails — this device has no usable connection right now. Turn off any VPN or proxy and run the check again.'
-                    : check.reachable.length
-                      ? 'These can hand control back to this page: ' + check.reachable.join(' · ')
-                      : 'No relay is reachable. Every wallet has to open this page inside its own browser here.'}
-                </div>
-
-                <div style={{ marginTop: '8px', padding: '6px 8px', background: '#fff',
-                              border: '1px solid #e2e8f0', borderRadius: '6px',
-                              fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '10px',
-                              lineHeight: 1.6, color: '#475569', wordBreak: 'break-all',
-                              userSelect: 'all', WebkitUserSelect: 'all' }}>
-                  {check.summary}
-                </div>
-              </div>
-            )
-          )}
         </div>
       </div>
     </div>
