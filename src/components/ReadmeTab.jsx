@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import GuideTab from './GuideTab';
 import RulesTab from './RulesTab';
+import { skyBtn } from '../ui';
 
 /* ============================================================
    Readme — Guide 与 Rules 的合并页
@@ -23,7 +24,7 @@ export default function ReadmeTab() {
 
   return (
     <div style={{ marginTop: '10px' }}>
-      <div style={{ display: 'flex', gap: '4px', padding: '4px', background: '#fff',
+      <div style={{ display: 'flex', gap: '6px', padding: '4px', background: '#fff',
                     border: '1px solid #e2e8f0', borderRadius: '14px',
                     boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
         {Object.keys(SEG).map((key) => {
@@ -34,12 +35,8 @@ export default function ReadmeTab() {
               onClick={() => setPart(key)}
               aria-pressed={on}
               style={{
-                appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                flex: 1, padding: '9px 10px', borderRadius: '11px', cursor: 'pointer',
-                border: 'none',
-                background: on ? '#1d4ed8' : 'transparent',
-                color: on ? '#fff' : '#64748b',
-                fontSize: '13px', fontWeight: 700, lineHeight: 1.2,
+                ...skyBtn('sm', { soft: !on }),
+                flex: 1, height: '36px', borderRadius: '11px',
                 transition: 'background 0.15s, color 0.15s'
               }}
             >

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { sendTransfer, normalizeAddress, toWei } from '../tx';
+import { TokenIcon } from '../icons';
+import { skyBtn, skyLink } from '../ui';
 
 // ============================================================================
 // 发送 / 接收
@@ -32,20 +34,9 @@ const sheetStyle = {
   maxHeight: '88vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', color: '#1e293b'
 };
 
-const primaryBtn = (disabled) => ({
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  width: '100%', padding: '15px 16px', border: 'none', borderRadius: '14px',
-  background: disabled ? '#93b4f5' : '#1d4ed8', color: '#fff',
-  fontSize: '15px', fontWeight: 700, lineHeight: 1.2,
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  boxShadow: disabled ? 'none' : '0 4px 14px rgba(29,78,216,0.28)'
-});
-
-const ghostBtn = {
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  width: '100%', padding: '12px', border: 'none', background: 'transparent',
-  color: '#64748b', fontSize: '13px', fontWeight: 600, cursor: 'pointer'
-};
+// 与全站同一套按钮语言（ui.js）
+const primaryBtn = (disabled) => skyBtn('lg', { block: true, disabled });
+const ghostBtn = { ...skyBtn('md', { block: true, soft: true }) };
 
 /** 资产选择里用的 16px 飞碟标（纯色，避免多实例的渐变 id 冲突） */
 const UfoMark = ({ size = 16 }) => (
@@ -285,9 +276,7 @@ export default function TransferSheet({
               href={`https://bscscan.com/tx/${done.hash}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'block', marginTop: '12px', padding: '12px', borderRadius: '12px',
-                       border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
-                       fontSize: '12px', fontWeight: 700, textAlign: 'center', textDecoration: 'none' }}
+              style={{ ...skyLink('md'), display: 'flex', width: '100%', marginTop: '12px' }}
             >
               View on BscScan ↗
             </a>
@@ -301,6 +290,13 @@ export default function TransferSheet({
           <>
             <div style={{ marginTop: '14px' }}>
               <div style={label}>Asset</div>
+              {tokens.length === 0 && (
+                <div style={{ marginTop: '8px', padding: '12px', borderRadius: '12px',
+                              background: '#f8fafc', border: '1px solid #f1f5f9',
+                              fontSize: '12px', color: '#94a3b8', lineHeight: 1.6 }}>
+                  Nothing to send yet. Receive some BNB or BEP-20 tokens first.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '7px', marginTop: '8px', flexWrap: 'wrap' }}>
                 {tokens.map((t) => {
                   const on = t.symbol === symbol;
@@ -309,16 +305,9 @@ export default function TransferSheet({
                       key={t.symbol}
                       onClick={() => { setSymbol(t.symbol); setAmount(''); setErr(''); }}
                       disabled={busy}
-                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                               display: 'flex', alignItems: 'center', gap: '6px',
-                               padding: '8px 11px', borderRadius: '11px', cursor: 'pointer',
-                               border: '1px solid ' + (on ? '#bfdbfe' : '#e2e8f0'),
-                               background: on ? '#eff6ff' : '#fff',
-                               color: on ? '#1d4ed8' : '#475569', fontSize: '12.5px', fontWeight: 700 }}
+                      style={{ ...skyBtn('sm', { soft: !on }), paddingLeft: '8px' }}
                     >
-                      {t.icon === 'UFO'
-                        ? <UfoMark size={16} />
-                        : <img src={t.icon} alt="" style={{ width: 16, height: 16 }} />}
+                      <TokenIcon token={t} size={17} />
                       {t.symbol}
                     </button>
                   );
@@ -363,10 +352,8 @@ export default function TransferSheet({
                 <button
                   onClick={setMax}
                   disabled={busy}
-                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                           appearance: 'none', border: 'none', background: '#e0ecff', color: '#1d4ed8',
-                           fontSize: '11px', fontWeight: 800, padding: '5px 9px', borderRadius: '8px',
-                           cursor: 'pointer' }}
+                  style={{ ...skyBtn('xs'), position: 'absolute', right: '8px', top: '50%',
+                           transform: 'translateY(-50%)' }}
                 >
                   MAX
                 </button>

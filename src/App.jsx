@@ -3,50 +3,22 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 // 只有真正签名时才按需下载 ethers（见 tx.js）。体积对比见 README。
 import { CONFIG } from './config';
 import { formatUnits, parseUnits } from './units';
-import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot } from './chain';
+import {
+  readNav, readPrice, readBnbPrice, readVaultBalances,
+  readTokenBalances, readTokenPrices
+} from './chain';
 import { submitSwap, toWei, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
 import WalletSetup from './components/WalletSetup';
-import TokenMenu from './components/TokenMenu';
+import TokenPicker from './components/TokenPicker';
 import TransferSheet from './components/TransferSheet';
 import ReadmeTab from './components/ReadmeTab';
+import { TokenIcon, UfoIcon } from './icons';
+import { TOKENS, TOKEN_BY_SYMBOL, STABLECOINS, UFO_TOKEN, isStable, formatAmount } from './tokens';
+import { skyBtn, skyLink } from './ui';
 
 // Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
 // 两份文案本身不动：它们是按条引用的条款，拆开写才不会被互相稀释。
-
-// ================= 1. 币种图标 =================
-// Tether / Circle / Binance 官方 logo 的矢量路径，内联成 data URI。
-// 不引用外部图床（assets.coingecko.com 在国内实测 20 秒超时），
-// 也不用「字母 T / $」替代 —— 这里就是官方标志本身的形状。
-const svgIcon = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg);
-
-// USDT（Tether 官方现行标志：六边形绿底 #50AF95 + 白色 ₮）
-// 2024 年 Tether 换过标，旧版是绿色圆形 + #26A17B，与官网已不一致。
-// 六边形宽高比 339:295，viewBox 保持原比例，由 preserveAspectRatio 居中留白。
-const ICON_USDT = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 339.43 295.27"><path fill="#50AF95" fill-rule="evenodd" d="M62.15,1.45l-61.89,130a2.52,2.52,0,0,0,.54,2.94L167.95,294.56a2.55,2.55,0,0,0,3.53,0L338.63,134.4a2.52,2.52,0,0,0,.54-2.94l-61.89-130A2.5,2.5,0,0,0,275,0H64.45a2.5,2.5,0,0,0-2.3,1.45h0Z"/><path fill="#fff" fill-rule="evenodd" d="M191.19,144.8v0c-1.2.09-7.4,0.46-21.23,0.46-11,0-18.81-.33-21.55-0.46v0c-42.51-1.87-74.24-9.27-74.24-18.13s31.73-16.25,74.24-18.15v28.91c2.78,0.2,10.74.67,21.74,0.67,13.2,0,19.81-.55,21-0.66v-28.9c42.42,1.89,74.08,9.29,74.08,18.13s-31.65,16.24-74.08,18.12h0Zm0-39.25V79.68h59.2V40.23H89.21V79.68H148.4v25.86c-48.11,2.21-84.29,11.74-84.29,23.16s36.18,20.94,84.29,23.16v82.9h42.78V151.83c48-2.21,84.12-11.73,84.12-23.14s-36.09-20.93-84.12-23.15h0Z"/></svg>');
-
-// USDC（Circle 官方标志：蓝底白色 $ + 两侧弧线）
-const ICON_USDC = svgIcon('<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g fill="none"><circle fill="#2775CA" cx="16" cy="16" r="16"/><g fill="#FFF"><path d="M20.022 18.124c0-2.124-1.28-2.852-3.84-3.156-1.828-.243-2.193-.728-2.193-1.578 0-.85.61-1.396 1.828-1.396 1.097 0 1.707.364 2.011 1.275a.458.458 0 00.427.303h.975a.416.416 0 00.427-.425v-.06a3.04 3.04 0 00-2.743-2.489V9.142c0-.243-.183-.425-.487-.486h-.915c-.243 0-.426.182-.487.486v1.396c-1.829.242-2.986 1.456-2.986 2.974 0 2.002 1.218 2.791 3.778 3.095 1.707.303 2.255.668 2.255 1.639 0 .97-.853 1.638-2.011 1.638-1.585 0-2.133-.667-2.316-1.578-.06-.242-.244-.364-.427-.364h-1.036a.416.416 0 00-.426.425v.06c.243 1.518 1.219 2.61 3.23 2.914v1.457c0 .242.183.425.487.485h.915c.243 0 .426-.182.487-.485V21.34c1.829-.303 3.047-1.578 3.047-3.217z"/><path d="M12.892 24.497c-4.754-1.7-7.192-6.98-5.424-11.653.914-2.55 2.925-4.491 5.424-5.402.244-.121.365-.303.365-.607v-.85c0-.242-.121-.424-.365-.485-.061 0-.183 0-.244.06a10.895 10.895 0 00-7.13 13.717c1.096 3.4 3.717 6.01 7.13 7.102.244.121.488 0 .548-.243.061-.06.061-.122.061-.243v-.85c0-.182-.182-.424-.365-.546zm6.46-18.936c-.244-.122-.488 0-.548.242-.061.061-.061.122-.061.243v.85c0 .243.182.485.365.607 4.754 1.7 7.192 6.98 5.424 11.653-.914 2.55-2.925 4.491-5.424 5.402-.244.121-.365.303-.365.607v.85c0 .242.121.424.365.485.061 0 .183 0 .244-.06a10.895 10.895 0 007.13-13.717c-1.096-3.46-3.778-6.07-7.13-7.162z"/></g></g></svg>');
-
-// BNB（BNB Chain 官方现行标志：金黄 #F0B90B 圆底 + 菱形组合图案）
-// 旧版是 #F3BA2F 圆底 + 单个白菱形（2021 年的币安图标），已被官方替换。
-const ICON_BNB = svgIcon('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2496 2496"><path fill="#F0B90B" d="M1248,0c689.3,0,1248,558.7,1248,1248s-558.7,1248-1248,1248S0,1937.3,0,1248S558.7,0,1248,0L1248,0z"/><path fill="#FFFFFF" d="M685.9,1248l0.9,330l280.4,165v193.2l-444.5-260.7v-524L685.9,1248L685.9,1248z M685.9,918v192.3l-163.3-96.6V821.4l163.3-96.6l164.1,96.6L685.9,918L685.9,918z M1084.3,821.4l163.3-96.6l164.1,96.6L1247.6,918L1084.3,821.4L1084.3,821.4z"/><path fill="#FFFFFF" d="M803.9,1509.6v-193.2l163.3,96.6v192.3L803.9,1509.6L803.9,1509.6z M1084.3,1812.2l163.3,96.6l164.1-96.6v192.3l-164.1,96.6l-163.3-96.6V1812.2L1084.3,1812.2z M1645.9,821.4l163.3-96.6l164.1,96.6v192.3l-164.1,96.6V918L1645.9,821.4L1645.9,821.4L1645.9,821.4z M1809.2,1578l0.9-330l163.3-96.6v524l-444.5,260.7v-193.2L1809.2,1578L1809.2,1578L1809.2,1578z"/><polygon fill="#FFFFFF" points="1692.1,1509.6 1528.8,1605.3 1528.8,1413 1692.1,1316.4 1692.1,1509.6"/><path fill="#FFFFFF" d="M1692.1,986.4l0.9,193.2l-281.2,165v330.8l-163.3,95.7l-163.3-95.7v-330.8l-281.2-165V986.4L968,889.8l279.5,165.8l281.2-165.8l164.1,96.6H1692.1L1692.1,986.4z M803.9,656.5l443.7-261.6l444.5,261.6l-163.3,96.6l-281.2-165.8L967.2,753.1L803.9,656.5L803.9,656.5z"/></svg>');
-
-const STABLECOINS = [
-  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: ICON_USDT },
-  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC }
-];
-
-// 贸易币全名是 UFO Dollar —— 这是链上的名字，不随产品品牌（UFO Wallet）改动。
-const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
-
-// 可发送的资产。BNB 是原生币（走 value 转账），其余走 ERC-20 transfer。
-const TRANSFER_TOKENS = [
-  { symbol: 'BNB', name: 'BNB', native: true, icon: ICON_BNB },
-  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: ICON_USDT },
-  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC },
-  { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' }
-];
 
 // ================= 2. 样式常量 =================
 const FONT_STYLE = {
@@ -57,16 +29,8 @@ const FONT_STYLE = {
 // 头部操作按钮：天蓝底、白字、比原来大一档。
 // 合并之后只剩两个：Lock 与 Account N。后者既是身份也是账户管理入口
 // （原来是「Account 3」只读标签 + 一个 Accounts 按钮，同一件事占两个位置）。
-const SKY_BTN = {
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-  height: '38px', padding: '0 clamp(9px, 2.8vw, 13px)', borderRadius: '13px',
-  border: 'none', color: '#fff',
-  background: 'linear-gradient(180deg, #5CCBEC 0%, #38BDF8 100%)',
-  fontSize: 'clamp(11px, 3vw, 12.5px)', fontWeight: 700,
-  whiteSpace: 'nowrap', cursor: 'pointer', lineHeight: 1,
-  boxShadow: '0 5px 14px -4px rgba(56,189,248,0.75)'
-};
+// 几何与配色来自 ui.js —— 全站所有按钮共用同一套，不再各处手写。
+const SKY_BTN = { ...skyBtn('md'), height: '38px', fontSize: 'clamp(11px, 3vw, 12.5px)', padding: '0 clamp(9px, 2.8vw, 13px)' };
 
 // 闪兑面板的配色：与截图同源的一套中性灰 + 天蓝
 const SWAP_TINT = {
@@ -100,9 +64,7 @@ function TokenChip({ token, size = 28, chevron = true, onClick }) {
         boxShadow: '0 1px 3px rgba(16,24,40,0.07)', flexShrink: 0
       }}
     >
-      {token.symbol === 'UFO'
-        ? <UfoIcon size={size} />
-        : <img src={token.icon} alt="" style={{ width: size, height: size, borderRadius: '50%' }} />}
+      <TokenIcon token={token} size={size} />
       <span style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.2px', color: SWAP_TINT.ink }}>
         {token.symbol}
       </span>
@@ -123,26 +85,6 @@ const SUB_CARD = {
   boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)',
   border: '1px solid #f1f5f9'
 };
-
-const UfoIcon = ({ size = 36 }) => (
-  <svg viewBox="0 0 100 100" style={{ width: size, height: size }} xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="ufo-body" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#60a5fa" />
-        <stop offset="100%" stopColor="#3b82f6" />
-      </linearGradient>
-      <linearGradient id="ufo-glass" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#e0f2fe" />
-        <stop offset="100%" stopColor="#bae6fd" />
-      </linearGradient>
-    </defs>
-    <path d="M 25 52 C 25 15, 75 15, 75 52 Z" fill="url(#ufo-glass)" stroke="#3b82f6" strokeWidth="3" />
-    <ellipse cx="50" cy="55" rx="45" ry="16" fill="url(#ufo-body)" />
-    <circle cx="35" cy="55" r="4" fill="#fff" />
-    <circle cx="50" cy="57" r="4" fill="#fff" />
-    <circle cx="65" cy="55" r="4" fill="#fff" />
-  </svg>
-);
 
 // ================= 3. 读链逻辑 =================
 async function fetchVaultPrice(tokenAddress) {
@@ -226,8 +168,8 @@ function App() {
   const accountNo = activeAcct ? activeAcct.no : null;
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
-  // '' | 'pay' | 'receive' —— 两枚代币胶囊各有自己的菜单
-  const [showTokenMenu, setShowTokenMenu] = useState('');
+  // '' | 'pay' | 'receive' —— 点哪一侧的胶囊，弹窗就替哪一侧选币
+  const [pickerSide, setPickerSide] = useState('');
 
   const [vaultBalances, setVaultBalances] = useState({ USDT: 0, USDC: 0 });
 
@@ -263,8 +205,11 @@ function App() {
     lastUpdated: null,
   });
 
-  const [bnbBal, setBnbBal] = useState('0.000000');
+  // 全部代币的余额（含 BNB），键是 symbol
   const [tokenBalances, setTokenBalances] = useState({});
+  // 链上询价结果（symbol → USD）。没询到的币不写默认值，
+  // 界面上显示 "—" 而不是把它当成 0 美元。
+  const [prices, setPrices] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [txMsg, setTxMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -379,17 +324,17 @@ function App() {
   const fetchUserBalances = useCallback(async () => {
     if (!address) return;
     try {
-      const snap = await readWalletSnapshot(address);
+      const bal = await readTokenBalances(address, TOKENS);
+      setTokenBalances(bal);
 
-      if (snap.bnb !== null) setBnbBal(snap.bnb.toFixed(6));
-      if (snap.bnbPrice !== null) setBnbPrice(snap.bnbPrice);
-
-      const next = {};
-      for (const token of [...STABLECOINS, UFO_TOKEN]) {
-        const v = snap[token.symbol];
-        next[token.symbol] = v === null ? '0.000000' : v.toFixed(6);
-      }
-      setTokenBalances(next);
+      // 只给「真的持有」的币询价。余额为 0 的币估值必然是 0，
+      // 为它们各发一次 getPair + getReserves 是纯粹的浪费。
+      const held = TOKENS.filter((t) => Number(bal[t.symbol] || 0) > 0);
+      if (!held.length) return;
+      try {
+        const map = await readTokenPrices(held);
+        if (map && Object.keys(map).length) setPrices((prev) => ({ ...prev, ...map }));
+      } catch (e) { /* 取不到价就保留上一轮的值，界面显示 — */ }
     } catch (error) {
       console.warn('[ufo] wallet balances unavailable:', error && error.message);
     }
@@ -409,7 +354,7 @@ function App() {
   useEffect(() => {
     if (!isConnected || !address) {
       setTokenBalances({});
-      setBnbBal('0.000000');
+      setPrices({});
       return;
     }
     fetchUserBalances();
@@ -428,7 +373,7 @@ function App() {
     setInputAmount('');
     setTxMsg('');
     setErrorMsg('');
-    setShowTokenMenu('');
+    setPickerSide('');
     txErrorRef.current = false;
   }, [isConnected]);
 
@@ -680,41 +625,52 @@ function App() {
     !!errorMsg || !inputAmount || parseFloat(inputAmount) <= 0 || !priceReady
   ));
 
-  // 钱包页顶部总额：BNB 按行情折算，稳定币 1:1，UFO 按链上 NAV。
-  const totalUsd = isConnected
-    ? (Number(bnbBal || 0) * (bnbPrice || 0))
-      + Number(tokenBalances.USDT || 0)
-      + Number(tokenBalances.USDC || 0)
-      + Number(tokenBalances.UFO || 0) * currentNav
-    : 0;
+  // 代币 → 美元。UFO 用金库 NAV，稳定币按 1，其余用链上报价。
+  // 拿不到就返回 null，界面显示 "—" —— 一个钱包不能把「读不到」写成 0。
+  const priceOf = (symbol) => {
+    if (symbol === 'UFO') return currentNav;
+    if (prices[symbol] != null) return prices[symbol];
+    if (isStable(symbol)) return 1;
+    if (symbol === 'BNB' && bnbPrice != null) return bnbPrice;
+    return null;
+  };
+
+  // 钱包资产列表：只列真的有钱的币，按美元估值从大到小。
+  // 这里不按「代币表顺序」排 —— 用户关心的是哪一笔最值钱，不是我们的配置顺序。
+  const portfolio = TOKENS
+    .map((t) => {
+      const balance = isConnected ? Number(tokenBalances[t.symbol] || 0) : 0;
+      const price = priceOf(t.symbol);
+      return { ...t, balance, price, usd: price == null ? null : balance * price };
+    })
+    .filter((t) => t.balance > 0)
+    .sort((a, b) => (b.usd || 0) - (a.usd || 0));
+
+  const totalUsd = portfolio.reduce((sum, t) => sum + (t.usd || 0), 0);
+
+  // 弹窗要用的是「整张表 + 价格」，没有余额的币也要能显示 0.00
+  const priceMap = TOKENS.reduce((m, t) => {
+    const p = priceOf(t.symbol);
+    if (p != null) m[t.symbol] = p;
+    return m;
+  }, {});
 
   const openAccounts = () => setWalletPanel('accounts');
 
-  // 两枚代币胶囊的菜单：点哪一侧就是「这一侧换成什么」。
-  // 选到另一侧已有的币，等价于交换方向 —— 面板上看到的结果与点选一致。
-  const tokenMenuItems = (side) => [STABLECOINS[0], STABLECOINS[1], UFO_TOKEN].map((coin) => {
-    const isPay = side === 'pay';
-    const selected = (isPay ? payToken : receiveToken).symbol === coin.symbol;
-    let meta = '';
-    if (coin.symbol === 'UFO') meta = `$${currentNav.toFixed(4)}`;
-    else if (coin.symbol === 'USDT') meta = `$${(stablecoinPrices.USDT?.priceFloat ?? 1).toFixed(4)}`;
-    else meta = `$${(stablecoinPrices.USDC?.priceFloat ?? 1).toFixed(4)}`;
-    return { symbol: coin.symbol, icon: coin.icon, meta, selected, coin };
-  });
-
-  const pickToken = (side, item) => {
-    const coin = item.coin;
+  // 点哪一侧的胶囊，弹窗就替哪一侧选币。选到另一侧已有的币，等价于交换方向。
+  // 只有金库能报价的币（USDT / USDC / UFO）会真正改变方向，其余在弹窗里
+  // 由 TokenPicker 明确拒绝并说明原因。
+  const pickToken = (side, coin) => {
+    if (!coin || !coin.tradable) return;
     if (coin.symbol === 'UFO') {
-      // 这一侧要 UFO：若选的是付款侧，方向变卖；选的是收款侧，方向变买
-      if (side === 'pay') setIsBuyingUFO(false);
-      else setIsBuyingUFO(true);
+      setIsBuyingUFO(side !== 'pay');
     } else {
       setSelectedStablecoin(coin);
-      if (side === 'pay') setIsBuyingUFO(true);
-      else setIsBuyingUFO(false);
+      setIsBuyingUFO(side === 'pay');
     }
-    setShowTokenMenu(false);
+    setPickerSide('');
     setInputAmount('');
+    setErrorMsg('');
   };
 
   const setMax = () => {
@@ -728,7 +684,7 @@ function App() {
     setInputAmount('');
     setTxMsg('');
     setErrorMsg('');
-    setShowTokenMenu('');
+    setPickerSide('');
   };
 
   // 一颗按钮担三种意思，顺序不能换：
@@ -866,42 +822,24 @@ function App() {
             {/* ---- 付款 ---- */}
             <div style={{ background: SWAP_TINT.card, borderRadius: '22px', padding: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                <div style={{ position: 'relative' }}>
-                  <TokenChip
-                    token={payToken}
-                    onClick={() => setShowTokenMenu(showTokenMenu === 'pay' ? '' : 'pay')}
-                  />
-                  {showTokenMenu === 'pay' && (
-                    <TokenMenu
-                      align="left"
-                      items={tokenMenuItems('pay')}
-                      onClose={() => setShowTokenMenu('')}
-                      onSelect={(it) => pickToken('pay', it)}
-                    />
-                  )}
-                </div>
+                <TokenChip
+                  token={payToken}
+                  onClick={() => setPickerSide('pay')}
+                />
 
                 <button
+                  type="button"
                   onClick={setMax}
                   disabled={payBal <= 0}
                   title="Use the whole balance"
-                  style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                           display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0,
-                           background: 'transparent', border: 'none', padding: '4px 2px',
-                           cursor: payBal > 0 ? 'pointer' : 'default', lineHeight: 1 }}
+                  style={{ ...skyBtn('xs', { soft: true, disabled: payBal <= 0 }),
+                           fontVariantNumeric: 'tabular-nums' }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={SWAP_TINT.mute}
-                       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 8H5a2 2 0 0 0 0 4h11a2 2 0 0 1 0 4H4" /><path d="M17 5l3 3-3 3" />
                   </svg>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: SWAP_TINT.mute,
-                                 fontVariantNumeric: 'tabular-nums' }}>
-                    {payBal.toFixed(2)}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 700,
-                                 color: payBal > 0 ? SWAP_TINT.ink : SWAP_TINT.mute }}>
-                    Max
-                  </span>
+                  {payBal.toFixed(2)} Max
                 </button>
               </div>
 
@@ -938,10 +876,11 @@ function App() {
                 title="Switch direction"
                 style={{ position: 'absolute', left: '50%', top: '-8px', transform: 'translateX(-50%)',
                          width: '44px', height: '44px', borderRadius: '50%',
-                         border: '1px solid #e6f8fd', background: '#fff', color: SWAP_TINT.ink,
-                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         border: 'none', background: 'linear-gradient(180deg, #5CCBEC 0%, #38BDF8 100%)',
+                         color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                          cursor: isProcessing ? 'not-allowed' : 'pointer',
-                         boxShadow: '0 0 0 6px #eaf9fd, 0 6px 14px rgba(56,189,248,0.18)' }}
+                         opacity: isProcessing ? 0.5 : 1,
+                         boxShadow: '0 0 0 6px #f4f5f7, 0 6px 16px -2px rgba(56,189,248,0.8)' }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -954,20 +893,10 @@ function App() {
             {/* ---- 收款 ---- */}
             <div style={{ background: SWAP_TINT.card, borderRadius: '22px', padding: '20px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                <div style={{ position: 'relative' }}>
-                  <TokenChip
-                    token={receiveToken}
-                    onClick={() => setShowTokenMenu(showTokenMenu === 'receive' ? '' : 'receive')}
-                  />
-                  {showTokenMenu === 'receive' && (
-                    <TokenMenu
-                      align="left"
-                      items={tokenMenuItems('receive')}
-                      onClose={() => setShowTokenMenu('')}
-                      onSelect={(it) => pickToken('receive', it)}
-                    />
-                  )}
-                </div>
+                <TokenChip
+                  token={receiveToken}
+                  onClick={() => setPickerSide('receive')}
+                />
 
                 <div style={{ textAlign: 'right', minWidth: 0 }}>
                   <div style={{ ...UI_FONT, fontSize: '17px', fontWeight: 700, lineHeight: 1.25,
@@ -1001,13 +930,9 @@ function App() {
             <button
               onClick={onSwapCta}
               disabled={swapDisabled}
-              style={{ ...UI_FONT, width: '100%', padding: '17px', marginTop: '18px',
-                       border: 'none', borderRadius: '30px',
-                       background: swapDisabled ? '#e9ecf1' : 'linear-gradient(180deg, #6BDCF0 0%, #4FCDE8 100%)',
-                       color: swapDisabled ? '#a8b0bd' : '#0b1220',
-                       fontSize: '17px', fontWeight: 800, letterSpacing: '0.2px',
-                       cursor: swapDisabled ? 'not-allowed' : 'pointer',
-                       boxShadow: swapDisabled ? 'none' : '0 10px 22px -10px rgba(79,205,232,0.95)' }}
+              style={{ ...UI_FONT, ...skyBtn('lg', { block: true, disabled: swapDisabled }),
+                       marginTop: '18px', borderRadius: '28px', fontSize: '17px',
+                       letterSpacing: '0.2px' }}
             >
               {ctaLabel}
             </button>
@@ -1059,12 +984,9 @@ function App() {
                 不在这里另做一套「请先连接钱包」的提示。 */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '18px' }}>
               <button
+                type="button"
                 onClick={() => openTransfer('send')}
-                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flex: 1,
-                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                         height: '44px', borderRadius: '13px', border: 'none',
-                         background: '#1d4ed8', color: '#fff', fontSize: '14px', fontWeight: 700,
-                         cursor: 'pointer', boxShadow: '0 4px 14px rgba(29,78,216,0.22)' }}
+                style={{ ...skyBtn('md', { block: true }), flex: 1, height: '46px', fontSize: '14px' }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 19V5" /><path d="M5 12l7-7 7 7" />
@@ -1072,12 +994,9 @@ function App() {
                 Send
               </button>
               <button
+                type="button"
                 onClick={() => openTransfer('receive')}
-                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flex: 1,
-                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                         height: '44px', borderRadius: '13px',
-                         border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
-                         fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+                style={{ ...skyBtn('md', { block: true, soft: true }), flex: 1, height: '46px', fontSize: '14px' }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 5v14" /><path d="M19 12l-7 7-7-7" />
@@ -1086,60 +1005,60 @@ function App() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                    <span style={{ fontSize: '16px', fontWeight: '700' }}>BNB</span>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>{bnbPrice == null ? '—' : '$' + formatPrice(bnbPrice, true)}</span>
-                  </div>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Pays the gas</span>
+            {/* 资产列表：只列真的有钱的币。代币表里的十几个币全部参与读取，
+                但余额为 0 的不占版面 —— 一个空钱包不该显示 15 行 0.00。 */}
+            {portfolio.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '26px 10px 10px', color: '#94a3b8' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b' }}>No assets yet</div>
+                <div style={{ fontSize: '12px', marginTop: '6px', lineHeight: 1.7 }}>
+                  Receive BNB or any BEP-20 token to this account and it shows up here.
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? bnbBal : '0.000000'}</span>
-                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>{bnbPrice == null ? '≈ —' : '≈ $' + formatUsd(Number(bnbBal) * bnbPrice)}</span>
-              </div>
-            </div>
-
-            {[...STABLECOINS, UFO_TOKEN].map((token, index, arr) => {
-              let currentPrice = 1.0;
-              let isFallback = false;
-              if (token.symbol === 'UFO') {
-                currentPrice = currentNav;
-                isFallback = navStatus === 'error';
-              } else if (token.symbol === 'USDT') {
-                currentPrice = stablecoinPrices.USDT?.priceFloat ?? 1.0;
-                isFallback = stablecoinPrices.USDT?.isFallback;
-              } else if (token.symbol === 'USDC') {
-                currentPrice = stablecoinPrices.USDC?.priceFloat ?? 1.0;
-                isFallback = stablecoinPrices.USDC?.isFallback;
-              }
-
-              return (
-                <div key={token.symbol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: index !== arr.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: index !== arr.length - 1 ? '20px' : '0', marginBottom: index !== arr.length - 1 ? '20px' : '0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {token.icon === 'UFO' ? <div style={{ width: 40, height: 40, background: '#f8fafc', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><UfoIcon size={28} /></div> : <img src={token.icon} style={{ width: 40, height: 40 }} alt={token.symbol} />}
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '700' }}>{token.symbol}</span>
-                        <span style={{ fontSize: '12px', fontWeight: '600', color: isFallback ? '#ef4444' : '#64748b' }}>
-                          ${formatPrice(currentPrice)}{isFallback && '*'}
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {portfolio.map((t, i) => (
+                  <div key={t.symbol} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    paddingBottom: '16px', marginBottom: i === portfolio.length - 1 ? 0 : '16px',
+                    borderBottom: i === portfolio.length - 1 ? 'none' : '1px solid #f1f5f9'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                      <TokenIcon token={t} size={40} />
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                          <span style={{ fontSize: '16px', fontWeight: 700 }}>{t.symbol}</span>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b',
+                                         fontVariantNumeric: 'tabular-nums' }}>
+                            {t.price == null
+                              ? '—'
+                              : '$' + t.price.toLocaleString('en-US', {
+                                  minimumFractionDigits: t.price >= 100 ? 2 : 4,
+                                  maximumFractionDigits: t.price >= 100 ? 2 : 4
+                                })}
+                            {t.symbol === 'UFO' && navStatus === 'error' ? ' *' : ''}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap',
+                                       overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {t.name}
                         </span>
                       </div>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>{token.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                      <span style={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                        {formatAmount(t.balance, 6)}
+                      </span>
+                      <span style={{ fontSize: '12.5px', color: '#10b981', fontWeight: 600,
+                                     marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
+                        {t.usd == null
+                          ? '≈ —'
+                          : '≈ $' + t.usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <span style={{ ...FONT_STYLE, fontSize: '18px', fontWeight: '700' }}>{isConnected ? tokenBalances[token.symbol] || '0.000000' : '0.000000'}</span>
-                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', fontFamily: 'monospace', marginTop: '2px' }}>
-                      ≈ ${formatUsd(Number(tokenBalances[token.symbol] || 0) * currentPrice)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
           </div>
         )}
@@ -1163,11 +1082,7 @@ function App() {
                   href={`https://bscscan.com/address/${address}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '5px',
-                           height: '32px', padding: '0 11px', borderRadius: '10px',
-                           border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
-                           fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2, textDecoration: 'none',
-                           whiteSpace: 'nowrap' }}
+                  style={skyLink('sm')}
                 >
                   BscScan
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -1181,7 +1096,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#334155' }}>Local Ledger</h3>
                 {history.length > 0 && (
-                  <button onClick={clearHistory} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                  <button type="button" onClick={clearHistory} style={skyBtn('xs', { soft: true })}>
                     Clear All
                   </button>
                 )}
@@ -1328,18 +1243,24 @@ function App() {
         })}
       </div>
 
+      {/* 代币弹窗：闪兑面板的两枚胶囊共用它，点哪侧就替哪侧选币 */}
+      <TokenPicker
+        open={!!pickerSide}
+        tokens={TOKENS}
+        balances={tokenBalances}
+        prices={priceMap}
+        selectedSymbol={(pickerSide === 'receive' ? receiveToken : payToken).symbol}
+        onSelect={(coin) => pickToken(pickerSide, coin)}
+        onClose={() => setPickerSide('')}
+      />
+
       <TransferSheet
         mode={transferMode}
         onClose={() => setTransferMode('')}
         address={address}
         accountNo={accountNo}
-        balances={{
-          BNB: bnbBal,
-          USDT: tokenBalances.USDT || '0',
-          USDC: tokenBalances.USDC || '0',
-          UFO: tokenBalances.UFO || '0'
-        }}
-        tokens={TRANSFER_TOKENS}
+        balances={tokenBalances}
+        tokens={portfolio}
         provider={walletProvider}
         onSent={handleTransferSent}
       />
@@ -1453,20 +1374,13 @@ class ErrorBoundary extends React.Component {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={() => this.setState({ failed: false, message: '', frame: '' })}
-            style={{
-              marginTop: '4px', padding: '10px 20px', borderRadius: '22px',
-              border: '1px solid #cbd5e1', background: '#fff', color: '#334155',
-              fontSize: '13px', fontWeight: 700, cursor: 'pointer'
-            }}
+            style={{ ...skyBtn('md', { soft: true }), marginTop: '4px' }}
           >
             Retry
           </button>
           <button
             onClick={() => window.location.reload()}
-            style={{
-              marginTop: '4px', padding: '10px 24px', borderRadius: '22px', border: 'none',
-              background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
-            }}
+            style={{ ...skyBtn('md'), marginTop: '4px' }}
           >
             Reload
           </button>

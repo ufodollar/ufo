@@ -155,7 +155,15 @@ export function useWallet() {
     setError('');
     try {
       const r = await switchLocalAccount(id);
-      bindActive();
+      // 直接用返回值定位新账户，不再回读一次 localStorage：
+      // 在存储不可写（隐私模式）的浏览器里，回读结果可能还是旧的 active，
+      // 于是顶部编号与链上余额都停在上一个账户 —— 表现就是「切换没生效」。
+      if (r && r.address) {
+        const restored = restoreLocalWallet();
+        setAccount({ address: r.address, provider: restored ? restored.provider : null });
+      } else {
+        bindActive();
+      }
       refreshAccounts();
       return r;
     } catch (e) {

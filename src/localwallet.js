@@ -124,6 +124,12 @@ function normalizeNos(o) {
   return dirty;
 }
 
+// 存储写不进去时的兜底：Safari 无痕模式、部分 WebView 的「只读 localStorage」、
+// 以及配额写满，都会让 setItem 抛 QuotaExceededError。钱在链上，账户在本机，
+// 这种情况下「切了但没记住」远好过「点了没反应」—— 至少本次会话是对的，
+// 刷新后回到上一个账户，而不是把人卡死在切换按钮上。
+let memActive = null;
+
 function read() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -132,7 +138,8 @@ function read() {
     if (!o) return null;
 
     if (o.v === 2 && Array.isArray(o.accounts) && o.accounts.length && o.salt) {
-      if (!o.accounts.some((a) => a.id === o.active)) o.active = o.accounts[0].id;
+      if (memActive && o.accounts.some((a) => a.id === memActive)) o.active = memActive;
+      else if (!o.accounts.some((a) => a.id === o.active)) o.active = o.accounts[0].id;
       // 一次性补号，之后就是只读。写回失败（无痕模式 / 配额满）不能影响读取，
       // 否则一个存储错误就等于「钱包不见了」。
       if (normalizeNos(o)) {
@@ -211,6 +218,7 @@ export function destroyLocalWallet() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* noop */ }
   try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* noop */ }
   session = null;
+  memActive = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +362,7 @@ async function attachAccount(w, pin) {
   if (!session) startSession(key, next);
   session.cache[acct.id] = w;
   session.active = acct.id;
+  memActive = acct.id;
 
   return { id: acct.id, address: w.address, privateKey: w.privateKey };
 }
@@ -419,7 +428,8 @@ export async function unlockLocalWallet(pin) {
   const acct = store.accounts.find((a) => a.id === store.active) || store.accounts[0];
   const w = await decryptWallet(acct, key);
   s.cache[acct.id] = w;
-  return { address: w.address };
+  memActive = acct.id;
+  return { address: w.address, id: acct.id, no: acct.no };
 }
 
 /**
@@ -443,20 +453,31 @@ export function removeAccount(id) {
 
   const active = store.active === id ? accounts[0].id : store.active;
   // nextNo 原样带走：删除账户不能让编号回退，否则新账户会顶替旧名字。
-  write({ v: 2, salt: store.salt, nextNo: store.nextNo, accounts, active });
+  try { write({ v: 2, salt: store.salt, nextNo: store.nextNo, accounts, active }); } catch (e) { /* 见 memActive */ }
   if (session) session.active = active;
+  memActive = active;
   return { removed: true, remaining: accounts.length, active };
 }
 
-/** 切到另一个账户。已解锁时不需要 PIN；未解锁会抛 4100。 */
+/**
+ * 切到另一个账户。已解锁时不需要 PIN；未解锁会抛 4100。
+ *
+ * 顺序是刻意的：先解密（这一步可能因为密钥缺失/损坏而失败），成功之后才改
+ * session 与存储。反过来的话，一次解密失败就会留下「存储指向新账户、内存
+ * 仍是旧账户」的分裂状态，之后每一次签名都会报「钱包已锁定」，重启才恢复。
+ */
 export async function switchAccount(id) {
   if (!session) {
-    const err = new Error('Wallet is locked.');
+    const err = new Error('Enter your PIN to switch accounts.');
     err.code = 4100;
     throw err;
   }
   const store = read();
-  if (!store) throw new Error('No wallet on this browser yet.');
+  if (!store) {
+    const err = new Error('No wallet on this browser yet.');
+    err.code = 'NO_WALLET';
+    throw err;
+  }
   const acct = store.accounts.find((a) => a.id === id);
   if (!acct) throw new Error('Unknown account.');
 
@@ -465,10 +486,26 @@ export async function switchAccount(id) {
     w = await decryptWallet(acct, session.key);
     session.cache[id] = w;
   }
+  if (w.address.toLowerCase() !== acct.address.toLowerCase()) {
+    // 密文和地址对不上：不是这个账户的钥匙。宁可报错，也不能让签名落到别的地址上。
+    throw new Error('This account could not be opened on this device.');
+  }
+
   session.active = id;
+  memActive = id;
   store.active = id;
-  write(store);
-  return { id, address: w.address };
+  try {
+    write(store);
+  } catch (e) {
+    // 写入失败不回滚：本次会话已经切了，刷新后会回到原账户并重新输 PIN。
+    console.warn('[ufo] could not persist the active account:', e && e.message);
+  }
+  return { id, address: w.address, no: acct.no };
+}
+
+/** 当前会话锁定的账户 id（内存），供 UI 在存储不可写时也能拿到正确值 */
+export function sessionActive() {
+  return session ? session.active : null;
 }
 
 /**

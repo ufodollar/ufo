@@ -184,3 +184,170 @@ export async function readWalletSnapshot(owner) {
     bnbPrice
   };
 }
+
+// ============================================================================
+// 多代币组合
+// ----------------------------------------------------------------------------
+// 钱包页与代币弹窗都要「每个代币的余额」。逐个 eth_call 是 N 次往返，
+// 手机上 15 个币就是 2~4 秒的空白列表。这里用 JSON-RPC batch 把同一批
+// 请求塞进一次 HTTP，按 12 个一组切开 —— 公共节点对单次批量有上限，
+// 超了整批返回错误，一个余额都读不到。
+// ============================================================================
+
+const SEL_DECIMALS = '0x313ce567';       // decimals()
+const SEL_GET_RESERVES = '0x0902f1ac';   // getReserves()
+const SEL_GET_PAIR = '0xe6a43905';       // getPair(address,address)
+
+// PancakeSwap V2。选它做报价源不是为了交易，而是因为它有 BSC 上最全的
+// 代币/稳定币交易对：一个只读的、无需许可的价格来源，不依赖任何 API key。
+const PANCAKE_FACTORY = '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73';
+const WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+
+const padWord = (n) => BigInt(n).toString(16).padStart(64, '0');
+
+async function inChunks(calls, size = 12) {
+  const out = [];
+  for (let i = 0; i < calls.length; i += size) {
+    const part = await ethBatch(calls.slice(i, i + size));
+    out.push(...part);
+  }
+  return out;
+}
+
+// ---- decimals：读完一次就记住，链上精度不会变 ----
+const DEC_KEY = 'ufo.token.decimals';
+let decMemo = null;
+
+function loadDecimals() {
+  if (decMemo) return decMemo;
+  decMemo = {};
+  try {
+    const raw = localStorage.getItem(DEC_KEY);
+    if (raw) decMemo = JSON.parse(raw) || {};
+  } catch (e) { decMemo = {}; }
+  return decMemo;
+}
+
+function saveDecimals() {
+  try { localStorage.setItem(DEC_KEY, JSON.stringify(decMemo)); } catch (e) { /* 无痕模式 */ }
+}
+
+/**
+ * 取代币精度。缺的才发请求，一次批量补齐。
+ * 读不到就退回代币表里的声明值 —— 宁可显示成 0.00 也不要整页空着。
+ */
+export async function readDecimals(tokens) {
+  const memo = loadDecimals();
+  const missing = tokens.filter((t) => !t.native && t.address && memo[t.address.toLowerCase()] == null);
+  if (missing.length) {
+    try {
+      const res = await inChunks(missing.map((t) => ({ to: t.address, data: SEL_DECIMALS })));
+      missing.forEach((t, i) => {
+        const v = decodeUint(res[i]);
+        // 有些代币的 decimals 是 0，也会返回 0x…00；只有 null 才算没读到
+        if (v !== null && v <= 36n) memo[t.address.toLowerCase()] = Number(v);
+      });
+      saveDecimals();
+    } catch (e) { /* 用声明值兜底 */ }
+  }
+  return (t) => {
+    if (t.native) return 18;
+    const v = memo[(t.address || '').toLowerCase()];
+    return v == null ? t.decimals : v;
+  };
+}
+
+/** 余额 = { SYMBOL: number }，一次批量读回 */
+export async function readTokenBalances(owner, tokens) {
+  if (!owner) return {};
+  const decOf = await readDecimals(tokens);
+  const erc20 = tokens.filter((t) => !t.native && t.address);
+
+  const calls = [
+    { method: 'eth_getBalance', params: [owner, 'latest'] },
+    ...erc20.map((t) => ({ to: t.address, data: encodeBalanceOf(owner) }))
+  ];
+  const res = await inChunks(calls);
+
+  const out = {};
+  const bnb = decodeUint(res[0]);
+  out.BNB = bnb === null ? 0 : Number(bnb) / 1e18;
+  erc20.forEach((t, i) => {
+    const raw = decodeUint(res[i + 1]);
+    out[t.symbol] = raw === null ? 0 : Number(raw) / 10 ** decOf(t);
+  });
+  return out;
+}
+
+// ---- 价格：PancakeSwap V2 的 USDT 交易对储备 ----
+// 只给「真的持有」的代币取价。余额为 0 的币估值必然是 0，没必要问链。
+let priceMemo = { at: 0, key: '', map: {} };
+
+/**
+ * @returns {Promise<Object>} { SYMBOL: usdPrice }，取不到的币不会出现在结果里
+ */
+export async function readTokenPrices(tokens, ttlMs = 60000) {
+  const key = tokens.map((t) => t.symbol).join(',');
+  if (priceMemo.key === key && Date.now() - priceMemo.at < ttlMs) return priceMemo.map;
+
+  const decOf = await readDecimals(tokens);
+  const usdt = tokens.find((t) => t.symbol === 'USDT');
+  if (!usdt) return {};
+
+  // 统一把 BNB 折成 WBNB 一起询价（原生币没有自己的交易对）
+  const quoted = tokens
+    .filter((t) => t.symbol !== 'USDT' && t.symbol !== 'UFO')
+    .map((t) => ({ ...t, pairToken: t.symbol === 'BNB' ? { ...t, address: WBNB_ADDRESS, native: false, decimals: 18, symbol: 'WBNB' } : t }));
+
+  if (!quoted.length) return {};
+
+  const pairCalls = quoted.map((t) => ({
+    to: PANCAKE_FACTORY,
+    data: SEL_GET_PAIR + padAddress(t.pairToken.address) + padAddress(usdt.address)
+  }));
+
+  let pairs;
+  try {
+    pairs = await inChunks(pairCalls);
+  } catch (e) {
+    return priceMemo.map;
+  }
+
+  const live = quoted
+    .map((t, i) => ({ t, pair: pairs[i] && pairs[i] !== '0x' ? '0x' + pairs[i].slice(-40) : null }))
+    .filter((x) => x.pair && x.pair !== '0x0000000000000000000000000000000000000000');
+
+  if (!live.length) return {};
+
+  let reserves;
+  try {
+    reserves = await inChunks(live.map((x) => ({ to: x.pair, data: SEL_GET_RESERVES })));
+  } catch (e) {
+    return priceMemo.map;
+  }
+
+  const map = {};
+  live.forEach((x, i) => {
+    const hex = reserves[i];
+    if (!hex || hex.length < 2 + 192) return;
+    const r0 = BigInt('0x' + hex.slice(2, 66));
+    const r1 = BigInt('0x' + hex.slice(66, 130));
+    if (r0 === 0n || r1 === 0n) return;
+
+    // token0 是地址较小的那个，和传参顺序无关
+    const tokenIsToken0 = x.t.pairToken.address.toLowerCase() < usdt.address.toLowerCase();
+    const tokenReserve = tokenIsToken0 ? r0 : r1;
+    const usdtReserve = tokenIsToken0 ? r1 : r0;
+
+    const tokenAmount = Number(tokenReserve) / 10 ** decOf(x.t.pairToken);
+    const usdtAmount = Number(usdtReserve) / 1e18;
+    if (!(tokenAmount > 0) || !(usdtAmount > 0)) return;
+
+    const price = usdtAmount / tokenAmount;
+    if (!isFinite(price) || price <= 0) return;
+    map[x.t.symbol] = price;
+  });
+
+  priceMemo = { at: Date.now(), key, map };
+  return map;
+}

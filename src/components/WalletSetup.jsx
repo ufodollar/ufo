@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { skyBtn } from '../ui';
 
 // ============================================================================
 // 钱包面板：生成 / 导入 / 解锁 / 账户管理（查看私钥、删除账户、切换账户）
@@ -17,64 +18,21 @@ const FONT = {
   WebkitFontSmoothing: 'antialiased'
 };
 
-const primaryBtn = (disabled) => ({
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  width: '100%', padding: '15px 16px', border: 'none', borderRadius: '14px',
-  background: disabled ? '#93b4f5' : '#1d4ed8', color: '#fff',
-  fontSize: '15px', fontWeight: 700, lineHeight: 1.2,
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  boxShadow: disabled ? 'none' : '0 4px 14px rgba(29,78,216,0.28)'
-});
+// 全站按钮同一套语言（ui.js）。这里保留旧的三个名字，是因为调用点有二十多处，
+// 逐个改容易漏；语义没变，只是外观统一到「天蓝渐变 + 白字」。
+const primaryBtn = (disabled) => skyBtn('lg', { block: true, disabled });
 
-const ghostBtn = {
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  width: '100%', padding: '12px', border: 'none', background: 'transparent',
-  color: '#64748b', fontSize: '13px', fontWeight: 600, cursor: 'pointer'
-};
+// 次级动作：白底 + 天蓝字 + 天蓝描边。仍然是按钮，不是灰字透明底。
+const ghostBtn = { ...skyBtn('md', { block: true, soft: true }), marginTop: 0 };
 
-const secBtn = {
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  width: '100%', padding: '13px 16px', border: '1px solid #cbd5e1', borderRadius: '13px',
-  background: '#fff', color: '#334155', fontSize: '14px', fontWeight: 700, cursor: 'pointer'
-};
+const secBtn = { ...skyBtn('md', { block: true, soft: true }) };
+
+// 卡片内的小按钮
+const cardBtn = (disabled) => skyBtn('sm', { disabled });
 
 const label = {
   fontSize: '11px', fontWeight: 700, color: '#94a3b8',
   letterSpacing: '0.6px', textTransform: 'uppercase'
-};
-
-const chip = (tone) => ({
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  padding: '7px 10px', borderRadius: '9px',
-  border: '1px solid ' + (tone === 'danger' ? '#fecaca' : '#e2e8f0'),
-  background: tone === 'danger' ? '#fef2f2' : '#fff',
-  color: tone === 'danger' ? '#b91c1c' : '#334155',
-  fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2, cursor: 'pointer', whiteSpace: 'nowrap'
-});
-
-// 账户卡的底色按编号轮换：白字始终压在渐变上，不依赖主题色
-const CARD_TINTS = [
-  'linear-gradient(135deg, #7C6BFF 0%, #A855F7 100%)',
-  'linear-gradient(135deg, #22D3EE 0%, #0E8FE8 100%)',
-  'linear-gradient(135deg, #F59E0B 0%, #F43F5E 100%)',
-  'linear-gradient(135deg, #10B981 0%, #0EA5E9 100%)'
-];
-
-// 渐变卡上的按钮：半透明白 + 白字。实心白块会盖掉卡片本身的颜色
-const glassChip = {
-  appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-  padding: '7px 10px', borderRadius: '9px',
-  border: '1px solid rgba(255,255,255,0.45)',
-  background: 'rgba(255,255,255,0.16)',
-  color: '#fff', fontSize: '11.5px', fontWeight: 700,
-  lineHeight: 1.2, cursor: 'pointer', whiteSpace: 'nowrap'
-};
-
-const glassDanger = {
-  ...glassChip,
-  border: '1px solid rgba(255,214,214,0.55)',
-  background: 'rgba(255,255,255,0.10)',
-  color: '#FFE4E6'
 };
 
 /** 老 WebView 里 navigator.clipboard 常常不存在，必须留 execCommand 兜底 */
@@ -118,37 +76,28 @@ export default function WalletSetup({
   const [copied, setCopied] = useState('');   // '' | 'ok' | 'fail'
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // 正在切往哪个账户（按钮上转圈用），以及切换后的确认提示。
+  // 切换是本地解密 + 写盘，几十毫秒就结束，但某些浏览器（旧 WebView、
+  // 隐私模式下的 Safari）会明显慢一截，没有反馈用户会以为按钮没反应。
+  const [switching, setSwitching] = useState(null);
+  const [notice, setNotice] = useState('');
 
   // 这次操作是否需要先过 PIN：已解锁就不用
   const needGate = !unlocked;
   // 是不是在给这个 vault 设第一个 PIN（决定文案：设置 vs 输入）
   const settingPin = !hasWallet;
 
-  // 账户面板用彩色渐变底；PIN、私钥这些表单仍留在白底上，对比度更稳。
-  // 渐变里的文字色集中在这里算，避免散落成一堆魔法值。
-  const themed = mode === 'accounts';
-  const hint = {
-    fontSize: '12.5px',
-    color: themed ? 'rgba(255,255,255,0.9)' : '#64748b',
-    lineHeight: 1.65,
-    marginTop: '8px'
-  };
-  const lbl = { ...label, color: themed ? 'rgba(255,255,255,0.7)' : label.color };
-  const ghost = themed
-    ? { ...ghostBtn, color: '#fff', background: 'rgba(255,255,255,0.14)', borderRadius: '12px' }
-    : ghostBtn;
-  // 渐变底上的主按钮反过来做：白底、深色字。蓝底压紫蓝渐变会糊成一片
-  const primary = (disabled) => (themed
-    ? { ...primaryBtn(disabled),
-        background: disabled ? 'rgba(255,255,255,0.55)' : '#fff',
-        color: disabled ? 'rgba(15,23,42,0.45)' : '#1d4ed8',
-        boxShadow: disabled ? 'none' : '0 10px 24px -14px rgba(15,23,42,0.6)' }
-    : primaryBtn(disabled));
+  // 面板是纯白的，账户卡是黑的。深色卡在浅色弹层里是「实体卡」的观感，
+  // 也让「这张卡属于哪个账户」比一片彩色渐变更容易一眼分开。
+  const hint = { fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' };
+  const lbl = label;
+  const primary = (disabled) => primaryBtn(disabled);
+  const ghost = ghostBtn;
 
   useEffect(() => {
     if (!open) return;
     setPin(''); setKeyInput(''); setSecret(''); setShownAddress(''); setTarget(null);
-    setCopied(''); setBusy(false); setErr('');
+    setCopied(''); setBusy(false); setErr(''); setSwitching(null); setNotice('');
 
     if (mode === 'create') {
       if (needGate) { setStep('pin'); return; }
@@ -249,14 +198,22 @@ export default function WalletSetup({
   };
 
   const doSwitch = async (id) => {
-    if (busy || id === activeId) return;
-    setBusy(true); setErr('');
+    // 只拦「同一张卡重复点」。之前用全局 busy 做闸门，只要别的动作
+    // （解锁、生成、删账户）还没落定，Switch 就会被静默吞掉 ——
+    // 用户看到的是「按钮点了没反应」，这正是切换失败最常见的成因。
+    if (switching || id === activeId) return;
+    setSwitching(id); setErr(''); setNotice('');
     try {
-      await onSwitch(id);
+      const r = await onSwitch(id);
+      const no = (r && r.id && noOf(r.id)) || noOf(id);
+      setNotice(no ? `Now signing with Account ${no}.` : 'Account switched.');
     } catch (e) {
       setErr(errText(e));
+      // 会话已经不在了（另一个标签页锁了钱包、或浏览器回收了进程）：
+      // 与其在列表里显示一行读不懂的错误，不如直接回到 PIN 关卡重新解锁。
+      if (e && e.code === 4100) setStep('pin');
     } finally {
-      setBusy(false);
+      setSwitching(null);
     }
   };
 
@@ -302,7 +259,7 @@ export default function WalletSetup({
     step === 'confirm' ? 'Delete account'
       : mode === 'accounts' ? 'Accounts'
         : mode === 'import' ? 'Import private key'
-          : mode === 'create' ? 'Create UFO wallet'
+          : mode === 'create' ? (accounts.length > 0 ? 'New account' : 'Create UFO wallet')
             : 'Unlock wallet';
 
   // 创建结果的 reveal 不允许点遮罩关闭：私钥只在这里出现一次
@@ -318,19 +275,16 @@ export default function WalletSetup({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: themed
-            ? 'linear-gradient(155deg, #6D5DF6 0%, #4F4CE8 30%, #2C8FE8 66%, #22D3EE 100%)'
-            : '#fff',
+          background: '#fff',
           width: '100%', maxWidth: '420px',
           borderRadius: '24px', padding: '22px 20px',
           boxShadow: '0 20px 60px rgba(15,23,42,0.28)',
           maxHeight: '88vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-          color: themed ? '#fff' : '#1e293b'
+          color: '#1e293b'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-          <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3,
-                        color: themed ? '#fff' : '#1e293b' }}>
+          <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3, color: '#1e293b' }}>
             {title}
           </div>
           {!lockOverlay && (
@@ -339,8 +293,7 @@ export default function WalletSetup({
               aria-label="Close"
               style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
                        width: '30px', height: '30px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                       background: themed ? 'rgba(255,255,255,0.18)' : '#f1f5f9',
-                       color: themed ? '#fff' : '#64748b', fontSize: '16px', padding: 0 }}
+                       background: '#f1f5f9', color: '#64748b', fontSize: '16px', padding: 0 }}
             >
               ×
             </button>
@@ -490,12 +443,21 @@ export default function WalletSetup({
             <button
               onClick={() => {
                 if (onBackedUp) onBackedUp();
-                if (mode === 'accounts') setStep('list');
-                else onClose();
+                if (mode === 'accounts') { setStep('list'); return; }
+                // 在账户面板里点「生成新账户」时 mode 会变成 create。生成完
+                // 若只是 onClose，用户就被弹回钱包页，还得再点一次 Account。
+                // 这里把面板切回 accounts，于是他看到的还是那张账户列表。
+                if (mode === 'create' && accounts.length > 1 && onNavigate) {
+                  onNavigate('accounts');
+                  return;
+                }
+                onClose();
               }}
               style={{ ...secBtn, marginTop: '9px' }}
             >
-              {mode === 'create' ? 'Done — open my wallet' : mode === 'accounts' ? 'Back to accounts' : 'Done'}
+              {mode === 'create'
+                ? (accounts.length > 1 ? 'Back to accounts' : 'Done — open my wallet')
+                : mode === 'accounts' ? 'Back to accounts' : 'Done'}
             </button>
 
             <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>
@@ -605,52 +567,76 @@ export default function WalletSetup({
               Switching changes which account signs swap transactions.
             </div>
 
+            {notice && (
+              <div style={{ marginTop: '12px', padding: '9px 11px', borderRadius: '10px',
+                            background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857',
+                            fontSize: '12px', fontWeight: 700, lineHeight: 1.5 }}>
+                {notice}
+              </div>
+            )}
+
             {accounts.length === 0 ? (
               <div style={{ marginTop: '16px', padding: '22px 14px', textAlign: 'center',
-                            border: '1px dashed rgba(255,255,255,0.45)', borderRadius: '16px',
-                            fontSize: '12.5px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>
+                            border: '1px dashed #e2e8f0', borderRadius: '16px',
+                            fontSize: '12.5px', color: '#94a3b8', lineHeight: 1.7 }}>
                 No account on this device yet.
               </div>
             ) : (
-              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '11px' }}>
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {accounts.map((a) => {
                   const isActive = a.id === activeId;
-                  // 底色由账户编号决定：删掉账户 1 之后，账户 2 的颜色不跟着变。
-                  const tint = CARD_TINTS[(Math.max(a.no, 1) - 1) % CARD_TINTS.length];
                   return (
-                    <div key={a.id} style={{ background: tint, borderRadius: '16px', padding: '13px 13px 11px',
-                                             boxShadow: isActive
-                                               ? '0 0 0 2px rgba(255,255,255,0.95), 0 10px 24px -12px rgba(15,23,42,0.55)'
-                                               : '0 8px 20px -14px rgba(15,23,42,0.5)' }}>
+                    <div key={a.id} style={{
+                      background: '#0B0F19', borderRadius: '18px', padding: '14px 14px 12px',
+                      boxShadow: isActive
+                        ? '0 0 0 2px #38BDF8, 0 12px 26px -14px rgba(15,23,42,0.7)'
+                        : '0 10px 22px -16px rgba(15,23,42,0.8)'
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff', letterSpacing: '0.2px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff', letterSpacing: '0.2px' }}>
                           Account {a.no}
                         </span>
                         {isActive ? (
-                          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 800, color: '#4338ca',
-                                         background: '#fff', borderRadius: '20px', padding: '4px 9px' }}>
+                          <span style={{
+                            flexShrink: 0, fontSize: '10.5px', fontWeight: 800, color: '#fff',
+                            background: 'linear-gradient(180deg, #5CCBEC 0%, #38BDF8 100%)',
+                            borderRadius: '20px', padding: '5px 10px', lineHeight: 1
+                          }}>
                             Active
                           </span>
                         ) : (
-                          <button onClick={() => doSwitch(a.id)} disabled={busy} style={glassChip}>
-                            Switch
+                          <button
+                            type="button"
+                            onClick={() => doSwitch(a.id)}
+                            disabled={!!switching}
+                            style={{ ...cardBtn(!!switching), minWidth: '74px' }}
+                          >
+                            {switching === a.id ? 'Switching…' : 'Switch'}
                           </button>
                         )}
                       </div>
 
-                      <div style={{ marginTop: '8px', fontFamily: 'ui-monospace, Menlo, monospace',
-                                    fontSize: '11px', lineHeight: 1.6, color: 'rgba(255,255,255,0.92)',
-                                    wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>
+                      <div style={{
+                        marginTop: '9px', fontFamily: 'ui-monospace, Menlo, monospace',
+                        fontSize: '11px', lineHeight: 1.65, color: 'rgba(255,255,255,0.64)',
+                        wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all'
+                      }}>
                         {a.address}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '7px', marginTop: '11px' }}>
-                        <button onClick={() => { setTarget(a.id); setErr(''); setPin(''); setSecret(''); setCopied(''); setStep('viewgate'); }}
-                                style={glassChip}>
+                      <div style={{ display: 'flex', gap: '7px', marginTop: '12px' }}>
+                        <button
+                          type="button"
+                          onClick={() => { setTarget(a.id); setErr(''); setPin(''); setSecret(''); setCopied(''); setStep('viewgate'); }}
+                          style={{ ...cardBtn(false), flex: 1 }}
+                        >
                           View private key
                         </button>
-                        <button onClick={() => { setTarget(a.id); setErr(''); setStep('confirm'); }}
-                                style={glassDanger}>
+                        <button
+                          type="button"
+                          onClick={() => { setTarget(a.id); setErr(''); setStep('confirm'); }}
+                          style={{ ...cardBtn(false), flex: 1 }}
+                        >
                           Delete
                         </button>
                       </div>
