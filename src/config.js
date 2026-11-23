@@ -15,6 +15,22 @@ export const CONFIG = {
 export const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a62d2b48a7318a00cba946637e2b0e1e749';
 
 /**
+ * 备用 RPC。
+ *
+ * 主节点是 Ankr 的公共 key —— 这类 key 被限流是常态（同一 key 被别的站点
+ * 抓去用、或者只是这个 IP 段超配额）。一旦它返回 429，余额、价格、nonce、
+ * gas、回执全部读不到，页面表现是「余额 0 + 按钮点不动 + 交易永远 pending」，
+ * 而这些都不是网络断了。
+ *
+ * 这两条是 BSC 官方 dataseed，不带 key、不依赖任何厂商账号。
+ * chain.js 只在网络层失败时才切换；JSON-RPC 返回的业务错误不会触发切换。
+ */
+export const RPC_FALLBACKS = [
+  'https://bsc-dataseed.binance.org/',
+  'https://bsc-dataseed1.defibit.io/'
+];
+
+/**
  * Reown（WalletConnect）Project ID。
  *
  * 留给钱包墙判断「要不要走中继通道」：填了就启用，留空则所有钱包继续走各自的

@@ -9,7 +9,7 @@
 // 合约不变，它们就不会变。
 // ============================================================================
 
-import { CONFIG, RPC_URL } from './config';
+import { CONFIG, RPC_URL, RPC_FALLBACKS } from './config';
 
 // keccak("签名") 的前 4 字节。只做「读」用到的三个，写链走 ethers 自带的编码。
 const SEL = {
@@ -28,6 +28,44 @@ export const decodeUint = (hex) => (hex && hex !== '0x' ? BigInt(hex) : null);
 
 let rpcId = 0;
 
+// ---------------------------------------------------------------------------
+// 一次 POST，失败就换下一个节点
+// ---------------------------------------------------------------------------
+// 只处理「网络层」失败：连不上、超时、非 2xx。JSON-RPC 的业务错误
+// （json.error，比如 revert）会原样返回给调用方，不该换节点重试 ——
+// 换十次也是同一个 revert，只会把一次失败拖成三十秒。
+const ENDPOINTS = [RPC_URL, ...RPC_FALLBACKS];
+let preferred = 0;
+
+async function postJson(payload, timeoutMs) {
+  let lastError = null;
+  for (let i = 0; i < ENDPOINTS.length; i++) {
+    const idx = (preferred + i) % ENDPOINTS.length;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
+    try {
+      const res = await fetch(ENDPOINTS[idx], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctl.signal
+      });
+      if (!res.ok) throw new Error('RPC HTTP ' + res.status);
+      const json = await res.json();
+      // 能用的这个记下来，后续请求先试它，避免每次都从坏节点开始
+      preferred = idx;
+      return json;
+    } catch (e) {
+      lastError = e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const err = lastError || new Error('RPC unreachable');
+  if (err && err.name === 'AbortError') throw new Error('RPC timeout');
+  throw err;
+}
+
 /**
  * 通用 JSON-RPC。除了 eth_call 之外，交易层还要预取 nonce / gasPrice /
  * estimateGas / receipt —— 这些都不能问钱包。
@@ -41,24 +79,9 @@ let rpcId = 0;
  *   网站坏了。移动网络切换（4G ↔ Wi-Fi）时尤其容易触发。
  */
 export async function rpcCall(method, params, timeoutMs = 12000) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
-  try {
-    const res = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
-      signal: ctl.signal
-    });
-    const json = await res.json();
-    if (json && json.error) throw new Error(json.error.message || 'RPC error');
-    return json.result;
-  } catch (e) {
-    if (e && (e.name === 'AbortError' || e.code === 20)) throw new Error('RPC timeout');
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
+  const json = await postJson({ jsonrpc: '2.0', id: ++rpcId, method, params }, timeoutMs);
+  if (json && json.error) throw new Error(json.error.message || 'RPC error');
+  return json.result;
 }
 
 /** 单次 eth_call */
@@ -80,23 +103,7 @@ export async function ethBatch(calls, timeoutMs = 12000) {
   }));
 
   // 同 rpcCall：没有超时就是「偶尔永远转圈」
-  const ctl = new AbortController();
-  const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
-  let json;
-  try {
-    const res = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: ctl.signal
-    });
-    json = await res.json();
-  } catch (e) {
-    if (e && (e.name === 'AbortError' || e.code === 20)) throw new Error('RPC timeout');
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
+  const json = await postJson(payload, timeoutMs);
   if (!Array.isArray(json)) throw new Error('RPC batch rejected');
 
   const byId = {};
