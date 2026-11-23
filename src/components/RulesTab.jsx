@@ -47,8 +47,8 @@ export default function RulesTab() {
 
         <Cl n="1.5">
           The settlement venue is BNB Chain. UFO is not issued on any other
-          network. In Bitget Wallet, select <b>BNB Chain</b> (displayed as BSC)
-          at the network prompt.
+          network. The wallet built into this page is bound to BNB Chain; there
+          is no network prompt to answer and nothing to switch.
         </Cl>
 
         <DefTable
@@ -107,38 +107,47 @@ export default function RulesTab() {
         gradient="linear-gradient(145deg, #6366f1 0%, #4f46e5 55%, #3730a3 100%)"
         glow="rgba(79,70,229,0.50)"
       >
-        <SecTitle n="03">Wallet operation — Bitget Wallet</SecTitle>
+        <SecTitle n="03">Wallet operation — built into this page</SecTitle>
 
         <Cl n="3.1">
-          Select the Bitget Wallet entry. On mobile the link opens the
-          application. If the application is not installed, the link redirects
-          to the download page after two seconds.
+          <b>Create.</b> Select <b>Create Wallet</b>, set a six-digit PIN, and
+          the page generates a private key and its address on the device. The
+          private key is shown once and may be copied. Write it down before
+          closing that panel: it is the only way to reach the address from
+          another device.
         </Cl>
 
         <Cl n="3.2">
-          If the application requests a network, select <b>BNB Chain</b>
-          (displayed as BSC). The request originates from the wallet, not from
-          this site.
+          <b>Unlock.</b> The key is stored encrypted with the PIN and never in
+          plaintext. After a reload, enter the same PIN to decrypt it. A wrong
+          PIN decrypts nothing and changes nothing.
         </Cl>
 
         <Cl n="3.3">
-          The page loads inside the application's browser. The provider is
-          injected on load; no QR pairing and no relay session are used.
+          <b>Accounts.</b> One PIN protects every account on this device.
+          Accounts carry a permanent number; switching, viewing a private key
+          (PIN required each time) and deleting an account all happen in the
+          Accounts panel. Deleting an account removes only the local
+          ciphertext — funds on chain are untouched.
         </Cl>
 
         <Cl n="3.4">
-          Select Connect and approve the connection. This associates the address
-          with the page. It moves no funds and consumes no gas.
+          <b>Send and receive.</b> Transfers support BNB and BEP-20 tokens
+          (USDT, USDC, UFO). The recipient is checked against its EIP-55
+          checksum before signing. The receive panel shows the address and a
+          QR code generated locally, not by a third-party service.
         </Cl>
 
         <Cl n="3.5">
-          Enter the notional and sign. Subsequent sessions restore the
-          association without a further prompt.
+          <b>Signing.</b> Every issuance, burn and transfer is signed on this
+          device and broadcast to BNB Chain. No relay, no QR pairing, and no
+          session is created outside this page.
         </Cl>
 
         <Note>
-          If the application opens on its home screen, use <b>Discover</b> and
-          reopen this site from the browsing history.
+          If the browser clears its data, the encrypted key is gone. The private
+          key you saved is the only recovery path — the operator cannot restore
+          it.
         </Note>
       </Card>
 

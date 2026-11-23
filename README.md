@@ -1,6 +1,7 @@
 <div align="center">
-  <h1>🛸 UFO Dollar - Frontend DApp</h1>
+  <h1>🛸 UFO Wallet — Frontend DApp</h1>
   <p><strong>The Web Interface for Asset Concealment and Private Settlement.</strong></p>
+  <p><sub>产品名是 <b>UFO Wallet</b>；链上的贸易币全名仍是 <b>UFO Dollar</b>（合约里的名字，不随产品更名）。</sub></p>
 
   <p>
     <img src="https://img.shields.io/badge/Status-Production--Ready-success?style=for-the-badge&logo=checkmarx" alt="Status">
@@ -54,8 +55,8 @@
 <table>
   <tr><th>状态</th><th>界面</th><th>能做什么</th></tr>
   <tr><td>还没有钱包</td><td>顶部 Create Wallet ＋ 账户管理按钮</td><td>生成新地址（每次都是新的随机私钥），或导入已有私钥</td></tr>
-  <tr><td>已生成，本次会话未解锁</td><td>顶部 Unlock / 锁图标 / 账户管理</td><td>输 6 位 PIN 解密私钥；进账户管理需先过 PIN</td></tr>
-  <tr><td>已解锁</td><td>顶部 Account N ＋ 锁图标 ＋ 账户管理</td><td>发行 UFO、销毁 UFO、查看余额；Wallet 页只有资产列表</td></tr>
+  <tr><td>已生成，本次会话未解锁</td><td>顶部 Unlock ＋ Lock ＋ Accounts</td><td>输 6 位 PIN 解密私钥；进账户管理需先过 PIN</td></tr>
+  <tr><td>已解锁</td><td>顶部 Account N ＋ Lock ＋ Accounts</td><td>发行 UFO、销毁 UFO、发送、接收、查看余额</td></tr>
 </table>
 
 <h3>密钥怎么存</h3>
@@ -65,6 +66,15 @@
 <p>账户管理弹窗里每个账户都列出编号、完整地址，并带 <b>View private key</b>（每次要重输 PIN）与 <b>Delete</b>（二次确认）两个按钮，列表按编号升序排列。删除只删本机的密文，链上资产不动；删掉最后一个账户等于删掉整个钱包，页面回到 Create Wallet。</p>
 <p>切账户后所有读写都跟着走：顶部编号立刻变（<code>bindActive</code> 同时刷新 <code>activeId</code>，顶部还以当前地址兜底匹配，避免状态滞后时显示错号）、余额用新地址重新读、签名前再校验 <code>tx.from</code> 与当前账户是否一致，不一致直接拒签 —— 防止「用 A 的余额签 B 的交易」。老记录（本字段上线前创建的）在首次读取时按当时顺序补一次编号，补完即固定。</p>
 
+<h3>发送与接收</h3>
+<p>Wallet 页的资产列表上方是 <b>Send</b> 与 <b>Receive</b> 两个入口。未连接时点它们会先走创建 / 解锁，不另做一套「请先连接钱包」的空提示。</p>
+<p><b>发送</b>支持 BNB（原生币，走 <code>value</code> 转账）与 USDT / USDC / UFO（BEP-20，走 <code>transfer</code>）。收款地址先做 EIP-55 校验和检查——形如 40 位十六进制但大小写 checksum 不对的地址会被拦下，因为那通常意味着抄错了字符，而这样的地址能把钱打进一个谁都没有私钥的位置。余额在签名前先查（BNB 还要留 gas），gas 由公共 RPC 估好，钱包只签名，成功后立刻重读余额并写一条 <code>Sent</code> 本地流水。</p>
+<p><b>接收</b>展示当前账户地址与二维码。二维码用 <code>qrcode-generator</code> 在<b>本地</b>生成（打开时才按需下载约 21 KB），不请求任何外部图床——地址是敏感信息，不该出现在第三方日志里。二维码内容是裸地址，主流钱包扫码即可识别。</p>
+
+<h3>页面结构</h3>
+<p>底部五个入口：<b>Issuance</b>（发行 / 销毁）、<b>Wallet</b>（余额 + 发送 / 接收）、<b>Readme</b>、<b>History</b>、<b>Contact</b>。</p>
+<p><b>Readme</b> 是 Guide 与 Rules 的合并页：顶部一个 segmented 切换，两块内容各自保留原来的条款编号（引用时仍然说「Guide §2.1」），只是翻页成本从一个底部 tab 变成一个点击。合并的原因是底部六个入口在 412px 上每个只剩 68px，标签已经挤到不好点。</p>
+
 <h3>签名怎么发生</h3>
 <p>本地钱包实现成一个 EIP-1193 provider（<code>src/localwallet.js</code>）：<code>eth_sendTransaction</code> 收到的是 <code>tx.js</code> 已经算好 nonce / gas / gasPrice 的交易，钱包只负责签名并广播原始字节。因此余额刷新、nonce 管理、回执轮询、错误处理全部沿用原有逻辑，没有为「本地钱包」写第二套。</p>
 
@@ -73,8 +83,9 @@
 <p>同理，WalletConnect 这类协议需要一个双方都能连上的中继；中继在部分网络里建不起长连接，而钱包 App 侧的中继地址是写死的，网页无法替换。把入口留在这里，只会变成「点了没反应」。</p>
 <table>
   <tr><th>模块</th><th>何时加载</th><th>大小（min / gzip）</th></tr>
-  <tr><td>React + UI + 读链层 + 钱包层</td><td>首屏必需</td><td>≈225KB / 71KB</td></tr>
-  <tr><td>Ethers.js</td><td>第一次生成钱包或签交易前</td><td>≈210KB / 78KB</td></tr>
+  <tr><td>React + UI + 读链层 + 钱包层</td><td>首屏必需</td><td>≈250KB / 77KB</td></tr>
+  <tr><td>Ethers.js</td><td>第一次生成钱包或签交易前</td><td>≈167KB / 60KB</td></tr>
+  <tr><td>qrcode-generator</td><td>第一次打开 Receive</td><td>≈21KB / 8KB</td></tr>
 </table>
 <p>四个设计决定值得记住，改代码时不要退回去：</p>
 <ol>
@@ -133,7 +144,7 @@
 </table>
 
 <h2>📄 License</h2>
-<p>This project is <b>proprietary and closed-source</b>. All rights reserved. No part of this repository may be reproduced, distributed, or transmitted in any form without prior written permission from the UFO Dollar team.</p>
+<p>This project is <b>proprietary and closed-source</b>. All rights reserved. No part of this repository may be reproduced, distributed, or transmitted in any form without prior written permission from the UFO Wallet team.</p>
 
 <br />
 <div align="center">

@@ -27,7 +27,8 @@ import { rpcCall } from './chain';
 const ERC20_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)'
+  'function approve(address spender, uint256 amount) returns (bool)',
+  'function transfer(address to, uint256 amount) returns (bool)'
 ];
 
 const VAULT_ABI = [
@@ -108,11 +109,12 @@ async function waitReceipt(hash) {
  * 同一个 nonce —— 后发的那笔会把前一笔替换掉，表现为「approve 成功但
  * deposit 永远 pending」。所以由调用方传一个下界，取两者较大值。
  */
-async function sendTx(walletProvider, { from, to, data, nonceFloor = 0 }) {
+async function sendTx(walletProvider, { from, to, data, value = 0n, nonceFloor = 0 }) {
+  const valueHex = '0x' + BigInt(value).toString(16);
   const [nonce, gasPrice, gasEstimate] = await Promise.all([
     rpcCall('eth_getTransactionCount', [from, 'pending']),
     rpcCall('eth_gasPrice', []),
-    rpcCall('eth_estimateGas', [{ from, to, data, value: '0x0' }])
+    rpcCall('eth_estimateGas', [{ from, to, data, value: valueHex }])
   ]);
 
   // 留 20% 余量：估算与实际执行之间状态可能微变，out of gas 的代价是白付手续费
@@ -125,6 +127,7 @@ async function sendTx(walletProvider, { from, to, data, nonceFloor = 0 }) {
     from,
     to,
     data,
+    value: valueHex,
     nonce: '0x' + useNonce.toString(16),
     gasPrice,
     gas: '0x' + gasLimit.toString(16),
@@ -244,4 +247,85 @@ export async function submitSwap({ walletProvider, owner, tokenAddress, amountWe
 /** 用户开始输金额就把 ABI 模块拉下来，点按钮时不用等下载 */
 export function prefetchTxLibs() {
   loadLibs().catch(() => {});
+}
+
+/**
+ * 收款地址校验。返回校验和格式（EIP-55）。
+ * 只做正则是不够的：混合大小写的地址如果 checksum 不对，说明抄错了字符，
+ * 但形如 0x + 40 位仍然是合法的「格式」。这种地址能把钱打进一个
+ * 谁都没有私钥的位置，必须在签名前拦下。
+ */
+export async function normalizeAddress(input) {
+  const t = String(input == null ? '' : input).trim();
+  if (!t) throw new Error('Enter a recipient address.');
+  if (!/^0x[0-9a-fA-F]{40}$/.test(t)) {
+    throw new Error('A BSC address is 0x followed by 40 hex characters.');
+  }
+  const { getAddress } = await import('ethers/address');
+  try {
+    return getAddress(t);
+  } catch (e) {
+    throw new Error('That address has an invalid checksum — check it character by character.');
+  }
+}
+
+/**
+ * 转账。原生币（BNB）与 BEP-20 代币走同一条路径：参数由公共 RPC 算好，
+ * 钱包只签名。与兑换不同，这里没有 approve —— transfer 是代币合约的直接调用。
+ *
+ * 余额在签名前先查：用户点完按钮才发现「余额不足」，在手机上等于白跑一趟。
+ */
+export async function sendTransfer({ walletProvider, owner, token, to, amountWei }) {
+  const { Interface } = await loadLibs();
+  const erc20 = new Interface(ERC20_ABI);
+  const native = !token || token.symbol === 'BNB' || token.native === true;
+
+  const amount = BigInt(amountWei);
+  if (amount <= 0n) throw new Error('Enter an amount greater than zero.');
+
+  const data = native ? '0x' : erc20.encodeFunctionData('transfer', [to, amount]);
+  const value = native ? amount : 0n;
+
+  const [bnbHex, tokenHex] = await Promise.all([
+    rpcCall('eth_getBalance', [owner, 'latest']),
+    native
+      ? Promise.resolve(null)
+      : rpcCall('eth_call', [
+          { to: token.address, data: erc20.encodeFunctionData('balanceOf', [owner]) },
+          'latest'
+        ])
+  ]);
+
+  if (native) {
+    if (BigInt(bnbHex || '0x0') < value) throw new Error('Not enough BNB.');
+  } else if (tokenHex && tokenHex !== '0x') {
+    // 读不到余额（'0x'）时不要在这里猜，交给链上估算 gas 去判定 ——
+    // 直接 BigInt('0x') 只会抛一句用户看不懂的转换错误。
+    if (BigInt(tokenHex) < amount) {
+      const err = new Error(`Not enough ${token.symbol}.`);
+      err.code = 'INSUFFICIENT_TOKEN';
+      throw err;
+    }
+  }
+
+  let sent;
+  try {
+    sent = await sendTx(walletProvider, {
+      from: owner,
+      to: native ? to : token.address,
+      data,
+      value
+    });
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    if (/insufficient funds|exceeds balance|gas required exceeds/i.test(msg)) {
+      throw new Error('Not enough BNB to cover the amount and gas.');
+    }
+    if (/execution reverted|revert/i.test(msg)) {
+      throw new Error('The transfer would fail on chain. Check the amount and the recipient.');
+    }
+    throw e;
+  }
+
+  return { hash: sent.hash, receipt: sent.receipt };
 }

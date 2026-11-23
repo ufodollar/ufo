@@ -43,7 +43,7 @@ export default function GuideTab() {
 
         <Cl n="1.1">
           UFO is a zero-value settlement token issued on BNB Chain. On the UFO
-          Dollar platform it is priced in US dollars, and 1 UFO is permanently
+          Wallet platform it is priced in US dollars, and 1 UFO is permanently
           equal to 1 USD. It can replace USDT and USDC as a commercial
           settlement instrument, and, by virtue of the advantages of an
           ordinary wallet and of zero on-chain value, it holds the advantages
@@ -64,7 +64,7 @@ export default function GuideTab() {
         </Cl>
 
         <Cl n="1.3">
-          The maker of the UFO Dollar platform will not create UFO out of thin
+          The maker of the UFO Wallet platform will not create UFO out of thin
           air. The contract code allows only stablecoins to be used for minting
           UFO. The code is the law, and it does not change.
         </Cl>

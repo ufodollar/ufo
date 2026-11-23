@@ -8,12 +8,11 @@ import { submitSwap, toWei, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
 import WalletSetup from './components/WalletSetup';
 import TokenMenu from './components/TokenMenu';
+import TransferSheet from './components/TransferSheet';
+import ReadmeTab from './components/ReadmeTab';
 
-// 引入抽离出来的文案组件
-// Guide = 产品说明（原 Rules 内容，已去除锚定/稳定币叙事）
-// Rules = 兑换规则 / 钱包用法 / 风险提示解释
-import GuideTab from './components/GuideTab';
-import RulesTab from './components/RulesTab';
+// Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
+// 两份文案本身不动：它们是按条引用的条款，拆开写才不会被互相稀释。
 
 // ================= 1. 币种图标 =================
 // Tether / Circle / Binance 官方 logo 的矢量路径，内联成 data URI。
@@ -38,7 +37,16 @@ const STABLECOINS = [
   { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC }
 ];
 
+// 贸易币全名是 UFO Dollar —— 这是链上的名字，不随产品品牌（UFO Wallet）改动。
 const UFO_TOKEN = { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' };
+
+// 可发送的资产。BNB 是原生币（走 value 转账），其余走 ERC-20 transfer。
+const TRANSFER_TOKENS = [
+  { symbol: 'BNB', name: 'BNB', native: true, icon: ICON_BNB },
+  { symbol: 'USDT', name: 'Tether USD', address: CONFIG.USDT_ADDRESS, icon: ICON_USDT },
+  { symbol: 'USDC', name: 'USD Coin', address: CONFIG.USDC_ADDRESS, icon: ICON_USDC },
+  { symbol: 'UFO', name: 'UFO Dollar', address: CONFIG.UFO_ADDRESS, icon: 'UFO' }
+];
 
 // ================= 2. 样式常量 =================
 const FONT_STYLE = {
@@ -46,12 +54,15 @@ const FONT_STYLE = {
 };
 
 /* Swap / Wallet / History 三个页面共用的白色容器，样式只在这里写一次 */
+// 头部操作按钮：文字 + 图标。原来是两个纯图标方块，手机上要靠猜 ——
+// 「锁」和「滑块」在没有上下文时并不自明。
 const HEAD_BTN = {
   appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: '34px', height: '34px', padding: 0, borderRadius: '11px',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+  height: '32px', padding: '0 clamp(6px, 1.8vw, 9px)', borderRadius: '10px',
   background: '#fff', border: '1px solid #e2e8f0', color: '#334155',
-  cursor: 'pointer', lineHeight: 1
+  fontSize: 'clamp(9.5px, 2.6vw, 11.5px)', fontWeight: 700,
+  whiteSpace: 'nowrap', cursor: 'pointer', lineHeight: 1
 };
 
 const SUB_CARD = {
@@ -149,6 +160,8 @@ function App() {
 
   // '' | 'create' | 'import' | 'unlock' | 'viewkey' | 'accounts'
   const [walletPanel, setWalletPanel] = useState('');
+  // '' | 'send' | 'receive'
+  const [transferMode, setTransferMode] = useState('');
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
@@ -555,6 +568,30 @@ function App() {
     }
   };
 
+  // 未连接时先走创建 / 解锁；已连接才打开转账面板
+  const openTransfer = (m) => {
+    if (!isConnected) {
+      setWalletPanel(hasWallet ? 'unlock' : 'create');
+      return;
+    }
+    setTransferMode(m);
+  };
+
+  // 转账成功后：记一笔本地流水 + 立刻重读余额（不等 10 秒轮询）
+  const handleTransferSent = (r) => {
+    saveTxToHistory({
+      time: new Date().toLocaleString(),
+      type: 'Sent',
+      payAmount: r.amount,
+      paySymbol: r.symbol,
+      receiveAmount: r.to.slice(0, 6) + '…' + r.to.slice(-4),
+      receiveSymbol: '',
+      status: 'Success',
+      txHash: r.hash
+    });
+    fetchUserBalances();
+  };
+
   const clearHistory = () => {
     if (window.confirm('Are you sure you want to clear all local history?')) {
       localStorage.removeItem('ufo_tx_history');
@@ -591,23 +628,31 @@ function App() {
       {/* Header */}
       {/* zIndex 必须高于主内容(10)和底栏(20)：header 和主内容是兄弟节点，
           同级时后渲染的会盖住前面的，账户菜单就会被 Swap 卡片压住 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', zIndex: 30, flexShrink: 0, position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '40px', height: '40px', background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <UfoIcon size={28} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '18px clamp(10px, 3.4vw, 20px)', gap: '6px',
+                    zIndex: 30, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+          <div style={{ width: 'clamp(28px, 7.8vw, 32px)', height: 'clamp(28px, 7.8vw, 32px)', flexShrink: 0,
+                        background: '#fff', borderRadius: '50%', display: 'flex', justifyContent: 'center',
+                        alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            <UfoIcon size={22} />
           </div>
-          <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>UFO<span style={{ color: '#3b82f6' }}> Dollar</span></span>
+          {/* 品牌名是 UFO Wallet；链上的贸易币全名仍是 UFO Dollar（见 UFO_TOKEN.name） */}
+          <span style={{ fontSize: 'clamp(13.5px, 3.9vw, 16px)', fontWeight: '700', letterSpacing: '-0.4px',
+                         whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            UFO<span style={{ color: '#3b82f6' }}> Wallet</span>
+          </span>
         </div>
         {/* 右上角：账户号 → 锁定 → 账户管理。
             账户号只显示「是第几个」，不再显示地址尾号；地址只在账户管理里出现。 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {isConnected ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '34px',
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '32px',
                             background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
-                            padding: '0 11px', borderRadius: '17px', fontWeight: 700, fontSize: '12.5px',
-                            lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                            padding: '0 clamp(6px, 1.8vw, 8px)', borderRadius: '16px', fontWeight: 700,
+                            fontSize: 'clamp(9.5px, 2.6vw, 11.5px)', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
                 Account {accountNo ?? '—'}
               </div>
               <button
@@ -616,10 +661,11 @@ function App() {
                 title="Lock wallet"
                 style={HEAD_BTN}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
                   <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
                 </svg>
+                Lock
               </button>
             </>
           ) : (
@@ -642,11 +688,12 @@ function App() {
             title="Accounts"
             style={HEAD_BTN}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 7h10M4 12h16M4 17h7" />
               <circle cx="18" cy="7" r="2.2" />
               <circle cx="14" cy="17" r="2.2" />
             </svg>
+            Accounts
           </button>
         </div>
       </div>
@@ -759,9 +806,9 @@ function App() {
                 <span>Pay Price</span>
                 <span>1 {isBuyingUFO ? selectedStablecoin.symbol : 'UFO'} = ${currentPayPrice !== null ? currentPayPrice.toFixed(4) : '—'} USD</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
-                <span>UFO Price (on-chain)</span>
-                <span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
+                <span style={{ flexShrink: 0 }}>UFO Price (on-chain)</span>
+                <span style={{ textAlign: 'right' }}>
                   1 UFO = ${currentNav.toFixed(4)} USD
                   {navStatus === 'error' && <span style={{ marginLeft: 6 }}>(read failed)</span>}
                 </span>
@@ -792,6 +839,37 @@ function App() {
         {activeTab === 'assets' && (
           <div style={{ marginTop: '10px' }}>
           <div style={{ ...SUB_CARD }}>
+            {/* 资产列表上方的两个动作。未连接时点了先走创建/解锁，
+                不在这里另做一套「请先连接钱包」的提示。 */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '18px' }}>
+              <button
+                onClick={() => openTransfer('send')}
+                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flex: 1,
+                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                         height: '44px', borderRadius: '13px', border: 'none',
+                         background: '#1d4ed8', color: '#fff', fontSize: '14px', fontWeight: 700,
+                         cursor: 'pointer', boxShadow: '0 4px 14px rgba(29,78,216,0.22)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5" /><path d="M5 12l7-7 7 7" />
+                </svg>
+                Send
+              </button>
+              <button
+                onClick={() => openTransfer('receive')}
+                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flex: 1,
+                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                         height: '44px', borderRadius: '13px',
+                         border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
+                         fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14" /><path d="M19 12l-7 7-7-7" />
+                </svg>
+                Receive
+              </button>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
@@ -904,7 +982,7 @@ function App() {
                   <div key={idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: '700', color: (tx.type === 'Issuance' || tx.type === 'Swap') ? '#3b82f6' : '#8b5cf6' }}>{tx.type}</span>
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: (tx.type === 'Issuance' || tx.type === 'Swap') ? '#3b82f6' : (tx.type === 'Sent' ? '#0f766e' : '#8b5cf6') }}>{tx.type}</span>
                         <span style={{ fontSize: '12px', color: '#94a3b8' }}>{tx.time}</span>
                       </div>
                       <span style={{
@@ -915,8 +993,14 @@ function App() {
                       }}>{tx.status}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#475569' }}>
-                      <div>Paid: <span style={{ fontWeight: '600', color: '#1e293b' }}>{tx.payAmount} {tx.paySymbol}</span></div>
-                      <div style={{ textAlign: 'right' }}>Received: <span style={{ fontWeight: '600', color: '#1e293b' }}>{tx.receiveAmount} {tx.receiveSymbol}</span></div>
+                      <div>
+                        {tx.type === 'Sent' ? 'Sent' : 'Paid'}: <span style={{ fontWeight: '600', color: '#1e293b' }}>{tx.payAmount} {tx.paySymbol}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        {tx.type === 'Sent'
+                          ? <>To: <span style={{ fontWeight: '600', color: '#1e293b', fontFamily: 'monospace' }}>{tx.receiveAmount}</span></>
+                          : <>Received: <span style={{ fontWeight: '600', color: '#1e293b' }}>{tx.receiveAmount} {tx.receiveSymbol}</span></>}
+                      </div>
                     </div>
                     {tx.txHash && tx.txHash !== '-' && (
                       <a
@@ -936,9 +1020,8 @@ function App() {
           </div>
         )}
 
-        {/* 抽离出的文案组件 */}
-        {activeTab === 'guide' && <GuideTab />}
-        {activeTab === 'rules' && <RulesTab />}
+        {/* Guide 与 Rules 合并为一页，页内切换 */}
+        {activeTab === 'readme' && <ReadmeTab />}
 
         {activeTab === 'contact' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
@@ -996,8 +1079,7 @@ function App() {
         {[
           { id: 'swap', label: 'Issuance', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg> },
           { id: 'assets', label: 'Wallet', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg> },
-          { id: 'guide', label: 'Guide', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /></svg> },
-          { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><polyline points="8.5 14.5 10.8 16.8 15.5 12" /></svg> },
+          { id: 'readme', label: 'Readme', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H2z" /><path d="M22 4.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H22z" /><path d="M12 9.5v8" /></svg> },
           { id: 'history', label: 'History', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3.2 1.9" /></svg> },
           { id: 'contact', label: 'Contact', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg> }
         ].map((tab) => (
@@ -1011,6 +1093,22 @@ function App() {
           </div>
         ))}
       </div>
+
+      <TransferSheet
+        mode={transferMode}
+        onClose={() => setTransferMode('')}
+        address={address}
+        accountNo={accountNo}
+        balances={{
+          BNB: bnbBal,
+          USDT: tokenBalances.USDT || '0',
+          USDC: tokenBalances.USDC || '0',
+          UFO: tokenBalances.UFO || '0'
+        }}
+        tokens={TRANSFER_TOKENS}
+        provider={walletProvider}
+        onSent={handleTransferSent}
+      />
 
       <WalletSetup
         mode={walletPanel}
