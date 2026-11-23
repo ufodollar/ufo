@@ -159,8 +159,25 @@ export function runWcTest(root) {
           'SDK 连上了中继，配对 URI 也生成了。\n\n' +
           '这意味着 WalletConnect 这条路完全可用：用户在钱包 App 里授权，' +
           '确认后按 redirect 声明自动跳回浏览器，页面不用进任何内置浏览器。\n\n' +
-          '配对 URI 是每次新生成的、4 分钟过期，把它贴进别的工具没有意义 —— ' +
-          '它的用处只是证明这条路成立。');
+          '下面两个按钮可以直接验完整闭环：点了会带着这条配对 URI 跳进 App，' +
+          '你在 App 里点一次「连接」，然后看它是不是自己回到浏览器。');
+
+        // 一键验证完整闭环。必须在点击的同步栈里赋值 location.href ——
+        // 挪进 await 之后 Chrome 会当成来路不明的导航丢掉。
+        const apps = [
+          ['用 Trust Wallet 试一次', 'https://link.trustwallet.com/wc?uri='],
+          ['用 Coin98 试一次', 'coin98://wc?uri=']
+        ];
+        apps.forEach(([label, prefix]) => {
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.style.cssText =
+            'display:block;width:100%;margin-top:10px;padding:13px 16px;border:none;' +
+            'border-radius:11px;background:#3b82f6;color:#fff;font-size:14px;' +
+            'font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent';
+          b.onclick = () => { location.href = prefix + encodeURIComponent(st.uri); };
+          root.appendChild(b);
+        });
         return;
       }
       await sleep(200);
