@@ -9,8 +9,9 @@
 //      「点了完全没反应」，这正是 OKX 之前的表现。
 //   3. 自定义 scheme —— iOS 只能这样。没装时浏览器毫无反应，必须自己计时。
 //
-// 还有一类是「打开 App 但不进浏览器」：SafePal 官方明确说 deeplink 只拉起
-// App，不会导航到内置浏览器。这类只能标 direct:false，进去后让用户粘贴。
+// 还有一类是「打开 App 但不进浏览器」：Trust 的 open_url 现在只负责把用户
+// 送进内置浏览器，url 参数会被丢掉。这类标 direct:true（浏览器确实会开），
+// 但必须把链接预先放进剪贴板，并在面板上留一条粘贴提示。
 
 const ICON = (id) => `/wallets/${id}.webp`;
 
@@ -56,9 +57,9 @@ export function autoconnectUrl() {
  * direct: true  → 能直接落进内置浏览器并加载本站
  * direct: false → 只能打开 App 本身，进去后要用户自己粘贴链接
  *
- * Trust 和 SafePal 属于后者：两家官方的 deeplink 都只负责拉起 App，
- * 不消费传入的 URL（SafePal 的文档甚至把这一点写成了注意事项）。
- * 处理方式一样 —— 复制链接、拉起 App、用户在地址栏/DApp 浏览器里粘贴一次。
+ * Trust 属于第三类：deeplink 能把浏览器拉起来，但 url 参数不会生效
+ * （四组对照实测，连 example.com 都只打开空白页）。处理方式是复制链接、
+ * 拉起浏览器、用户在地址栏粘贴一次。
  *
  * OKX 的 okx:// 格式始终无公开文档且 intent 实测不可靠，Bybit 的
  * app.bybit.com/inapp 其官方适配器自己注明「只打开 App，不加载页面」。
@@ -122,7 +123,6 @@ export function walletList() {
     bitget: 'bitkeep://wc?uri=',
     tokenpocket: 'tpdapp://wc?uri=',
     imtoken: 'imtokenv2://wc?uri=',
-    safepal: 'safepal://wc?uri=',
     phantom: 'phantom://wc?uri='
   };
   return [
@@ -246,20 +246,22 @@ export function walletList() {
       scheme: true
     },
     {
-      id: 'safepal', name: 'SafePal', direct: false, manual: true,
-      // 官方 deeplink 服务是 https://link.safepal.io/wallet/openurl，
-      // 但 SafePal 自己的文档写得很清楚：这条链接只拉起 App，
-      // **不会**导航到 DApp 浏览器，也不会自动加载传进去的 URL。
-      // （@tronweb3/tronwallet-adapter-safepal 的 README 原文：
-      //   "Deeplink only opens the SafePal app — it does not navigate
-      //    directly to the dApp browser or load the current page URL"）
+      id: 'coin98', name: 'Coin98', direct: true,
+      // 官方 deeplink（docs.coin98.com/developer-guide/deeplink）：
+      //   https://coin98.com/dapp/:link/:chainId
       //
-      // 所以和 Trust 同一种处理：复制链接 → 拉起 App → 用户到「Discover」
-      // 里粘贴一次。用 https 而不是裸 scheme，因为 Android 上没注册 host 的
-      // scheme 会静默失败，universal link 至少还能落到下载页。
-      url: `https://link.safepal.io/wallet/openurl?url=${enc}`,
-      fallback: 'https://www.safepal.com/download',
-      pasteHint: 'Link copied. In SafePal, open Discover at the bottom, then paste the link into the DApp browser.'
+      // 这个条目之前被删过一次，原因记在这里，免得第三次踩同一个坑：
+      // 上一版把 `https://ufo-eea.pages.dev/?c=1` 整段 encodeURIComponent
+      // 塞进 :link，而 Coin98 **不做 percent-decode**，于是它把
+      // "https%3A%2F%2Fufo-eea.pages.dev%2F%3Fc%3D1" 原样当成网址打开 ——
+      // 白屏。当时判断成「Coin98 的深链不行」，其实是参数拼错了。
+      //
+      // 正确写法就是官方示例的样子：:link 只放主机名，不带协议头、不带 query，
+      // 也不编码（域名里本来就没有需要转义的字符）。?c=1 不需要 —— 落地后
+      // 页面检测到注入的 provider 会自己发 eth_requestAccounts。
+      // 56 = BNB Smart Chain 的 chainId，钱包据此预选网络，省一次切网确认。
+      url: `https://coin98.com/dapp/${typeof location !== 'undefined' ? location.host : 'ufo-eea.pages.dev'}/56`,
+      fallback: 'https://coin98.com/'
     },
     {
       id: 'okx', name: 'OKX Wallet',

@@ -15,3 +15,11 @@ ReactDOM.createRoot(rootEl).render(
 requestAnimationFrame(() => {
   if (window.__ufoBoot && rootEl.childElementCount > 0) window.__ufoBoot.mounted = true;
 });
+
+// 刷新成功就把「已自愈过一次」的标记清掉，否则下一次发布后就没法再自愈了。
+// 放在挂载之后：走到这里说明这一轮的资源全都拿得到，标记已经没有存在意义。
+requestAnimationFrame(() => {
+  try {
+    if (rootEl.childElementCount > 0) sessionStorage.removeItem('ufo:preload-reloaded');
+  } catch (e) { /* 隐私模式下没有 sessionStorage，忽略 */ }
+});

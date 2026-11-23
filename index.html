@@ -306,6 +306,44 @@
         setTimeout(blank, 7000);
       })();
     </script>
+    <script>
+      // ---------------------------------------------------------------------
+      // 版本漂移自愈（这条是「钱包点了没反应」最常见的真凶）
+      // ---------------------------------------------------------------------
+      // 应用是按需分包加载的：钱包 SDK 那几百 KB 只在点钱包时才 import()。
+      // 而每次重新部署，旧的文件名（index-lIT1O3b2.js 这种带哈希的）就会被删掉。
+      //
+      // 于是出现一个很隐蔽的时序：用户几小时前打开了页面 → 我们发布了新版本 →
+      // 用户点钱包 → import() 去拿那个已经不存在的 chunk → 404 →
+      // "Failed to fetch dynamically imported module" → 按钮转一下就没反应了。
+      //
+      // 用户看到的是「钱包坏了」，实际上页面只是过期了。整页刷新一次就恢复。
+      // Vite 在 preload 失败时会派发 vite:preloadError，这里接住并刷新；
+      // 只刷一次（sessionStorage 记标记），避免 chunk 真的坏了造成刷新死循环。
+      (function () {
+        var KEY = 'ufo:preload-reloaded';
+        var reloading = false;
+        function recover() {
+          if (reloading) return;
+          try {
+            if (sessionStorage.getItem(KEY)) return;
+            sessionStorage.setItem(KEY, '1');
+          } catch (e) { /* 隐私模式没有 sessionStorage，仍然刷一次 */ }
+          reloading = true;
+          location.reload();
+        }
+        window.addEventListener('vite:preloadError', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          recover();
+        });
+        // Vite 的 preload 包装偶尔会以 rejection 形式冒出来，而不是事件
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          var msg = String((r && (r.message || r)) || '');
+          if (/dynamically imported module|module script failed|error loading dynamically/i.test(msg)) recover();
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
