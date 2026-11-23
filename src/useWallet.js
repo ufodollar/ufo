@@ -609,23 +609,42 @@ export function useWallet() {
     }
   }, [busy, accept]);
 
-  const disconnect = useCallback(async () => {
+  const disconnect = useCallback(() => {
     optedOut.current = true;
     try { sessionStorage.setItem(OPTOUT_KEY, '1'); } catch (e) { /* noop */ }
     // 主动断开就把「来过」的记忆一起清掉，否则刷新一下又会被自动连回去
     try { localStorage.removeItem(SEEN_KEY); } catch (e) { /* noop */ }
 
-    // 有 revokePermissions 的钱包（MetaMask 等）会真的撤销授权，
-    // 下次打开页面就不会再自动连回来。不支持的忽略即可。
     const provider = account && account.provider;
-    if (provider && typeof provider.request === 'function') {
-      try { await provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }); }
-      catch (e) { /* 不支持就算了 */ }
-    }
 
+    // 顺序很关键：先断开界面，再去问钱包撤销授权。
+    //
+    // 旧写法是 await revoke 之后再 setAccount(null)，看起来更「干净」，
+    // 实际上把一个可以永远不返回的 Promise 放在了关键路径上：
+    //   · Trust 的桥接在会话已失效时不会回包；
+    //   · OKX Connect 的 provider 在 App 侧断开后同样可能挂住。
+    // 用户在那一秒里看到的是「点了没反应」，之后再点、再刷新，
+    // 就变成了「断开钱包后页面崩溃」。
+    //
+    // revoke 只是锦上添花：它让下一次打开不再自动连回来，而这件事
+    // sessionStorage 里的 optedOut 标记已经做到了。所以它必须异步、必须超时、
+    // 必须失败也不影响本地状态。
     setAccount(null);
     setChainIssue(null);
     setPickerOpen(false);
+    setError('');
+
+    if (provider && typeof provider.request === 'function') {
+      try {
+        const revoke = provider.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }]
+        });
+        // 3 秒封顶，超时就丢掉这个 Promise —— 不留任何悬挂的引用。
+        const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+        Promise.race([Promise.resolve(revoke), timeout]).catch(() => {});
+      } catch (e) { /* 同步抛出的钱包（部分 SDK）直接忽略 */ }
+    }
   }, [account]);
 
   // 打开钱包墙就顺手开始下 SDK：从面板出现到用户点中某个图标，

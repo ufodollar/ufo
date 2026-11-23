@@ -150,9 +150,16 @@ function App() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  // 钱包层报错也走同一条提示条
+  // 钱包层报错也走同一条提示条。
+  // 一定要转成字符串：ethers / 各家 SDK 抛出来的 reason 有时是个对象，
+  // 直接塞进 JSX 会触发 "Objects are not valid as a React child"，
+  // React 会把整棵树卸载 —— 用户看到的就是「页面崩了」。
   useEffect(() => {
-    if (walletError) setNotice(walletError);
+    if (!walletError) return;
+    const msg = typeof walletError === 'string'
+      ? walletError
+      : (walletError.message || String(walletError));
+    setNotice(msg);
   }, [walletError]);
 
   const [activeTab, setActiveTab] = useState('swap');
@@ -216,8 +223,19 @@ function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem('ufo_tx_history');
-    if (saved) {
-      try { setHistory(JSON.parse(saved)); } catch (e) {}
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      // 早期版本只写字符串、或者写到一半被中断，都可能留下非数组。
+      // 旧代码直接 setHistory(parsed)，History 标签一渲染 .map 就抛，
+      // 整棵树被卸载 —— 这本身就是一条「点开就崩」的路径。
+      if (Array.isArray(parsed)) {
+        setHistory(parsed.filter((x) => x && typeof x === 'object'));
+      } else {
+        localStorage.removeItem('ufo_tx_history');
+      }
+    } catch (e) {
+      try { localStorage.removeItem('ufo_tx_history'); } catch (err) { /* noop */ }
     }
   }, []);
 
@@ -273,7 +291,9 @@ function App() {
 
   useEffect(() => {
     fetchNav();
-    const interval = setInterval(fetchNav, 30000);
+    // 页面在后台时不轮询：手机上几十个标签页并存，每 30 秒一次 RPC
+    // 没有任何收益，只会在内存吃紧时把渲染进程推到崩溃边缘。
+    const interval = setInterval(() => { if (!document.hidden) fetchNav(); }, 30000);
     return () => clearInterval(interval);
   }, [fetchNav]);
 
@@ -329,6 +349,7 @@ function App() {
     refreshPrices();
     fetchVaultBalances();
     const interval = setInterval(() => {
+      if (document.hidden) return;
       refreshPrices();
       fetchVaultBalances();
     }, 8000);
@@ -342,10 +363,37 @@ function App() {
       return;
     }
     fetchUserBalances();
-    const interval = setInterval(fetchUserBalances, 10000);
+    const interval = setInterval(() => { if (!document.hidden) fetchUserBalances(); }, 10000);
     return () => clearInterval(interval);
     // activeTab 一起进依赖：每次切到 Wallet / History 都立刻拉一次，不用等下一个 10 秒
   }, [isConnected, address, fetchUserBalances, activeTab]);
+
+  // 断开之后把上一个会话的残留清干净。
+  //
+  // 旧版本只把 account 置空，金额输入框、错误提示、交易结果都还留着 ——
+  // 那些内容属于一个已经不存在的地址。用户接着点按钮，走的是
+  // 「未连接 → 重新弹授权」，而他以为自己在继续上一笔。
+  useEffect(() => {
+    if (isConnected) return;
+    setInputAmount('');
+    setTxMsg('');
+    setErrorMsg('');
+    setShowTokenMenu(false);
+    setShowAccountMenu(false);
+    txErrorRef.current = false;
+  }, [isConnected]);
+
+  // 回到前台补一次：后台期间三个轮询都停着，切回来不能还显示十分钟前的余额。
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.hidden) return;
+      refreshPrices();
+      fetchVaultBalances();
+      fetchUserBalances();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshPrices, fetchVaultBalances, fetchUserBalances]);
 
   const currentPriceData = selectedStablecoin.symbol === 'USDT' ? stablecoinPrices.USDT : stablecoinPrices.USDC;
   const currentPriceError = stablecoinPrices.errors.find(e => e.token === selectedStablecoin.symbol);
@@ -374,7 +422,15 @@ function App() {
       return;
     }
 
-    const price18 = currentPriceData.price18;
+    // 价格数据没到手时不要往下算：currentPriceData 可能是 null（比如
+    // 两个稳定币的报价都没读回来），旧代码在这里直接取 price18 会抛，
+    // 抛在 effect 里就会把整棵 React 树卸载 —— 表现和「页面崩溃」一样。
+    const price18 = currentPriceData && currentPriceData.price18;
+    if (!price18) {
+      setOutputAmount('0.000000');
+      setFeeAmount('0.000000');
+      return;
+    }
     const deviation = price18 > 10n ** 18n ? price18 - 10n ** 18n : 10n ** 18n - price18;
     if (Number(deviation * 10000n / 10n ** 18n) > CONFIG.MAX_PRICE_DEVIATION * 10000) {
       setErrorMsg(`${selectedStablecoin.symbol} price deviation exceeds 2%. Trading paused.`);
@@ -553,7 +609,7 @@ function App() {
         <div style={{ position: 'fixed', top: '12px', left: '12px', right: '12px', zIndex: 10001, pointerEvents: 'none',
                       background: '#1e293b', color: '#fff', fontSize: '12.5px', lineHeight: 1.5, padding: '10px 14px',
                       borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
-          {notice}
+          {String(notice)}
         </div>
       )}
 
@@ -751,11 +807,11 @@ function App() {
                 <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1', fontSize: '13px', color: '#64748b' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                     <span>USDT Pool:</span>
-                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{vaultBalances.USDT.toFixed(2)}</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{Number(vaultBalances.USDT || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>USDC Pool:</span>
-                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{vaultBalances.USDC.toFixed(2)}</span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{Number(vaultBalances.USDC || 0).toFixed(2)}</span>
                   </div>
                 </div>
               )}
@@ -1015,23 +1071,59 @@ function App() {
 }
 
 // 渲染期异常兜底：任何组件抛错都不会让整页变成白屏，
-// 而是给出可点击的重新加载入口（生产环境必须有这一层）
+// 而是给出可点击的重新加载入口（生产环境必须有这一层）。
+//
+// 这里同时承担「诊断」职责。之前崩溃页只说 "The page broke."，
+// 用户在手机上没有任何控制台，我们拿不到任何线索，只能靠猜。
+// 现在把错误原文、出错组件栈的第一行、页面地址一起显示出来 ——
+// 一张截图就能定位。同时写进 sessionStorage，刷新后仍然可读。
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { failed: false };
+    this.state = { failed: false, message: '', frame: '' };
   }
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error) {
+    return {
+      failed: true,
+      message: (error && (error.name ? error.name + ': ' : '') + (error.message || String(error))) || 'Unknown error'
+    };
   }
 
-  componentDidCatch(error) {
+  componentDidCatch(error, info) {
     console.warn('[ufo] render error:', error && error.message);
+    let frame = '';
+    try {
+      const stack = String((error && error.stack) || '').split('\n');
+      // 跳过第一行（重复 message），取第一条带地址的帧
+      frame = stack.find((l) => /https?:\/\/|\.js/i.test(l) && !/^[A-Za-z]*Error/.test(l.trim())) || '';
+      frame = frame.trim().replace(/^at\s+/, '').slice(0, 180);
+    } catch (e) { /* noop */ }
+
+    this.setState({ frame });
+    try {
+      sessionStorage.setItem('ufo_last_crash', JSON.stringify({
+        at: new Date().toISOString(),
+        msg: String((error && error.message) || error).slice(0, 300),
+        frame,
+        componentStack: String((info && info.componentStack) || '')
+          .split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2)
+          .map((l) => l.replace(/^at\s+/, '').replace(/\s+/g, ' '))
+          .join(' ← ').slice(0, 240),
+        href: location.href.slice(0, 200)
+      }));
+    } catch (e) { /* 无痕模式 */ }
   }
 
   render() {
     if (!this.state.failed) return this.props.children;
+
+    let last = null;
+    try {
+      const raw = sessionStorage.getItem('ufo_last_crash');
+      if (raw) last = JSON.parse(raw);
+    } catch (e) { /* noop */ }
+
     return (
       <div style={{
         minHeight: '100%', display: 'flex', flexDirection: 'column',
@@ -1043,15 +1135,46 @@ class ErrorBoundary extends React.Component {
         <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, maxWidth: '320px' }}>
           Reload it. If it breaks again, open the site inside your wallet app.
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          style={{
-            marginTop: '4px', padding: '10px 24px', borderRadius: '22px', border: 'none',
-            background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
-          }}
-        >
-          Reload
-        </button>
+
+        <div style={{
+          maxWidth: '340px', width: '100%', textAlign: 'left', background: '#fff',
+          border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px',
+          fontSize: '10.5px', lineHeight: 1.6, color: '#64748b', wordBreak: 'break-word'
+        }}>
+          <div style={{ fontWeight: 700, color: '#475569', marginBottom: '4px' }}>What happened</div>
+          <div style={{ fontFamily: 'monospace', color: '#b91c1c' }}>{this.state.message || (last && last.msg) || '—'}</div>
+          {(this.state.frame || (last && last.frame)) && (
+            <div style={{ fontFamily: 'monospace', marginTop: '4px', color: '#94a3b8' }}>at {this.state.frame || last.frame}</div>
+          )}
+          {(last && last.componentStack) && (
+            <div style={{ marginTop: '4px', color: '#94a3b8' }}>in {last.componentStack}</div>
+          )}
+          {location.pathname !== '/' && (
+            <div style={{ marginTop: '4px', color: '#cbd5e1' }}>{location.pathname}</div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => this.setState({ failed: false, message: '', frame: '' })}
+            style={{
+              marginTop: '4px', padding: '10px 20px', borderRadius: '22px',
+              border: '1px solid #cbd5e1', background: '#fff', color: '#334155',
+              fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '4px', padding: '10px 24px', borderRadius: '22px', border: 'none',
+              background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            Reload
+          </button>
+        </div>
       </div>
     );
   }
