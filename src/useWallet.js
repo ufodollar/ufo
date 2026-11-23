@@ -181,12 +181,15 @@ export function useWallet() {
   // 发现浏览器里所有实现了 EIP-6963 的钱包
   useEffect(() => watchInjectedWallets(setInjectedWallets), []);
 
-  const accept = useCallback((accounts, provider) => {
+  const accept = useCallback((accounts, provider, via = 'injected') => {
     if (!accounts || !accounts.length) return false;
     optedOut.current = false;
     try { sessionStorage.removeItem(OPTOUT_KEY); } catch (e) { /* 无痕模式 */ }
     try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) { /* 无痕模式 */ }
-    setAccount({ address: normalizeAddress(accounts[0]), provider });
+    // via 记录这条连接是注入式还是 SDK 桥接。两者在断开时的处理不同：
+    // SDK 的 provider 只认识自己那套方法，往里塞 wallet_revokePermissions
+    // 会走到它的未知方法分支，轻则报错、重则把桥接状态弄乱。
+    setAccount({ address: normalizeAddress(accounts[0]), provider, via });
     setError('');
     // 不等它：切链是后台动作，用户点完图标应当立刻看到页面。
     // 但结果要接住 —— 切不过去时页面需要一条明确的提示，
@@ -266,7 +269,7 @@ export function useWallet() {
           const restored = await restoreMetaMask({ windowMs: mmReturn ? 10000 : 2500 });
           if (!cancelled && restored) {
             clearMmPending();
-            accept(restored.accounts, restored.provider);
+            accept(restored.accounts, restored.provider, 'sdk');
             return;
           }
         } catch (e) { /* 恢复失败就当普通访问，页面上的 Connect 按钮仍然在 */ }
@@ -290,7 +293,7 @@ export function useWallet() {
           const restored = await restoreOkx({ windowMs: okxReturn ? 10000 : 3000 });
           if (!cancelled && restored) {
             clearOkxPending();
-            accept(restored.accounts, restored.provider);
+            accept(restored.accounts, restored.provider, 'sdk');
             return;
           }
         } catch (e) { /* 恢复失败就当普通访问，页面上的 Connect 按钮仍然在 */ }
@@ -310,7 +313,7 @@ export function useWallet() {
           const restored = await restoreWc({ windowMs: wcReturn ? 10000 : 3000 });
           if (!cancelled && restored) {
             clearWcPending();
-            accept(restored.accounts, restored.provider);
+            accept(restored.accounts, restored.provider, 'sdk');
             return;
           }
         } catch (e) { /* 恢复失败就当普通访问 */ }
@@ -533,7 +536,7 @@ export function useWallet() {
       // 动态 import：SDK 约 100KB（gzip 后），只有真的点 OKX 才下载
       const { connectOkx } = await import('./okxconnect');
       const { accounts, provider } = await connectOkx();
-      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      if (accept(accounts, provider, 'sdk')) { setPickerOpen(false); return true; }
       return false;
     } catch (e) {
       // 4001 / reject 是用户自己取消，不当作错误上报
@@ -561,7 +564,7 @@ export function useWallet() {
     try {
       const { connectMetaMask } = await import('./metamaskconnect');
       const { accounts, provider } = await connectMetaMask();
-      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      if (accept(accounts, provider, 'sdk')) { setPickerOpen(false); return true; }
       return false;
     } catch (e) {
       if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return false;
@@ -599,7 +602,7 @@ export function useWallet() {
     try {
       const { connectWc } = await import('./walletconnect');
       const { accounts, provider } = await connectWc(wallet, opts);
-      if (accept(accounts, provider)) { setPickerOpen(false); return true; }
+      if (accept(accounts, provider, 'sdk')) { setPickerOpen(false); return true; }
       return false;
     } catch (e) {
       if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) return false;
@@ -616,6 +619,7 @@ export function useWallet() {
     try { localStorage.removeItem(SEEN_KEY); } catch (e) { /* noop */ }
 
     const provider = account && account.provider;
+    const viaInjected = !!account && account.via !== 'sdk';
 
     // 顺序很关键：先断开界面，再去问钱包撤销授权。
     //
@@ -634,7 +638,7 @@ export function useWallet() {
     setPickerOpen(false);
     setError('');
 
-    if (provider && typeof provider.request === 'function') {
+    if (viaInjected && provider && typeof provider.request === 'function') {
       try {
         const revoke = provider.request({
           method: 'wallet_revokePermissions',
