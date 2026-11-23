@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { walletList, openInWallet, isMobile, autoconnectUrl } from '../wallets';
 import { getWcUri } from '../wclink';
+import { runNetcheck } from '../netcheck';
 
 const FONT = { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' };
 
@@ -24,6 +25,8 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   // WalletConnect 的「手动打开」链接。只在自动跳转不可靠时出现 ——
   // 用户点它是一个全新的用户手势，浏览器不会再拦。
   const [manualOpen, setManualOpen] = useState(null);
+  // 网络自检结果。null = 没跑过；{running:true} = 正在跑；否则是 runNetcheck 的返回值。
+  const [check, setCheck] = useState(null);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
@@ -31,7 +34,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const wcBroken = useRef(new Set());
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -177,6 +180,18 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
     }
 
     openInWallet(wallet);
+  };
+
+  // 网络自检。耗时取决于最慢的那个目标（默认 6 秒超时），并发跑。
+  // 这不是给所有人看的入口 —— 只有在「点了钱包却连不上」时才会有人去点它。
+  const handleCheck = async () => {
+    if (check && check.running) return;
+    setCheck({ running: true });
+    try {
+      setCheck(await runNetcheck({ timeoutMs: 6000 }));
+    } catch (e) {
+      setCheck({ error: String((e && e.message) || 'The check could not run.') });
+    }
   };
 
   const hasExt = !!(injectedWallets && injectedWallets.length);
@@ -361,6 +376,63 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
         >
           {linkCopied ? 'Link copied' : 'Copy link'}
         </button>
+
+        {/* 网络自检。
+            起因：这里能不能「点一下就回到浏览器」，取决于手机当前网络能否
+            连上对应钱包的中继域名，而这些域名在部分移动网络下是被整段阻断的，
+            且 SDK 只会静默重试，界面上什么都不说。把它做成面板里的一个按钮，
+            是因为让用户另开一个网址、记一条路径，成功率远低于就地一点。
+            结果直接渲染在下面：一张截图就能把整条链路的状态说清楚。 */}
+        <div style={{ marginTop: '10px', textAlign: 'center' }}>
+          <button
+            onClick={handleCheck}
+            style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                     background: 'none', border: 'none', padding: '6px 4px', cursor: 'pointer',
+                     fontSize: '11.5px', color: '#94a3b8', textDecoration: 'underline',
+                     textUnderlineOffset: '3px' }}
+          >
+            {check && check.running ? 'Checking this network…' : 'Wallets not connecting? Check this network'}
+          </button>
+
+          {check && !check.running && (
+            check.error ? (
+              <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#b91c1c' }}>{check.error}</div>
+            ) : (
+              <div style={{ marginTop: '8px', padding: '10px 12px', textAlign: 'left',
+                            background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '10px' }}>
+                {check.rows.map((r) => (
+                  <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', lineHeight: '1.9' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', flex: '0 0 auto',
+                                   background: r.ok ? '#16a34a' : '#dc2626' }} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: '11.5px', color: '#334155' }}>{r.label}</span>
+                    <span style={{ fontSize: '10.5px', fontVariantNumeric: 'tabular-nums',
+                                   color: r.ok ? '#15803d' : '#b91c1c' }}>
+                      {r.ok ? r.ms + 'ms' : (r.timeout ? 'timeout ' : 'blocked ') + r.ms + 'ms'}
+                    </span>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e8edf4',
+                              fontSize: '11px', lineHeight: 1.55,
+                              color: check.noNetwork ? '#b91c1c' : '#475569' }}>
+                  {check.noNetwork
+                    ? 'Even the control host fails — this device has no usable connection right now. Turn off any VPN or proxy and run the check again.'
+                    : check.reachable.length
+                      ? 'These can hand control back to this page: ' + check.reachable.join(' · ')
+                      : 'No relay is reachable. Every wallet has to open this page inside its own browser here.'}
+                </div>
+
+                <div style={{ marginTop: '8px', padding: '6px 8px', background: '#fff',
+                              border: '1px solid #e2e8f0', borderRadius: '6px',
+                              fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '10px',
+                              lineHeight: 1.6, color: '#475569', wordBreak: 'break-all',
+                              userSelect: 'all', WebkitUserSelect: 'all' }}>
+                  {check.summary}
+                </div>
+              </div>
+            )
+          )}
+        </div>
       </div>
     </div>
   );
