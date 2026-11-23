@@ -125,7 +125,19 @@ function loadProvider() {
             name: 'UFO Ecosystem',
             description: 'Self-service issuance for UFO Dollar on BNB Smart Chain',
             url: ORIGIN,
-            icons: [ORIGIN + '/icon-512.png']
+            icons: [ORIGIN + '/icon-512.png'],
+            // 授权完成后，钱包会读这个字段决定把你送回哪里。
+            //
+            // 这是 DApp 侧唯一能控制「回跳」的一环，而且只能是「声明」——
+            // 真正执行 goBack 的是钱包：它在 approveSession 之后调
+            // WalletConnectRouter.goBack(native) 或 openURL(universal)。
+            // 所以这里不写，钱包就无从知道该回到哪个页面，哪怕中继是通的。
+            //
+            // 只有 universal，没有 native：native 必须是自定义 scheme
+            // （myapp://），我们是个 https 站点，填 https 会被部分钱包
+            // 误当成 scheme 解析而失败。带 wc=1 是为了回来时能认出
+            // 「这是一次 WalletConnect 回跳」，从而走会话恢复而不是重新配对。
+            redirect: { universal: `${ORIGIN}/?wc=1` }
           }
         });
 
