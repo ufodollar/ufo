@@ -34,13 +34,39 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
   // 直接退回该钱包的内置浏览器 —— 否则用户每点一次都要白等一轮。
   const wcBroken = useRef(new Set());
+  // 本次打开是否已经自动跑过自检。用 ref 而不是靠 check 判断：
+  // 后者会让 effect 在 setCheck 之后重入，cleanup 把结果吃掉。
+  const ranCheck = useRef(false);
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); setExpanded(false); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); setExpanded(false); ranCheck.current = false; return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // 面板一打开就静默跑一次网络自检。
+  //
+  // 之前把入口做成了「点一下才跑」，结果没人点 —— 但这几个通道通不通，
+  // 恰恰是「为什么点钱包连不上」的唯一答案。与其等用户去发现一行小字，
+  // 不如默认就把结论摆出来。
+  //
+  // ★ 必须放在 `if (!open) return null` 之前。
+  //   提前 return 会让下面所有 hook 在 open=false 的那几次渲染里被跳过，
+  //   等 open 变 true 时 hook 数量对不上，React 直接抛错、整页进错误兜底。
+  //
+  // ★ 依赖里绝不能放 check：一旦 setCheck({running:true})，React 会先执行
+  //   上一轮的 cleanup 把 alive 置 false，随后结果回来就被丢掉 ——
+  //   界面永远停在「Checking…」。用 ref 防重入，用 open 当唯一触发条件。
+  useEffect(() => {
+    if (!open || !mobile || ranCheck.current) return;
+    ranCheck.current = true;
+    setCheck({ running: true });
+    runNetcheck({ timeoutMs: 5000 })
+      .then(setCheck)
+      // 失败也给一个非空状态：若置回 null，下次打开又要白等一轮
+      .catch((e) => setCheck({ error: String((e && e.message) || 'The check could not run.') }));
+  }, [open, mobile]);
 
   if (!open) return null;
 
@@ -194,22 +220,6 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
       setCheck({ error: String((e && e.message) || 'The check could not run.') });
     }
   };
-
-  // 面板一打开就静默跑一次。
-  //
-  // 之前把入口做成了「点一下才跑」，结果没人点 —— 但这几个通道通不通，
-  // 恰恰是「为什么点钱包连不上」的唯一答案。与其等用户去发现一行小字，
-  // 不如默认就把结论摆出来：他自己看得懂，我们也不用再隔着屏幕猜。
-  useEffect(() => {
-    if (!open || !mobile || check) return;
-    let alive = true;
-    setCheck({ running: true });
-    runNetcheck({ timeoutMs: 5000 })
-      .then((r) => { if (alive) setCheck(r); })
-      // 失败也给一个非空状态：若置回 null，effect 会再跑一次，等于死循环
-      .catch((e) => { if (alive) setCheck({ error: String((e && e.message) || 'The check could not run.') }); });
-    return () => { alive = false; };
-  }, [open, mobile, check]);
 
   const hasExt = !!(injectedWallets && injectedWallets.length);
   const showWall = mobile;            // 手机：钱包墙，点了进 App 内置浏览器

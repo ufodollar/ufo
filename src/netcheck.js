@@ -29,13 +29,27 @@ async function probeOne(url, timeoutMs) {
   const t0 = Date.now();
   const ctl = new AbortController();
   const timer = setTimeout(() => { try { ctl.abort(); } catch (e) { /* noop */ } }, timeoutMs);
+
+  const run = (async () => {
+    try {
+      await fetch(url, { mode: 'no-cors', cache: 'no-store', redirect: 'follow', signal: ctl.signal });
+      return { ok: true, ms: Date.now() - t0, timeout: false };
+    } catch (e) {
+      const ms = Date.now() - t0;
+      // 明显早于超时就失败 = 连接被拒/被重置；贴着超时线 = 黑洞，包被丢弃
+      return { ok: false, ms, timeout: ms >= timeoutMs - 500 };
+    }
+  })();
+
+  // abort() 不是在所有情况下都能把 fetch 立刻拽回来（no-cors + 被丢包的链路
+  // 尤其容易挂住，真机实测 8 秒还没退出）。UI 不能等它 —— 用 race 兜一个硬上限，
+  // 到点就先给结论，那个请求自己在后台烂掉无所谓。
+  const deadline = new Promise((resolve) => {
+    setTimeout(() => resolve({ ok: false, ms: Date.now() - t0, timeout: true }), timeoutMs + 250);
+  });
+
   try {
-    await fetch(url, { mode: 'no-cors', cache: 'no-store', redirect: 'follow', signal: ctl.signal });
-    return { ok: true, ms: Date.now() - t0, timeout: false };
-  } catch (e) {
-    const ms = Date.now() - t0;
-    // 明显早于超时就失败 = 连接被拒/被重置；贴着超时线 = 黑洞，包被丢弃
-    return { ok: false, ms, timeout: ms >= timeoutMs - 500 };
+    return await Promise.race([run, deadline]);
   } finally {
     clearTimeout(timer);
   }
