@@ -234,6 +234,18 @@
             };
           }
         } catch (e) { /* 极老的 WebView 没有 crypto，交给调用处失败 */ }
+
+        // Chrome 85。SDK 的错误序列化里有一句 `err instanceof AggregateError`，
+        // 全局没有这个构造器时那不是「判空失败」而是 ReferenceError ——
+        // 反过来把真正的错误吞掉，日志里只剩一句莫名其妙的 AggregateError is not defined。
+        if (typeof AggregateError === 'undefined') {
+          window.AggregateError = function (errors, message) {
+            var e = new Error(message || '');
+            e.name = 'AggregateError';
+            e.errors = errors || [];
+            return e;
+          };
+        }
       })();
     </script>
     <script>
