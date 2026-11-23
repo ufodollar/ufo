@@ -147,7 +147,12 @@ export default function WalletSetup({
     return e.message || String(e);
   };
 
-  const idxOf = (id) => accounts.findIndex((a) => a.id === id);
+  // 编号来自账户记录本身（a.no），不是数组下标 —— 删掉账户 1 之后，
+  // 账户 2 仍然是账户 2，不会因为下标变成 0 就改名叫账户 1。
+  const noOf = (id) => {
+    const a = accounts.find((x) => x.id === id);
+    return a && a.no ? a.no : null;
+  };
   const addrOf = (id) => (accounts.find((a) => a.id === id) || {}).address || '';
 
   const doGenerate = async () => {
@@ -473,7 +478,7 @@ export default function WalletSetup({
         {step === 'viewgate' && (
           <>
             <div style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' }}>
-              Enter your 6-digit PIN to reveal the private key of Account {idxOf(target) + 1}.
+              Enter your 6-digit PIN to reveal the private key of Account {noOf(target) ?? '—'}.
               Make sure nobody is looking at your screen.
             </div>
 
@@ -520,7 +525,7 @@ export default function WalletSetup({
             </div>
 
             <div style={{ marginTop: '12px' }}>
-              <div style={label}>Account {idxOf(target) + 1}</div>
+              <div style={label}>Account {noOf(target) ?? '—'}</div>
               <div style={{ marginTop: '4px', padding: '10px 11px', borderRadius: '10px',
                             background: '#f8fafc', border: '1px solid #e2e8f0',
                             fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
@@ -557,7 +562,7 @@ export default function WalletSetup({
               </div>
             ) : (
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {accounts.map((a, i) => {
+                {accounts.map((a) => {
                   const isActive = a.id === activeId;
                   return (
                     <div key={a.id} style={{ border: '1px solid ' + (isActive ? '#bfdbfe' : '#e2e8f0'),
@@ -565,7 +570,7 @@ export default function WalletSetup({
                                              borderRadius: '14px', padding: '12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
-                          Account {i + 1}
+                          Account {a.no}
                         </span>
                         {isActive ? (
                           <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: 700, color: '#1d4ed8',

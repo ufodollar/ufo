@@ -91,9 +91,39 @@ function badPin() {
 // 存储
 // ---------------------------------------------------------------------------
 // v2 布局：
-//   { v: 2, salt, active, accounts: [{ id, address, iv, ct, at }] }
+//   { v: 2, salt, active, nextNo, accounts: [{ id, no, address, iv, ct, at }] }
 // salt 是 vault 级的：同一个 PIN + 同一把 salt 派生出同一把密钥，
 // 每个账户只用自己的 iv，不必每次切账户都跑一遍 21 万轮 PBKDF2。
+//
+// no 是账户的**永久编号**：创建时分配，写进记录，之后永不改、永不复用。
+// 它不能由数组下标推导 —— 删掉账户 1 之后，账户 2 的下标会变成 0，
+// 用下标渲染就会让同一个账户改名叫「账户 1」，授权、对账、客服沟通全部错位。
+// 编号出现空洞（1、3）是正常的，银行账号、数据库自增主键都是这个语义。
+// nextNo 单调递增，删除后也不回退，保证编号不被新账户复用。
+function normalizeNos(o) {
+  let dirty = false;
+  let max = 0;
+  o.accounts.forEach((a) => {
+    if (Number.isInteger(a.no) && a.no > 0) max = Math.max(max, a.no);
+  });
+
+  let seq = max;
+  o.accounts.forEach((a) => {
+    if (!(Number.isInteger(a.no) && a.no > 0)) {
+      // 老记录（本字段上线前创建的）按当时的存储顺序补号，补完即固定。
+      seq += 1;
+      a.no = seq;
+      dirty = true;
+    }
+  });
+
+  if (!Number.isInteger(o.nextNo) || o.nextNo <= max) {
+    o.nextNo = max + 1;
+    dirty = true;
+  }
+  return dirty;
+}
+
 function read() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -103,6 +133,11 @@ function read() {
 
     if (o.v === 2 && Array.isArray(o.accounts) && o.accounts.length && o.salt) {
       if (!o.accounts.some((a) => a.id === o.active)) o.active = o.accounts[0].id;
+      // 一次性补号，之后就是只读。写回失败（无痕模式 / 配额满）不能影响读取，
+      // 否则一个存储错误就等于「钱包不见了」。
+      if (normalizeNos(o)) {
+        try { write(o); } catch (e) { /* 下次再补 */ }
+      }
       return o;
     }
 
@@ -112,7 +147,8 @@ function read() {
         v: 2,
         salt: o.salt,
         active: 'legacy',
-        accounts: [{ id: 'legacy', address: o.address, iv: o.iv, ct: o.ct, at: o.at, mnemonic: true }],
+        nextNo: 2,
+        accounts: [{ id: 'legacy', no: 1, address: o.address, iv: o.iv, ct: o.ct, at: o.at, mnemonic: true }],
         legacy: true
       };
     }
@@ -139,11 +175,21 @@ export function localAddress() {
   return a ? a.address : null;
 }
 
-/** 账户列表（只有地址，没有密钥） */
+/** 账户列表（只有地址与永久编号，没有密钥）。按编号升序，与存储顺序无关。 */
 export function localAccounts() {
   const o = read();
   if (!o) return [];
-  return o.accounts.map((a) => ({ id: a.id, address: a.address }));
+  return o.accounts
+    .map((a) => ({ id: a.id, no: a.no, address: a.address }))
+    .sort((x, y) => x.no - y.no);
+}
+
+/** 某个账户的永久编号。找不到时返回 null，调用方不要拿下标兜底。 */
+export function accountNo(id) {
+  const o = read();
+  if (!o) return null;
+  const a = o.accounts.find((x) => x.id === (id || o.active));
+  return a ? a.no : null;
 }
 
 export function activeAccountId() {
@@ -220,12 +266,15 @@ async function openVault(pin) {
   const legacy = store.accounts[0];
   const w = await decryptWallet(legacy, key);
   const packed = await encryptPrivateKey(w.privateKey, key);
+  const newId = legacy.id === 'legacy' ? randHex(8) : legacy.id;
   const migrated = {
     v: 2,
     salt: store.salt,
-    active: legacy.id === 'legacy' ? randHex(8) : legacy.id,
+    active: newId,
+    nextNo: 2,
     accounts: [{
-      id: legacy.id === 'legacy' ? randHex(8) : legacy.id,
+      id: newId,
+      no: legacy.no || 1,
       address: w.address,
       iv: packed.iv,
       ct: packed.ct,
@@ -268,7 +317,7 @@ async function attachAccount(w, pin) {
   }
 
   // openVault 迁移时已经把 v2 记录写回去了，这里读到的就是最新形状。
-  const base = read() || { v: 2, salt, accounts: [], active: null };
+  const base = read() || { v: 2, salt, accounts: [], active: null, nextNo: 1 };
 
   // 地址不是另起的随机串：它由这把私钥经 secp256k1 公钥 + keccak256 推导。
   // 这里显式再验一次，防止以后有人为了「快一点」把地址和私钥分开生成 ——
@@ -279,8 +328,13 @@ async function attachAccount(w, pin) {
   }
 
   const packed = await encryptPrivateKey(w.privateKey, key);
+  // 编号同时受 nextNo 与「现有最大编号」约束：即使记录被外部改过，
+  // 也不会出现两个账户共用一个编号。
+  const maxNo = base.accounts.reduce((m, a) => (Number.isInteger(a.no) && a.no > m ? a.no : m), 0);
+  const no = Math.max(base.nextNo || 1, maxNo + 1);
   const acct = {
     id: randHex(8),
+    no,
     address: w.address,
     iv: packed.iv,
     ct: packed.ct,
@@ -291,7 +345,9 @@ async function attachAccount(w, pin) {
     v: 2,
     salt: base.salt || salt,
     accounts: base.accounts.concat([acct]),
-    active: acct.id
+    active: acct.id,
+    // 编号只增不减：删掉的号不会发给下一个新账户。
+    nextNo: no + 1
   };
   write(next);
 
@@ -373,6 +429,9 @@ export async function unlockLocalWallet(pin) {
 export function removeAccount(id) {
   const store = read();
   if (!store) return { removed: false, remaining: 0 };
+  if (!store.accounts.some((a) => a.id === id)) {
+    return { removed: false, remaining: store.accounts.length };
+  }
 
   const accounts = store.accounts.filter((a) => a.id !== id);
   if (session) delete session.cache[id];
@@ -383,7 +442,8 @@ export function removeAccount(id) {
   }
 
   const active = store.active === id ? accounts[0].id : store.active;
-  write({ v: 2, salt: store.salt, accounts, active });
+  // nextNo 原样带走：删除账户不能让编号回退，否则新账户会顶替旧名字。
+  write({ v: 2, salt: store.salt, nextNo: store.nextNo, accounts, active });
   if (session) session.active = active;
   return { removed: true, remaining: accounts.length, active };
 }

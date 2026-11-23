@@ -71,10 +71,13 @@ export function useWallet() {
     }
   }, [refreshAccounts]);
 
+  // 绑定当前账户。这里必须同时刷新 activeId：顶部的账户编号读的是它，
+  // 只更新地址而漏掉编号，就会出现「切到账户 2 了、顶上还写着账户 1」。
   const bindActive = useCallback(() => {
     const restored = restoreLocalWallet();
     if (!restored) return null;
     setAccount({ address: restored.accounts[0], provider: restored.provider });
+    setActiveId(activeAccountId());
     return restored;
   }, []);
 

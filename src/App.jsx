@@ -152,9 +152,14 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
-  // 顶部只显示「是第几个账户」，地址不在页面上出现（只在账户管理弹窗里）。
-  const activeIdx = accounts.findIndex((a) => a.id === activeId);
-  const accountNo = activeIdx >= 0 ? activeIdx + 1 : 1;
+  // 顶部只显示账户编号，地址不在页面上出现（只在账户管理弹窗里）。
+  // 编号取记录里的 a.no，永远不用数组下标：删掉账户 1 之后账户 2 仍叫账户 2。
+  const addrKey = (address || '').toLowerCase();
+  const activeAcct =
+    accounts.find((a) => a.id === activeId) ||
+    (addrKey ? accounts.find((a) => a.address.toLowerCase() === addrKey) : null) ||
+    null;
+  const accountNo = activeAcct ? activeAcct.no : null;
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
@@ -603,7 +608,7 @@ function App() {
                             padding: '0 11px', borderRadius: '17px', fontWeight: 700, fontSize: '12.5px',
                             lineHeight: 1.2, whiteSpace: 'nowrap' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                Account {accountNo}
+                Account {accountNo ?? '—'}
               </div>
               <button
                 onClick={lockWallet}
