@@ -134,12 +134,12 @@ function App() {
   // 在 Wallet 标签页生成一个，之后每次进来输 PIN 解锁（见 useWallet.js）。
   const {
     address, provider: walletProvider, isConnected,
-    busy: walletBusy, hasWallet, backedUp,
-    create: createWallet, unlock: unlockWallet, lock: lockWallet,
-    exportKey, confirmBackup, fixChain
+    busy: walletBusy, hasWallet, backedUp, accounts, activeId,
+    create: createWallet, importKey, unlock: unlockWallet, lock: lockWallet,
+    switchTo: switchAccount, viewKey, confirmBackup, fixChain
   } = useWallet();
 
-  // '' | 'create' | 'unlock' | 'backup'
+  // '' | 'create' | 'import' | 'unlock' | 'viewkey' | 'accounts'
   const [walletPanel, setWalletPanel] = useState('');
 
   const [activeTab, setActiveTab] = useState('swap');
@@ -147,7 +147,8 @@ function App() {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [copiedAddr, setCopiedAddr] = useState(false);
 
-  // 地址可以复制（它本来就是公开的），助记词不能 —— 两件事在 UI 上必须区分。
+  // 地址是公开信息，随手可复制；私钥是另一回事 —— 只有「查看私钥」那条路能出，
+  // 而且每次都要重输 PIN。两件事在 UI 上必须区分。
   const copyAddress = async () => {
     try {
       await navigator.clipboard.writeText(address || '');
@@ -628,14 +629,29 @@ function App() {
                       View on BscScan
                     </a>
                     <button
-                      onClick={() => { setShowAccountMenu(false); setWalletPanel('backup'); }}
+                      onClick={() => { setShowAccountMenu(false); setWalletPanel('accounts'); }}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                               width: '100%', height: '44px',
+                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
+                               color: '#1e293b', background: 'transparent', border: 'none',
+                               borderRadius: '8px', cursor: 'pointer' }}
+                    >
+                      <span>Switch account</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8',
+                                     background: '#eff6ff', borderRadius: '20px', padding: '3px 8px' }}>
+                        {accounts.length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => { setShowAccountMenu(false); setWalletPanel('viewkey'); }}
                       style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
                                display: 'flex', alignItems: 'center', width: '100%', height: '44px',
                                padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
                                color: '#1e293b', background: 'transparent', border: 'none',
                                borderRadius: '8px', cursor: 'pointer' }}
                     >
-                      Back up phrase
+                      View private key
                     </button>
                     <button
                       onClick={() => { setShowAccountMenu(false); lockWallet(); }}
@@ -842,8 +858,8 @@ function App() {
                     <div style={{ marginTop: '10px', padding: '9px 10px', borderRadius: '10px',
                                   background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(253,230,138,0.5)',
                                   fontSize: '11.5px', lineHeight: 1.6, color: '#fef3c7' }}>
-                      Your recovery phrase is not backed up. Write it down now — if this browser’s
-                      data is cleared, this address and its funds are gone.
+                      You have not saved this private key yet. Copy it now — if this browser’s
+                      data is cleared, this address and its funds are gone with it.
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '7px', marginTop: '14px', flexWrap: 'wrap' }}>
@@ -856,12 +872,20 @@ function App() {
                       {copiedAddr ? 'Copied' : 'Copy address'}
                     </button>
                     <button
-                      onClick={() => setWalletPanel('backup')}
+                      onClick={() => setWalletPanel('viewkey')}
                       style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
                                padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
                                background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
                     >
-                      Back up phrase
+                      View private key
+                    </button>
+                    <button
+                      onClick={() => setWalletPanel('accounts')}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
+                    >
+                      Accounts · {accounts.length}
                     </button>
                     <button
                       onClick={lockWallet}
@@ -887,6 +911,15 @@ function App() {
                   >
                     Unlock wallet
                   </button>
+                  <button
+                      onClick={() => setWalletPanel('accounts')}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                               marginTop: '8px', padding: '11px', borderRadius: '12px',
+                               border: '1px solid rgba(255,255,255,0.35)',
+                               background: 'transparent', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Accounts · {accounts.length}
+                  </button>
                 </>
               ) : (
                 <>
@@ -901,6 +934,15 @@ function App() {
                              background: '#fff', color: '#1d4ed8', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
                   >
                     Generate wallet
+                  </button>
+                  <button
+                    onClick={() => setWalletPanel('import')}
+                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                             marginTop: '8px', padding: '12px', borderRadius: '12px',
+                             border: '1px solid rgba(255,255,255,0.35)',
+                             background: 'transparent', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Import private key
                   </button>
                 </>
               )}
@@ -1109,10 +1151,17 @@ function App() {
       <WalletSetup
         mode={walletPanel}
         onClose={() => setWalletPanel('')}
+        onNavigate={(m) => setWalletPanel(m)}
         address={address}
+        accounts={accounts}
+        activeId={activeId}
+        hasWallet={hasWallet}
+        unlocked={isConnected}
         onCreate={createWallet}
+        onImport={importKey}
         onUnlock={unlockWallet}
-        onBackup={exportKey}
+        onViewKey={viewKey}
+        onSwitch={switchAccount}
         onBackedUp={confirmBackup}
       />
 

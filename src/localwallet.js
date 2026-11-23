@@ -10,10 +10,17 @@
 //   生成一个本地钱包，用用户设置的 6 位 PIN 加密后存在 localStorage，签名在
 //   浏览器内完成。用户看到的就是一个网页弹框，点确认，交易就发出去了。
 //
-// 代价必须说清楚（UI 上也要说）：
-//   这是一个**新地址**，跟用户手机里其他钱包的地址不是同一个。要发行
-//   UFO，得先往这个地址转 USDT。清掉浏览器数据 = 私钥丢失，所以创建时
-//   强制展示助记词，之后还可以用 PIN 重新导出。
+// 为什么是裸私钥而不是助记词：
+//   这个钱包只服务一件事 —— 在网页里签发行/销毁两笔交易。助记词的额外价值
+//   是「一个种子派生无数地址」，而这里要的是「一个地址、一把钥匙、能导出来」。
+//   裸私钥更短、更容易手抄，任何钱包都能直接导入，也不会让用户误以为这是一
+//   个可以当主钱包用的 HD 钱包。
+//
+// 多账户：
+//   一个 PIN 保护一个 vault，vault 里挂 N 个账户，每个账户各自一条密文。
+//   PIN 只在解锁时派生一次密钥（PBKDF2 21 万轮，很贵），之后切账户用内存里
+//   的 CryptoKey 解对应那条密文，不需要再输 PIN。刷新页面后内存清空，必须
+//   重新输一次 PIN —— 这是刻意的：解密后的私钥绝不留到磁盘。
 //
 // 为什么做成 EIP-1193：
 //   tx.js 的设计是「钱包只接收预填好的 eth_sendTransaction，负责签名」。
@@ -23,9 +30,10 @@
 
 import { rpcCall } from './chain';
 
+// 沿用 v1 的键名：老用户存的是助记词版本，读出来能当场迁移成私钥版本，
+// 换键名等于把他们钱包丢在原地。
 const STORE_KEY = 'ufo.local.wallet.v1';
-// 「助记词已经抄下来了」的标记。它不参与签名，只用来决定要不要在界面上
-// 继续提醒 —— 没抄的人一旦清了浏览器数据，这个钱包就再也回不来了。
+// 「私钥已经保存过」的标记。它不参与签名，只用来决定要不要在界面上继续提醒。
 const BACKUP_KEY = 'ufo.local.backedUp';
 const PBKDF2_ROUNDS = 210000;
 const CHAIN_ID = 56;
@@ -51,6 +59,17 @@ function fromB64(str) {
   return out;
 }
 
+function toHex(bytes) {
+  let s = '0x';
+  const b = new Uint8Array(bytes);
+  for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, '0');
+  return s;
+}
+
+function randHex(nbytes) {
+  return toHex(crypto.getRandomValues(new Uint8Array(nbytes))).slice(2);
+}
+
 async function deriveKey(pin, salt) {
   const base = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
@@ -62,16 +81,42 @@ async function deriveKey(pin, salt) {
   );
 }
 
+function badPin() {
+  const err = new Error('Wrong PIN.');
+  err.code = 'BAD_PIN';
+  return err;
+}
+
 // ---------------------------------------------------------------------------
 // 存储
 // ---------------------------------------------------------------------------
+// v2 布局：
+//   { v: 2, salt, active, accounts: [{ id, address, iv, ct, at }] }
+// salt 是 vault 级的：同一个 PIN + 同一把 salt 派生出同一把密钥，
+// 每个账户只用自己的 iv，不必每次切账户都跑一遍 21 万轮 PBKDF2。
 function read() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || obj.v !== 1 || !obj.address || !obj.ct) return null;
-    return obj;
+    const o = JSON.parse(raw);
+    if (!o) return null;
+
+    if (o.v === 2 && Array.isArray(o.accounts) && o.accounts.length && o.salt) {
+      if (!o.accounts.some((a) => a.id === o.active)) o.active = o.accounts[0].id;
+      return o;
+    }
+
+    // v1（助记词版）：先包成 v2 的形状让上层照常读，等第一次解锁时再真迁移。
+    if (o.v === 1 && o.address && o.ct && o.salt && o.iv) {
+      return {
+        v: 2,
+        salt: o.salt,
+        active: 'legacy',
+        accounts: [{ id: 'legacy', address: o.address, iv: o.iv, ct: o.ct, at: o.at, mnemonic: true }],
+        legacy: true
+      };
+    }
+    return null;
   } catch (e) {
     return null;
   }
@@ -86,13 +131,27 @@ export function hasLocalWallet() {
   return !!read();
 }
 
-/** 地址是明文存的，用于界面显示，不涉及私钥 */
+/** 当前账户地址（明文存的，只用于界面显示） */
 export function localAddress() {
   const o = read();
-  return o ? o.address : null;
+  if (!o) return null;
+  const a = o.accounts.find((x) => x.id === o.active) || o.accounts[0];
+  return a ? a.address : null;
 }
 
-/** 助记词是否已经被用户确认抄写过 */
+/** 账户列表（只有地址，没有密钥） */
+export function localAccounts() {
+  const o = read();
+  if (!o) return [];
+  return o.accounts.map((a) => ({ id: a.id, address: a.address }));
+}
+
+export function activeAccountId() {
+  const o = read();
+  return o ? o.active : null;
+}
+
+/** 私钥是否已经被用户保存过 */
 export function hasBackedUp() {
   try { return localStorage.getItem(BACKUP_KEY) === '1'; } catch (e) { return false; }
 }
@@ -109,85 +168,234 @@ export function destroyLocalWallet() {
 }
 
 // ---------------------------------------------------------------------------
-// 创建 / 导入 / 解锁
+// 会话：只在内存里，刷新即失效
 // ---------------------------------------------------------------------------
-let session = null; // { wallet, address } —— 只在内存里，刷新即失效
+// key 是 PBKDF2 派生出的 AES-GCM CryptoKey（extractable = false）。
+// cache 是已解密的账户：切账户时免去重复解密，但绝不落盘。
+let session = null; // { key, salt, cache: { [id]: Wallet }, active }
 
-function wordlistOk(phrase) {
-  return typeof phrase === 'string' && phrase.trim().split(/\s+/).length >= 12;
+async function decryptWallet(acct, key) {
+  const { Wallet } = await import('ethers/wallet');
+  let plain;
+  try {
+    plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromB64(acct.iv) }, key, fromB64(acct.ct)
+    );
+  } catch (e) {
+    // AES-GCM 认证失败只会以这种方式暴露：PIN 不对就是这里抛。
+    throw badPin();
+  }
+  const text = dec.decode(plain);
+  // v1 账户里存的是 12 个词，迁移后才是私钥
+  return acct.mnemonic ? Wallet.fromPhrase(text.trim()) : new Wallet(text);
+}
+
+async function encryptPrivateKey(privateKey, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(privateKey));
+  return { iv: toB64(iv), ct: toB64(ct) };
 }
 
 /**
- * 生成新钱包。返回助记词 —— **只返回这一次**，之后只能靠 PIN 导出。
- * 调用方必须把它展示给用户并要求抄写。
+ * 用 PIN 打开 vault。成功返回 { key, store }（store 可能是刚迁移出来的）。
+ * 失败抛 BAD_PIN，或 NO_WALLET。
  */
-export async function createLocalWallet(pin, { mnemonic } = {}) {
-  const { Wallet } = await import('ethers/wallet');
-  let w;
-  if (mnemonic) {
-    if (!wordlistOk(mnemonic)) throw new Error('That recovery phrase does not look complete.');
-    w = Wallet.fromPhrase(mnemonic.trim().replace(/\s+/g, ' '));
-  } else {
-    w = Wallet.createRandom();
+async function openVault(pin) {
+  const store = read();
+  if (!store) {
+    const err = new Error('No wallet on this browser yet.');
+    err.code = 'NO_WALLET';
+    throw err;
   }
 
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(pin, salt);
+  const key = await deriveKey(String(pin || ''), fromB64(store.salt));
 
-  // 存助记词而不是裸私钥：用户还能把它导进 MetaMask / Trust，
-  // 不至于被锁死在这个页面里。
-  const secret = enc.encode(w.mnemonic.phrase);
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, secret);
+  if (!store.legacy) {
+    const acct = store.accounts.find((a) => a.id === store.active) || store.accounts[0];
+    await decryptWallet(acct, key); // 只为验证 PIN
+    return { key, store };
+  }
 
-  write({
-    v: 1,
+  // ---- v1 → v2 迁移：解出助记词，取出私钥，用新 iv 重新加密 ----
+  const legacy = store.accounts[0];
+  const w = await decryptWallet(legacy, key);
+  const packed = await encryptPrivateKey(w.privateKey, key);
+  const migrated = {
+    v: 2,
+    salt: store.salt,
+    active: legacy.id === 'legacy' ? randHex(8) : legacy.id,
+    accounts: [{
+      id: legacy.id === 'legacy' ? randHex(8) : legacy.id,
+      address: w.address,
+      iv: packed.iv,
+      ct: packed.ct,
+      at: legacy.at || Date.now()
+    }]
+  };
+  write(migrated);
+  return { key, store: migrated };
+}
+
+function startSession(key, store) {
+  session = { key, salt: store.salt, cache: {}, active: store.active };
+  return session;
+}
+
+/** 把一个已构造好的 Wallet 挂到 vault 上（新建和导入共用） */
+async function attachAccount(w, pin) {
+  const store = read();
+  let key;
+  let salt;
+
+  if (session) {
+    // 已解锁：直接用内存里的密钥，不用再输 PIN
+    key = session.key;
+    salt = store ? store.salt : null;
+  } else if (store) {
+    const opened = await openVault(pin);
+    key = opened.key;
+    salt = opened.store.salt;
+  } else {
+    // 全新 vault：这一次的 PIN 就是以后的开锁密码
+    if (String(pin || '').length < 6) {
+      const err = new Error('Set a 6-digit PIN first.');
+      err.code = 'NO_PIN';
+      throw err;
+    }
+    const raw = crypto.getRandomValues(new Uint8Array(16));
+    salt = toB64(raw);
+    key = await deriveKey(String(pin), raw);
+  }
+
+  // openVault 迁移时已经把 v2 记录写回去了，这里读到的就是最新形状。
+  const base = read() || { v: 2, salt, accounts: [], active: null };
+
+  const packed = await encryptPrivateKey(w.privateKey, key);
+  const acct = {
+    id: randHex(8),
     address: w.address,
-    salt: toB64(salt),
-    iv: toB64(iv),
-    ct: toB64(ct),
+    iv: packed.iv,
+    ct: packed.ct,
     at: Date.now()
-  });
+  };
 
-  session = { wallet: w, address: w.address };
-  return { address: w.address, mnemonic: w.mnemonic.phrase };
+  const next = {
+    v: 2,
+    salt: base.salt || salt,
+    accounts: base.accounts.concat([acct]),
+    active: acct.id
+  };
+  write(next);
+
+  if (!session) startSession(key, next);
+  session.cache[acct.id] = w;
+  session.active = acct.id;
+
+  return { id: acct.id, address: w.address, privateKey: w.privateKey };
+}
+
+function makeRandomWallet(Wallet) {
+  // 32 字节随机数就是一把 secp256k1 私钥；极小概率越界，越界就重摇。
+  for (let i = 0; i < 8; i++) {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    try {
+      return new Wallet(toHex(bytes));
+    } catch (e) { /* 非法标量，重来 */ }
+  }
+  throw new Error('Could not generate a key on this device.');
+}
+
+// ---------------------------------------------------------------------------
+// 创建 / 导入 / 解锁 / 切账户 / 导出
+// ---------------------------------------------------------------------------
+
+/**
+ * 生成一个新账户（私钥类型）。
+ * 返回 { address, privateKey, id } —— 私钥只在这一次和「查看私钥」时出现。
+ * 已经有 vault 且已解锁时 pin 可以不传；否则必须传 PIN。
+ */
+export async function createLocalWallet(pin) {
+  const { Wallet } = await import('ethers/wallet');
+  return attachAccount(makeRandomWallet(Wallet), pin);
+}
+
+/** 导入已有的私钥（0x 开头可省略，必须是 64 位十六进制） */
+export async function importLocalWallet(privateKey, pin) {
+  const { Wallet } = await import('ethers/wallet');
+  const hex = String(privateKey || '').trim().replace(/^0x/i, '').replace(/\s+/g, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    const err = new Error('A private key is 64 hex characters.');
+    err.code = 'BAD_KEY';
+    throw err;
+  }
+
+  let w;
+  try {
+    w = new Wallet('0x' + hex);
+  } catch (e) {
+    const err = new Error('That private key is not valid.');
+    err.code = 'BAD_KEY';
+    throw err;
+  }
+
+  const store = read();
+  if (store && store.accounts.some((a) => a.address.toLowerCase() === w.address.toLowerCase())) {
+    const err = new Error('This account is already in your wallet.');
+    err.code = 'DUP';
+    throw err;
+  }
+
+  return attachAccount(w, pin);
 }
 
 /** 用 PIN 解密，成功则建立内存会话 */
 export async function unlockLocalWallet(pin) {
-  const o = read();
-  if (!o) throw new Error('No wallet on this browser yet.');
-
-  const salt = fromB64(o.salt);
-  const iv = fromB64(o.iv);
-  const key = await deriveKey(pin, salt);
-
-  let plain;
-  try {
-    plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, fromB64(o.ct));
-  } catch (e) {
-    // AES-GCM 的认证失败只会以这种方式暴露：口令错误就是这里抛。
-    const err = new Error('Wrong PIN.');
-    err.code = 'BAD_PIN';
-    throw err;
-  }
-
-  const { Wallet } = await import('ethers/wallet');
-  const phrase = dec.decode(plain);
-  const w = Wallet.fromPhrase(phrase);
-  session = { wallet: w, address: w.address };
+  const { key, store } = await openVault(pin);
+  const s = startSession(key, store);
+  const acct = store.accounts.find((a) => a.id === store.active) || store.accounts[0];
+  const w = await decryptWallet(acct, key);
+  s.cache[acct.id] = w;
   return { address: w.address };
 }
 
-/** 导出助记词（需要 PIN，UI 必须二次确认） */
-export async function exportMnemonic(pin) {
-  const o = read();
-  if (!o) throw new Error('No wallet on this browser yet.');
-  const key = await deriveKey(pin, fromB64(o.salt));
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromB64(o.iv) }, key, fromB64(o.ct)
-  );
-  return dec.decode(plain);
+/** 切到另一个账户。已解锁时不需要 PIN；未解锁会抛 4100。 */
+export async function switchAccount(id) {
+  if (!session) {
+    const err = new Error('Wallet is locked.');
+    err.code = 4100;
+    throw err;
+  }
+  const store = read();
+  if (!store) throw new Error('No wallet on this browser yet.');
+  const acct = store.accounts.find((a) => a.id === id);
+  if (!acct) throw new Error('Unknown account.');
+
+  let w = session.cache[id];
+  if (!w) {
+    w = await decryptWallet(acct, session.key);
+    session.cache[id] = w;
+  }
+  session.active = id;
+  store.active = id;
+  write(store);
+  return { id, address: w.address };
+}
+
+/**
+ * 查看 / 导出私钥。**每次都要输 PIN**：这是唯一能拿到明文私钥的入口，
+ * 不能因为「已经解锁」就放行 —— 解锁是持续状态，看私钥是一次性动作。
+ */
+export async function exportPrivateKey(pin, id) {
+  const store = read();
+  if (!store) {
+    const err = new Error('No wallet on this browser yet.');
+    err.code = 'NO_WALLET';
+    throw err;
+  }
+  const key = await deriveKey(String(pin || ''), fromB64(store.salt));
+  const acct = store.accounts.find((a) => a.id === (id || store.active)) || store.accounts[0];
+  const w = await decryptWallet(acct, key);
+  return w.privateKey;
 }
 
 export function lockLocalWallet() {
@@ -210,6 +418,11 @@ function makeProvider() {
     (listeners[event] || []).forEach((fn) => { try { fn(payload); } catch (e) { /* noop */ } });
   };
 
+  const activeWallet = () => {
+    if (!session) return null;
+    return session.cache[session.active] || null;
+  };
+
   return {
     isLocalWallet: true,
     isMetaMask: false,
@@ -220,12 +433,17 @@ function makeProvider() {
         err.code = 4100;
         throw err;
       }
-      const { wallet } = session;
+      const wallet = activeWallet();
+      if (!wallet) {
+        const err = new Error('Wallet is locked.');
+        err.code = 4100;
+        throw err;
+      }
 
       switch (method) {
         case 'eth_requestAccounts':
         case 'eth_accounts':
-          return [session.address];
+          return [wallet.address];
 
         case 'eth_chainId':
           return CHAIN_HEX;
@@ -269,7 +487,7 @@ function makeProvider() {
             chainId: CHAIN_ID
           });
           const hash = await rpcCall('eth_sendRawTransaction', [raw]);
-          emit('accountsChanged', [session.address]);
+          emit('accountsChanged', [wallet.address]);
           return hash;
         }
 
@@ -301,7 +519,7 @@ function fromB64Hex(hex) {
  */
 export async function connectLocalWallet(pin) {
   if (!session) await unlockLocalWallet(pin);
-  return { accounts: [session.address], provider: makeProvider() };
+  return { accounts: [localAddress()], provider: makeProvider() };
 }
 
 /** 页面刷新后重新回到已连接状态用：不弹 PIN，但 provider 是锁住的 */
