@@ -38,17 +38,6 @@ const sheetStyle = {
 const primaryBtn = (disabled) => skyBtn('lg', { block: true, disabled });
 const ghostBtn = { ...skyBtn('md', { block: true, soft: true }) };
 
-/** 资产选择里用的 16px 飞碟标（纯色，避免多实例的渐变 id 冲突） */
-const UfoMark = ({ size = 16 }) => (
-  <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true">
-    <path d="M 25 52 C 25 15, 75 15, 75 52 Z" fill="#dbeafe" stroke="#3b82f6" strokeWidth="5" />
-    <ellipse cx="50" cy="55" rx="45" ry="16" fill="#3b82f6" />
-    <circle cx="35" cy="55" r="4.5" fill="#fff" />
-    <circle cx="50" cy="57" r="4.5" fill="#fff" />
-    <circle cx="65" cy="55" r="4.5" fill="#fff" />
-  </svg>
-);
-
 const label = {
   fontSize: '11px', fontWeight: 700, color: '#94a3b8',
   letterSpacing: '0.6px', textTransform: 'uppercase'

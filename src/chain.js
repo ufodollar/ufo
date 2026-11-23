@@ -152,39 +152,6 @@ export async function readVaultBalances() {
   return { USDT: units(usdt), USDC: units(usdc) };
 }
 
-/**
- * 钱包快照：BNB + USDT + USDC + UFO + BNB 价格，一次往返。
- * 原来要走 6 次（其中 BNB 还绕道钱包自己的 RPC，最慢）。
- */
-export async function readWalletSnapshot(owner) {
-  const [bnbHex, usdtHex, usdcHex, ufoHex, oracleHex] = await ethBatch([
-    { method: 'eth_getBalance', params: [owner, 'latest'] },
-    { to: CONFIG.USDT_ADDRESS, data: encodeBalanceOf(owner) },
-    { to: CONFIG.USDC_ADDRESS, data: encodeBalanceOf(owner) },
-    { to: CONFIG.UFO_ADDRESS, data: encodeBalanceOf(owner) },
-    { to: CONFIG.BNB_ORACLE, data: '0xfeaf968c' }
-  ]);
-
-  const units = (hex) => {
-    const v = decodeUint(hex);
-    return v === null ? null : Number(v) / 1e18;
-  };
-
-  let bnbPrice = null;
-  if (oracleHex && oracleHex.length >= 2 + 128) {
-    const answer = BigInt('0x' + oracleHex.slice(2 + 64, 2 + 128));
-    if (answer > 0n) bnbPrice = Number(answer) / 1e8;
-  }
-
-  return {
-    bnb: units(bnbHex),
-    USDT: units(usdtHex),
-    USDC: units(usdcHex),
-    UFO: units(ufoHex),
-    bnbPrice
-  };
-}
-
 // ============================================================================
 // 多代币组合
 // ----------------------------------------------------------------------------

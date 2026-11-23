@@ -14,7 +14,7 @@ import TokenPicker from './components/TokenPicker';
 import TransferSheet from './components/TransferSheet';
 import ReadmeTab from './components/ReadmeTab';
 import { TokenIcon, UfoIcon } from './icons';
-import { TOKENS, TOKEN_BY_SYMBOL, STABLECOINS, UFO_TOKEN, isStable, formatAmount } from './tokens';
+import { TOKENS, STABLECOINS, UFO_TOKEN, isStable, formatAmount } from './tokens';
 import { skyBtn, skyLink } from './ui';
 
 // Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
@@ -597,11 +597,6 @@ function App() {
   };
 
   const formatUsd = (val) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const formatPrice = (val, isBnb = false) => {
-    if (isBnb) return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return Number(val).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-  };
-
   const currentPayPrice = isBuyingUFO
     ? (currentPriceData?.priceFloat ?? null)
     : currentNav;
