@@ -27,6 +27,8 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const [manualOpen, setManualOpen] = useState(null);
   // 网络自检结果。null = 没跑过；{running:true} = 正在跑；否则是 runNetcheck 的返回值。
   const [check, setCheck] = useState(null);
+  // 明细是否展开。默认收起：常态只留一行结论，面板才不至于被挤满。
+  const [expanded, setExpanded] = useState(false);
   const mobile = useMemo(() => isMobile(), []);
   const wallets = useMemo(() => walletList(), []);
   // 某条 WalletConnect 入口真机接不住时记下来，同一个会话里不再重试，
@@ -34,7 +36,7 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   const wcBroken = useRef(new Set());
 
   useEffect(() => {
-    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); return; }
+    if (!open) { setOpening(''); setCopied(false); setNotice(''); setHint(''); setPasteUrl(''); setLinkCopied(false); setManualOpen(null); setCheck(null); setExpanded(false); return; }
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -183,16 +185,31 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
   };
 
   // 网络自检。耗时取决于最慢的那个目标（默认 6 秒超时），并发跑。
-  // 这不是给所有人看的入口 —— 只有在「点了钱包却连不上」时才会有人去点它。
-  const handleCheck = async () => {
+  const handleCheck = async (force) => {
     if (check && check.running) return;
     setCheck({ running: true });
     try {
-      setCheck(await runNetcheck({ timeoutMs: 6000 }));
+      setCheck(await runNetcheck({ timeoutMs: 6000, force }));
     } catch (e) {
       setCheck({ error: String((e && e.message) || 'The check could not run.') });
     }
   };
+
+  // 面板一打开就静默跑一次。
+  //
+  // 之前把入口做成了「点一下才跑」，结果没人点 —— 但这几个通道通不通，
+  // 恰恰是「为什么点钱包连不上」的唯一答案。与其等用户去发现一行小字，
+  // 不如默认就把结论摆出来：他自己看得懂，我们也不用再隔着屏幕猜。
+  useEffect(() => {
+    if (!open || !mobile || check) return;
+    let alive = true;
+    setCheck({ running: true });
+    runNetcheck({ timeoutMs: 5000 })
+      .then((r) => { if (alive) setCheck(r); })
+      // 失败也给一个非空状态：若置回 null，effect 会再跑一次，等于死循环
+      .catch((e) => { if (alive) setCheck({ error: String((e && e.message) || 'The check could not run.') }); });
+    return () => { alive = false; };
+  }, [open, mobile, check]);
 
   const hasExt = !!(injectedWallets && injectedWallets.length);
   const showWall = mobile;            // 手机：钱包墙，点了进 App 内置浏览器
@@ -380,21 +397,40 @@ export default function WalletPicker({ open, onClose, injectedWallets, onPick, o
         {/* 网络自检。
             起因：这里能不能「点一下就回到浏览器」，取决于手机当前网络能否
             连上对应钱包的中继域名，而这些域名在部分移动网络下是被整段阻断的，
-            且 SDK 只会静默重试，界面上什么都不说。把它做成面板里的一个按钮，
-            是因为让用户另开一个网址、记一条路径，成功率远低于就地一点。
-            结果直接渲染在下面：一张截图就能把整条链路的状态说清楚。 */}
+            且 SDK 只会静默重试，界面上什么都不说。
+            面板打开时已经自动跑过一次，常态只显示一行结论 —— 够看懂，也够截图；
+            想看每个目标的耗时再展开。 */}
         <div style={{ marginTop: '10px', textAlign: 'center' }}>
+          {check && check.rows && (
+            <div style={{ marginBottom: '7px', padding: '5px 8px', borderRadius: '6px',
+                          background: '#f8fafc', border: '1px solid #eef2f7',
+                          fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '9.5px',
+                          lineHeight: 1.6, color: '#64748b', wordBreak: 'break-all',
+                          userSelect: 'all', WebkitUserSelect: 'all' }}>
+              {check.summary}
+            </div>
+          )}
+
           <button
-            onClick={handleCheck}
+            onClick={() => {
+              if (check && check.rows) { setExpanded((v) => !v); return; }
+              handleCheck(true);
+            }}
             style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
                      background: 'none', border: 'none', padding: '6px 4px', cursor: 'pointer',
                      fontSize: '11.5px', color: '#94a3b8', textDecoration: 'underline',
                      textUnderlineOffset: '3px' }}
           >
-            {check && check.running ? 'Checking this network…' : 'Wallets not connecting? Check this network'}
+            {check && check.running
+              ? 'Checking this network…'
+              : expanded
+                ? 'Hide details'
+                : check && check.rows
+                  ? 'Details'
+                  : 'Wallets not connecting? Check this network'}
           </button>
 
-          {check && !check.running && (
+          {expanded && check && !check.running && (
             check.error ? (
               <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#b91c1c' }}>{check.error}</div>
             ) : (

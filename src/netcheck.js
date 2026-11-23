@@ -48,7 +48,13 @@ async function probeOne(url, timeoutMs) {
  *   summary   —— 一行可复制/可截图的结论，如 `OKX=ok WalletConnect=fail …`
  *   reachable —— 能走「授权后自动回浏览器」这条路的渠道名数组
  */
-export async function runNetcheck({ timeoutMs = 6000 } = {}) {
+let lastRun = null;
+const TTL = 60 * 1000;
+
+export async function runNetcheck({ timeoutMs = 6000, force = false } = {}) {
+  // 面板每开一次都重跑会白烧流量：一分钟内的结论直接复用。
+  if (!force && lastRun && Date.now() - lastRun.at < TTL) return lastRun;
+
   const rows = await Promise.all(
     NET_TARGETS.map(async (t) => ({ ...t, ...(await probeOne(t.url, timeoutMs)) }))
   );
@@ -60,5 +66,6 @@ export async function runNetcheck({ timeoutMs = 6000 } = {}) {
   const reachable = ['OKX', 'WalletConnect', 'MetaMask', 'Coinbase'].filter((k) => byKey[k]);
   const summary = rows.map((r) => `${r.key}=${r.ok ? 'ok' : 'fail'}`).join(' ');
 
-  return { rows, summary, reachable, noNetwork };
+  lastRun = { rows, summary, reachable, noNetwork, at: Date.now() };
+  return lastRun;
 }
