@@ -23,11 +23,13 @@ export const RPC_URL = 'https://rpc.ankr.com/bsc/6697e20a67ff784e1da4e725453d8a6
  * 而这些都不是网络断了。
  *
  * 这两条是 BSC 官方 dataseed，不带 key、不依赖任何厂商账号。
+ * 第三条是 PublicNode，独立于币安基础设施 —— 前两条同时抽风时还有得选。
  * chain.js 只在网络层失败时才切换；JSON-RPC 返回的业务错误不会触发切换。
  */
 export const RPC_FALLBACKS = [
   'https://bsc-dataseed.binance.org/',
-  'https://bsc-dataseed1.defibit.io/'
+  'https://bsc-dataseed1.defibit.io/',
+  'https://bsc.publicnode.com'
 ];
 
 /**
