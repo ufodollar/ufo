@@ -90,7 +90,7 @@ export default function WalletSetup({ mode, onClose, onCreate, onUnlock, onBacku
 
   return (
     <div
-      onClick={step === 'reveal' ? undefined : onClose}
+      onClick={(step === 'reveal' && isCreate) ? undefined : onClose}
       style={{ ...FONT, position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2000, background: 'rgba(15,23,42,0.5)',
                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
                backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' }}
@@ -109,7 +109,7 @@ export default function WalletSetup({ mode, onClose, onCreate, onUnlock, onBacku
           <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3 }}>
             {title}
           </div>
-          {step !== 'reveal' && (
+          {(step !== 'reveal' || !isCreate) && (
             <button
               onClick={onClose}
               aria-label="Close"
@@ -216,28 +216,33 @@ export default function WalletSetup({ mode, onClose, onCreate, onUnlock, onBacku
               </div>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginTop: '14px',
-                            cursor: 'pointer', fontSize: '12.5px', color: '#334155', lineHeight: 1.55 }}>
-              <input
-                type="checkbox"
-                checked={agree}
-                onChange={(e) => setAgree(e.target.checked)}
-                style={{ marginTop: '2px', width: '16px', height: '16px', flexShrink: 0, accentColor: '#1d4ed8' }}
-              />
-              I have written all 12 words on paper, in order.
-            </label>
+            {/* 只有创建时必须确认抄写。备份是用户主动回来看一眼，
+                再拦一道「先勾选」只会让人以为按钮坏了。 */}
+            {isCreate && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginTop: '14px',
+                              cursor: 'pointer', fontSize: '12.5px', color: '#334155', lineHeight: 1.55 }}>
+                <input
+                  type="checkbox"
+                  checked={agree}
+                  onChange={(e) => setAgree(e.target.checked)}
+                  style={{ marginTop: '2px', width: '16px', height: '16px', flexShrink: 0, accentColor: '#1d4ed8' }}
+                />
+                I have written all 12 words on paper, in order.
+              </label>
+            )}
 
             <button
               onClick={() => { if (onBackedUp) onBackedUp(); onClose(); }}
-              disabled={!agree}
-              style={{ ...primaryBtn(!agree), marginTop: '14px' }}
+              disabled={isCreate && !agree}
+              style={{ ...primaryBtn(isCreate && !agree), marginTop: '14px' }}
             >
               {isCreate ? 'Done — open my wallet' : 'Done'}
             </button>
 
             <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>
-              This phrase will not be shown again. You can view it later from Wallet → Back up,
-              but only by entering your PIN.
+              {isCreate
+                ? 'This phrase will not be shown again. You can view it later from Wallet → Back up phrase, but only by entering your PIN.'
+                : 'Close this and the phrase is hidden again. Treat anyone who sees this screen as the owner of the wallet.'}
             </div>
           </>
         )}
