@@ -175,6 +175,17 @@ export function walletList() {
       //      切网交给页面自己：落地后 ensureBscChain 会发
       //      wallet_switchEthereumChain，用户确认一次即可。
       //
+      //   5. 第六次修正，也是最后一次：真机实测表明 open_url 已经**不再消费
+      //      url 参数**。判据是四组对照（外站 example.com / 原样 / 编码 /
+      //      无协议）全部打开空白页 —— 连 example.com 都白，就不是我们站点
+      //      的兼容性问题，而是这个构建把 url 丢了。同时用户手动在浏览器里
+      //      输入本站地址，页面完全正常。
+      //
+      //      结论：这条 deeplink 现在只剩「把用户送进内置浏览器」这一个作用，
+      //      送进去之后必须靠粘贴。所以链接在点击那一刻就已经放进剪贴板，
+      //      面板上的提示随页面一直挂着（见 pasteHint），用户回来也能照着做。
+      //      不再指望任何参数能让它自动加载 —— 六个方向都试过了。
+      //
       // 官方文档注明 DApp 浏览器是 Android Only —— iOS 版已移除该功能，
       // 所以 iOS 上不显示这个入口（noBrowser）。
       url: `trust://open_url?coin_id=60&url=${currentUrl().replace(/\/+$/, '')}`,
@@ -189,7 +200,7 @@ export function walletList() {
       // 浏览器入口不再露在导航里，open_url 偶尔会静默退回首页。这时候用户
       // 手上必须有一条能立刻走通的路 —— 链接已经替他复制好了，只要点底部
       // 那个放大镜粘进去，就一定落在内置浏览器里，且带着 ?c=1 自动授权。
-      pasteHint: 'Link copied. If Trust only shows its home screen, tap the search icon at the bottom right, paste the link, and open it.',
+      pasteHint: 'Link copied. Trust opens its browser blank — tap the address bar, long-press, Paste, then Go. The page auto-connects once it loads.',
       noBrowser: platform() === 'ios'
     },
     {
