@@ -6,7 +6,7 @@ import { formatUnits, parseUnits } from './units';
 import { readNav, readPrice, readBnbPrice, readVaultBalances, readWalletSnapshot } from './chain';
 import { submitSwap, toWei, prefetchTxLibs } from './tx';
 import { useWallet } from './useWallet';
-import WalletPicker from './components/WalletPicker';
+import WalletSetup from './components/WalletSetup';
 import TokenMenu from './components/TokenMenu';
 
 // 引入抽离出来的文案组件
@@ -129,42 +129,32 @@ async function fetchStablecoinPrices() {
 
 // ================= 4. 主应用 =================
 function App() {
-  // 钱包层只有一条路径：EIP-1193 注入。
-  // 桌面扩展、钱包 App 内置浏览器都走这条；手机普通浏览器则由 WalletPicker
-  // 跳进钱包自己的浏览器，落地后同样是注入 —— 全程不经过任何中继，见 wallets.js
+  // 只有一条路径：钱包本体就在这个页面里。
+  // 没有注入式钱包、没有钱包墙、没有 WalletConnect —— 用户第一次来时
+  // 在 Wallet 标签页生成一个，之后每次进来输 PIN 解锁（见 useWallet.js）。
   const {
     address, provider: walletProvider, isConnected,
-    busy: walletBusy, autoConnecting, error: walletError,
-    chainIssue, fixChain,
-    connect, disconnect, connectOkxWallet, connectWcWallet, connectMetaMaskWallet, connectLocal, wcReachable,
-    pickerOpen, closePicker, connectWith, injectedWallets
+    busy: walletBusy, hasWallet, backedUp,
+    create: createWallet, unlock: unlockWallet, lock: lockWallet,
+    exportKey, confirmBackup, fixChain
   } = useWallet();
 
-  // 提示条内容（钱包连接异常时显示）
-  const [notice, setNotice] = useState('');
-
-  // 提示条 8 秒后自动消失，pointer-events:none 保证它永远不会挡住点击
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(''), 8000);
-    return () => clearTimeout(t);
-  }, [notice]);
-
-  // 钱包层报错也走同一条提示条。
-  // 一定要转成字符串：ethers / 各家 SDK 抛出来的 reason 有时是个对象，
-  // 直接塞进 JSX 会触发 "Objects are not valid as a React child"，
-  // React 会把整棵树卸载 —— 用户看到的就是「页面崩了」。
-  useEffect(() => {
-    if (!walletError) return;
-    const msg = typeof walletError === 'string'
-      ? walletError
-      : (walletError.message || String(walletError));
-    setNotice(msg);
-  }, [walletError]);
+  // '' | 'create' | 'unlock' | 'backup'
+  const [walletPanel, setWalletPanel] = useState('');
 
   const [activeTab, setActiveTab] = useState('swap');
   const [isBuyingUFO, setIsBuyingUFO] = useState(true);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [copiedAddr, setCopiedAddr] = useState(false);
+
+  // 地址可以复制（它本来就是公开的），助记词不能 —— 两件事在 UI 上必须区分。
+  const copyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(address || '');
+      setCopiedAddr(true);
+      setTimeout(() => setCopiedAddr(false), 1600);
+    } catch (e) { /* 非安全上下文没有 clipboard，忽略 */ }
+  };
 
   const [selectedStablecoin, setSelectedStablecoin] = useState(STABLECOINS[0]);
   const [showTokenMenu, setShowTokenMenu] = useState(false);
@@ -249,19 +239,9 @@ function App() {
     });
   };
 
-  // 「Switch」按钮的重试状态。切链会弹钱包自己的确认框，可能要等用户几秒，
-  // 这期间按钮必须变成不可再点，否则连点会叠出多个切换请求。
-  const [chainFixing, setChainFixing] = useState(false);
-  const handleFixChain = useCallback(async () => {
-    if (chainFixing) return;
-    setChainFixing(true);
-    try { await fixChain(); } finally { setChainFixing(false); }
-  }, [chainFixing, fixChain]);
-
   const ensureBscNetwork = useCallback(async () => {
-    // 切链逻辑统一在 useWallet.ensureBscChain 里，这里不再抄一份：
-    // 两份实现迟早会漂移（一份加 addEthereumChain、另一份忘了），
-    // 而且只有那边会顺手把失败结果告诉 UI。
+    // 本地钱包的 chainId 固定是 0x38，切换请求恒成功。
+    // 保留这一层是为了让 submitSwap 的调用方式不因钱包形态而分叉。
     return fixChain();
   }, [fixChain]);
 
@@ -498,7 +478,11 @@ function App() {
 
   const handleAction = async () => {
     if (isProcessing) return;
-    if (!isConnected || !walletProvider) return connect();
+    // 没有钱包就先生成/解锁，而不是「连接」。这是本页唯一的账户来源。
+    if (!isConnected || !walletProvider) {
+      setWalletPanel(hasWallet ? 'unlock' : 'create');
+      return;
+    }
 
     const isNetworkOk = await ensureBscNetwork();
     if (!isNetworkOk) return;
@@ -582,12 +566,7 @@ function App() {
 
   const isButtonDisabled =
     isProcessing ||
-    // 自动授权正在进行时，钱包自己的弹窗盖在上面，此时按钮不该再被点
-    (!isConnected && autoConnecting) ||
     (isConnected && (
-      // 钱包明确在别的链上时直接拦住：签名请求要么被钱包拒绝，
-      // 要么在错误的网络上执行，两种都不该让用户等到最后一步才发现。
-      chainIssue === 'wrong' ||
       errorMsg !== '' ||
       !inputAmount ||
       parseFloat(inputAmount) <= 0 ||
@@ -604,14 +583,6 @@ function App() {
       {/* 装饰光斑：纯视觉，必须让点击穿透，否则会盖在内容上吞掉点击 */}
       <div style={{ position: 'absolute', top: '-50px', left: '-50px', width: '250px', height: '250px', background: '#bfdbfe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
       <div style={{ position: 'absolute', bottom: '50px', right: '-50px', width: '250px', height: '250px', background: '#ddd6fe', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.4, zIndex: 0, pointerEvents: 'none' }}></div>
-
-      {notice && (
-        <div style={{ position: 'fixed', top: '12px', left: '12px', right: '12px', zIndex: 10001, pointerEvents: 'none',
-                      background: '#1e293b', color: '#fff', fontSize: '12.5px', lineHeight: 1.5, padding: '10px 14px',
-                      borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
-          {String(notice)}
-        </div>
-      )}
 
       {/* Header */}
       {/* zIndex 必须高于主内容(10)和底栏(20)：header 和主内容是兄弟节点，
@@ -657,14 +628,24 @@ function App() {
                       View on BscScan
                     </a>
                     <button
-                      onClick={() => { setShowAccountMenu(false); disconnect(); }}
+                      onClick={() => { setShowAccountMenu(false); setWalletPanel('backup'); }}
                       style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
                                display: 'flex', alignItems: 'center', width: '100%', height: '44px',
                                padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
-                               color: '#ef4444', background: 'transparent', border: 'none',
+                               color: '#1e293b', background: 'transparent', border: 'none',
+                               borderRadius: '8px', cursor: 'pointer' }}
+                    >
+                      Back up phrase
+                    </button>
+                    <button
+                      onClick={() => { setShowAccountMenu(false); lockWallet(); }}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               display: 'flex', alignItems: 'center', width: '100%', height: '44px',
+                               padding: '0 14px', textAlign: 'left', fontSize: '13px', lineHeight: 1.2,
+                               color: '#334155', background: 'transparent', border: 'none',
                                borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
                     >
-                      Disconnect
+                      Lock wallet
                     </button>
                   </div>
                 </>
@@ -672,15 +653,15 @@ function App() {
             </>
           ) : (
             <button
-              onClick={connect}
-              disabled={walletBusy || autoConnecting}
+              onClick={() => setWalletPanel(hasWallet ? 'unlock' : 'create')}
+              disabled={walletBusy}
               style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
-                       background: (walletBusy || autoConnecting) ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
+                       background: walletBusy ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none',
                        padding: '8px 16px', borderRadius: '20px', fontWeight: '700', fontSize: '13px',
-                       lineHeight: 1.2, cursor: (walletBusy || autoConnecting) ? 'wait' : 'pointer',
+                       lineHeight: 1.2, cursor: walletBusy ? 'wait' : 'pointer',
                        boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
             >
-              {autoConnecting ? 'Approve in wallet…' : walletBusy ? 'Connecting…' : 'Connect Wallet'}
+              {walletBusy ? 'Working…' : hasWallet ? 'Unlock' : 'Create Wallet'}
             </button>
           )}
         </div>
@@ -688,34 +669,6 @@ function App() {
 
       {/* Main Content */}
       <div style={{ flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overflowY: 'auto', padding: '0 20px 85px 20px', zIndex: 10 }}>
-
-        {/* 网络不对时常驻提示。不用上面那条 8 秒自动消失的 notice：
-            这是一个持续状态，用户滚回来看时它还得在，否则他只会看到
-            「余额 0、按钮点不动」，却不知道原因。
-            文案分两档：确定在别的链 vs 读不到链，后者的说法必须留余地。 */}
-        {isConnected && chainIssue && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px',
-                        marginTop: '10px', padding: '10px 12px',
-                        background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '12px',
-                        color: '#92400e', fontSize: '12px', lineHeight: 1.45 }}>
-            <span style={{ flex: 1 }}>
-              {chainIssue === 'wrong'
-                ? 'Your wallet is on a different network. Switch to BNB Smart Chain to continue.'
-                : 'Could not confirm your wallet network. Please make sure BNB Smart Chain is selected.'}
-            </span>
-            <button
-              onClick={handleFixChain}
-              disabled={chainFixing}
-              style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-                       height: '32px', padding: '0 12px', borderRadius: '8px', border: 'none',
-                       background: chainFixing ? '#fbbf24' : '#f59e0b', color: '#fff',
-                       fontWeight: '700', fontSize: '12px', lineHeight: 1.2,
-                       cursor: chainFixing ? 'wait' : 'pointer' }}
-            >
-              {chainFixing ? 'Switching…' : 'Switch'}
-            </button>
-          </div>
-        )}
 
         {activeTab === 'swap' && (
           <div style={{ ...SUB_CARD, marginTop: '10px' }}>
@@ -846,14 +799,114 @@ function App() {
               style={{ ...FONT_STYLE, width: '100%', padding: '16px', background: isButtonDisabled ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '700', cursor: isButtonDisabled ? 'not-allowed' : 'pointer', marginTop: '20px', boxShadow: isButtonDisabled ? 'none' : '0 8px 20px -5px rgba(59,130,246,0.4)' }}
             >
               {isProcessing ? 'Processing...'
-                : !isConnected ? (autoConnecting ? 'Approve in wallet…' : 'Connect Wallet')
+                : !isConnected ? (hasWallet ? 'Unlock Wallet' : 'Create Wallet')
                 : (isBuyingUFO ? 'Issuance' : 'Burn')}
             </button>
           </div>
         )}
 
         {activeTab === 'assets' && (
-          <div style={{ ...SUB_CARD, marginTop: '10px' }}>
+          <div style={{ marginTop: '10px' }}>
+            {/* 官方钱包本体。这里不再有「连接钱包」，只有三种状态：
+                没有钱包 / 已锁定 / 已解锁。 */}
+            <div style={{
+              borderRadius: '20px', padding: '18px', color: '#fff',
+              background: isConnected
+                ? 'linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%)'
+                : 'linear-gradient(135deg,#0f172a 0%,#1e293b 100%)',
+              boxShadow: '0 10px 26px rgba(29,78,216,0.18)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '10.5px', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700, opacity: 0.72 }}>
+                  Official UFO Wallet
+                </div>
+                {isConnected && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 600, opacity: 0.9 }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
+                    Unlocked
+                  </div>
+                )}
+              </div>
+
+              {isConnected ? (
+                <>
+                  <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '12.5px',
+                                marginTop: '10px', lineHeight: 1.6, wordBreak: 'break-all', opacity: 0.95 }}>
+                    {address}
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.78, marginTop: '6px', lineHeight: 1.6 }}>
+                    This wallet lives in this browser. It issues and redeems UFO at the protocol NAV —
+                    no app, no bridge, no third party.
+                  </div>
+                  {!backedUp && (
+                    <div style={{ marginTop: '10px', padding: '9px 10px', borderRadius: '10px',
+                                  background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(253,230,138,0.5)',
+                                  fontSize: '11.5px', lineHeight: 1.6, color: '#fef3c7' }}>
+                      Your recovery phrase is not backed up. Write it down now — if this browser’s
+                      data is cleared, this address and its funds are gone.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '7px', marginTop: '14px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={copyAddress}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
+                    >
+                      {copiedAddr ? 'Copied' : 'Copy address'}
+                    </button>
+                    <button
+                      onClick={() => setWalletPanel('backup')}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
+                    >
+                      Back up phrase
+                    </button>
+                    <button
+                      onClick={lockWallet}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit',
+                               padding: '8px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                               background: 'rgba(255,255,255,0.16)', color: '#fff', fontSize: '12px', fontWeight: 700 }}
+                    >
+                      Lock
+                    </button>
+                  </div>
+                </>
+              ) : hasWallet ? (
+                <>
+                  <div style={{ fontSize: '17px', fontWeight: 700, marginTop: '8px' }}>Wallet locked</div>
+                  <div style={{ fontSize: '12.5px', opacity: 0.8, marginTop: '5px', lineHeight: 1.65 }}>
+                    Your key is still on this device. Enter your PIN to sign again.
+                  </div>
+                  <button
+                    onClick={() => setWalletPanel('unlock')}
+                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                             marginTop: '14px', padding: '13px', borderRadius: '12px', border: 'none',
+                             background: '#fff', color: '#1d4ed8', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Unlock wallet
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '17px', fontWeight: 700, marginTop: '8px' }}>No wallet on this device yet</div>
+                  <div style={{ fontSize: '12.5px', opacity: 0.82, marginTop: '5px', lineHeight: 1.65 }}>
+                    Generate one here. The address and its key are created on this device and never leave it.
+                  </div>
+                  <button
+                    onClick={() => setWalletPanel('create')}
+                    style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
+                             marginTop: '14px', padding: '13px', borderRadius: '12px', border: 'none',
+                             background: '#fff', color: '#1d4ed8', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Generate wallet
+                  </button>
+                </>
+              )}
+            </div>
+
+          <div style={{ ...SUB_CARD, marginTop: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <img src={ICON_BNB} style={{ width: 40, height: 40 }} alt="BNB" />
@@ -908,6 +961,7 @@ function App() {
                 </div>
               );
             })}
+          </div>
           </div>
         )}
 
@@ -1052,19 +1106,14 @@ function App() {
         ))}
       </div>
 
-      <WalletPicker
-        open={pickerOpen}
-        onClose={closePicker}
-        injectedWallets={injectedWallets}
-        onPick={connectWith}
-        onOkxConnect={connectOkxWallet}
-        onWcConnect={connectWcWallet}
-        onMmConnect={connectMetaMaskWallet}
-        onLocalConnect={connectLocal}
-        wcReady={wcReachable === true}
-        wcBlocked={wcReachable === false}
-        busy={walletBusy}
-        error={walletError}
+      <WalletSetup
+        mode={walletPanel}
+        onClose={() => setWalletPanel('')}
+        address={address}
+        onCreate={createWallet}
+        onUnlock={unlockWallet}
+        onBackup={exportKey}
+        onBackedUp={confirmBackup}
       />
 
     </div>
@@ -1134,7 +1183,7 @@ class ErrorBoundary extends React.Component {
       }}>
         <div style={{ fontSize: '15px', fontWeight: 700 }}>The page broke.</div>
         <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, maxWidth: '320px' }}>
-          Reload it. If it breaks again, open the site inside your wallet app.
+          Reload it. Your wallet stays on this device — you will only need your PIN again.
         </div>
 
         <div style={{

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>UFO Ecosystem</title>
+    <meta name="theme-color" content="#f8fafc" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-512.png" />
+
+    <!-- 首屏唯一的后端依赖：RPC。提前建连，省一次 TLS 握手（约 100-200ms）。
+         钱包就在这个页面里，没有任何第三方域名需要在首屏预热。 -->
+    <link rel="preconnect" href="https://rpc.ankr.com" crossorigin />
+    <link rel="dns-prefetch" href="https://rpc.ankr.com" />
+
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+      html, body {
+        background-color: #f8fafc;
+        color: #1e293b;
+      }
+      body {
+        /* 先写 100vh 兜底：旧版 WebView（微信 X5、部分钱包内置浏览器）不认 dvh，
+           只写 100dvh 会让高度失效，配合下面的 overflow:hidden 就是整页点不动的成因 */
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+      }
+      #root {
+        width: 100%;
+        max-width: 480px;
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        background-color: #f8fafc;
+        position: relative;
+      }
+
+      /* AppKit 弹窗（w3m-modal）关闭时不得拦截点击。
+         注意判定条件必须是 class="open"：AppKit 用 classList 开关弹窗，
+         宿主元素上从来没有 open 属性，写成 :not([open]) 会命中所有状态
+         （包括已打开），导致弹窗里每个钱包按钮都点不动。 */
+      w3m-modal:not(.open) {
+        pointer-events: none !important;
+      }
+
+      /* 首屏骨架：内联在 HTML 里，不依赖 JS，脚本下来之前就能看到 */
+      .boot {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+      .boot-ring {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2.5px solid #dbeafe;
+        border-top-color: #3b82f6;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      .boot-text {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+        font-weight: 600;
+      }
+      /* 品牌字标。
+         它的唯一用途是「让截图自带证据」：钱包内置浏览器一旦加载了本页，
+         哪怕 JS 一行都没执行，这三个字母也会画出来。
+         白屏截图里如果有 UFO，问题在 JS/网络；如果连它都没有，
+         问题在唤起链接或 WebView 本身 —— 这两个方向的处理办法完全不同。 */
+      .boot-mark {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.34em;
+        color: #1d4ed8;
+        text-indent: 0.34em;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-ring { animation: none; border-top-color: #dbeafe; }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-BxcYH7Bz.js"></script>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot">
+        <div class="boot-mark">UFO</div>
+        <div class="boot-ring"></div>
+        <div class="boot-text">LOADING</div>
+      </div>
+    </div>
+    <noscript>
+      <div style="padding: 40px 24px; text-align: center; color: #64748b; font-size: 14px;">
+        This app requires JavaScript. Please enable it and reload the page.
+      </div>
+    </noscript>
+    <script>
+      // ---------------------------------------------------------------------
+      // 老 WebView 的运行时垫片（ES5 写，任何浏览器都能执行）
+      // ---------------------------------------------------------------------
+      // 语法降级（见 vite.config.js 的 build.target）只能保证「解析得过」。
+      // 还有一类坑是「解析得过、调用时才炸」：这些 API 属于 Chrome 71–98
+      // 才有的东西，而钱包内置浏览器长期停在 Chrome 70–79。少一个，整个
+      // 页面就在某个不经意的调用处停住，表现同样是白屏或按钮失灵。
+      //
+      // 全部用 typeof 判断，现代浏览器上这段等于空转。
+      (function () {
+        if (typeof globalThis === 'undefined') {
+          try { window.globalThis = window; } catch (e) {}
+        }
+
+        if (typeof Promise !== 'undefined' && typeof Promise.allSettled !== 'function') {
+          Promise.allSettled = function (list) {
+            return Promise.all((list || []).map(function (p) {
+              return Promise.resolve(p).then(
+                function (v) { return { status: 'fulfilled', value: v }; },
+                function (r) { return { status: 'rejected', reason: r }; }
+              );
+            }));
+          };
+        }
+
+        if (typeof queueMicrotask !== 'function') {
+          window.queueMicrotask = function (fn) {
+            Promise.resolve().then(fn).catch(function (err) {
+              setTimeout(function () { throw err; }, 0);
+            });
+          };
+        }
+
+        if (typeof String.prototype.replaceAll !== 'function') {
+          String.prototype.replaceAll = function (search, replacement) {
+            var s = String(this);
+            if (search instanceof RegExp) {
+              if (!search.global) throw new TypeError('replaceAll requires a global RegExp');
+              return s.replace(search, replacement);
+            }
+            return s.split(String(search)).join(String(replacement));
+          };
+        }
+
+        if (typeof Object.fromEntries !== 'function') {
+          Object.fromEntries = function (entries) {
+            var o = {};
+            var list = entries || [];
+            for (var i = 0; i < list.length; i++) o[list[i][0]] = list[i][1];
+            return o;
+          };
+        }
+
+        // Chrome 98。只用于普通对象（钱包 SDK 内部传的都是 plain object），
+        // 不做完整语义还原 —— 有 BigInt/函数时会抛，比静默返回错值好。
+        if (typeof structuredClone !== 'function') {
+          window.structuredClone = function (v) { return JSON.parse(JSON.stringify(v)); };
+        }
+
+        // ------------------------------------------------------------------
+        // 下面四个是「构建期查不出来」的那一类：
+        // esbuild 只降语法（?. / ?? / class fields），从不替换运行时 API。
+        // 源码里 Object.hasOwn(...) 写起来和 obj.hasOwnProperty 没区别，
+        // 但它在 Chrome 93 才落地。Trust 的 WebView 停在 70–79，一调用
+        // 就是 TypeError，整个 bundle 在那一行中止 —— 页面白屏，
+        // 而构建日志里一个字都不会提。上一轮只垫了语法和 5 个 API，
+        // 漏掉的正是这几个，所以「修完语法还白」并不奇怪。
+        // ------------------------------------------------------------------
+
+        // Chrome 93。SDK 里成片使用，用来替代 hasOwnProperty.call。
+        if (typeof Object.hasOwn !== 'function') {
+          Object.hasOwn = function (obj, key) {
+            return Object.prototype.hasOwnProperty.call(Object(obj), key);
+          };
+        }
+
+        // Chrome 97
+        if (typeof Array.prototype.findLast !== 'function') {
+          Array.prototype.findLast = function (fn, thisArg) {
+            for (var i = this.length - 1; i >= 0; i--) {
+              if (fn.call(thisArg, this[i], i, this)) return this[i];
+            }
+            return undefined;
+          };
+        }
+        if (typeof Array.prototype.findLastIndex !== 'function') {
+          Array.prototype.findLastIndex = function (fn, thisArg) {
+            for (var i = this.length - 1; i >= 0; i--) {
+              if (fn.call(thisArg, this[i], i, this)) return i;
+            }
+            return -1;
+          };
+        }
+
+        // Chrome 92。负下标要能绕回尾部 —— WalletConnect 内部用 at(-1) 取
+        // 最新一条历史记录，返回 undefined 会让它自己走进异常分支。
+        if (typeof Array.prototype.at !== 'function') {
+          Array.prototype.at = function (i) {
+            var n = this.length;
+            var k = Math.trunc(i) || 0;
+            if (k < 0) k += n;
+            return (k < 0 || k >= n) ? undefined : this[k];
+          };
+        }
+        if (typeof String.prototype.at !== 'function') {
+          String.prototype.at = function (i) {
+            var s = String(this);
+            var n = s.length;
+            var k = Math.trunc(i) || 0;
+            if (k < 0) k += n;
+            return (k < 0 || k >= n) ? undefined : s.charAt(k);
+          };
+        }
+
+        // Chrome 92。SDK 拿它生成请求 id / 会话 id，缺了直接抛。
+        // 只在安全上下文里有 randomUUID，顺手补一个等价实现。
+        try {
+          if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
+            crypto.randomUUID = function () {
+              var b = new Uint8Array(16);
+              crypto.getRandomValues(b);
+              b[6] = (b[6] & 0x0f) | 0x40; // version 4
+              b[8] = (b[8] & 0x3f) | 0x80; // variant 10
+              var h = [];
+              for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+              return h.slice(0, 4).join('') + '-' + h.slice(4, 6).join('') + '-' +
+                h.slice(6, 8).join('') + '-' + h.slice(8, 10).join('') + '-' + h.slice(10, 16).join('');
+            };
+          }
+        } catch (e) { /* 极老的 WebView 没有 crypto，交给调用处失败 */ }
+
+        // Chrome 85。SDK 的错误序列化里有一句 `err instanceof AggregateError`，
+        // 全局没有这个构造器时那不是「判空失败」而是 ReferenceError ——
+        // 反过来把真正的错误吞掉，日志里只剩一句莫名其妙的 AggregateError is not defined。
+        if (typeof AggregateError === 'undefined') {
+          window.AggregateError = function (errors, message) {
+            var e = new Error(message || '');
+            e.name = 'AggregateError';
+            e.errors = errors || [];
+            return e;
+          };
+        }
+      })();
+    </script>
+    <script>
+      // 运行时错误记录：钱包内置浏览器没有控制台，出错时只能靠页面自己说出来。
+      // 只存最近几条，任何报错都会出现在下面的兜底界面里。
+      window.__ufoBoot = { t0: Date.now(), mounted: false, errors: [] };
+      (function () {
+        function push(msg) {
+          try { window.__ufoBoot.errors.push(String(msg).slice(0, 160)); } catch (e) {}
+        }
+        window.addEventListener('error', function (e) {
+          if (e && e.target && e.target.tagName === 'SCRIPT') { push('script failed: ' + (e.target.src || '').split('/').pop()); return; }
+          push((e.message || 'error') + ' @ ' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          push('rejection: ' + ((e.reason && e.reason.message) || e.reason));
+        });
+      })();
+    </script>
+    <script>
+      // 自愈：脚本没下载下来 / 加载报错时，不要让人对着一个永远转圈的页面干等
+      (function () {
+        function detail() {
+          var errs = (window.__ufoBoot && window.__ufoBoot.errors) || [];
+          return errs.length
+            ? '<div style="margin-top:10px;font-size:10.5px;color:#94a3b8;word-break:break-all;text-align:left">' + errs.slice(-3).join('<br>') + '</div>'
+            : '<div style="margin-top:10px;font-size:10.5px;color:#94a3b8">no script error recorded</div>';
+        }
+        function fail() {
+          var boot = document.querySelector('#root .boot');
+          if (!boot) return; // React 已接管，说明正常
+          boot.innerHTML =
+            '<div style="text-align:center;line-height:1.9">' +
+            '<div style="font-size:13px;color:#475569;font-weight:600">The page could not load</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8">Check the connection and reload. If it keeps failing, try a current Chrome or Safari.</div>' +
+            detail() +
+            '</div>' +
+            '<button onclick="location.reload()" style="margin-top:6px;padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">重新加载</button>';
+        }
+        // 白屏兜底：脚本被拦、bundle 解析失败、React 挂载后整棵树被卸载，
+        // 三种情况最终都会留下一个空的 #root。只要它空着就说明没渲染成功，
+        // 与其让人对着纯白页面，不如给一句话和一个重载按钮。
+        function blank() {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            root.innerHTML =
+              '<div style="padding:40px 24px;text-align:center;line-height:1.9">' +
+              '<div style="font-size:13px;color:#475569;font-weight:600">Nothing rendered</div>' +
+              '<div style="font-size:11.5px;color:#94a3b8">The page loaded but the app did not start.</div>' +
+              detail() +
+              '</div>' +
+              '<div style="text-align:center"><button onclick="location.reload()" style="padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">Reload</button></div>';
+          }
+        }
+        // 4.5 秒还没接管就说话。原来给 9 秒 —— 对站在那儿等的人太长，
+        // 他看到的只是一片白，早就退出了。
+        setTimeout(fail, 4500);
+        setTimeout(blank, 7000);
+      })();
+    </script>
+    <script>
+      // ---------------------------------------------------------------------
+      // 版本漂移自愈（这条是「钱包点了没反应」最常见的真凶）
+      // ---------------------------------------------------------------------
+      // 应用是按需分包加载的：钱包 SDK 那几百 KB 只在点钱包时才 import()。
+      // 而每次重新部署，旧的文件名（index-lIT1O3b2.js 这种带哈希的）就会被删掉。
+      //
+      // 于是出现一个很隐蔽的时序：用户几小时前打开了页面 → 我们发布了新版本 →
+      // 用户点钱包 → import() 去拿那个已经不存在的 chunk → 404 →
+      // "Failed to fetch dynamically imported module" → 按钮转一下就没反应了。
+      //
+      // 用户看到的是「钱包坏了」，实际上页面只是过期了。整页刷新一次就恢复。
+      // Vite 在 preload 失败时会派发 vite:preloadError，这里接住并刷新；
+      // 只刷一次（sessionStorage 记标记），避免 chunk 真的坏了造成刷新死循环。
+      (function () {
+        var KEY = 'ufo:preload-reloaded';
+        var reloading = false;
+        function recover() {
+          if (reloading) return;
+          try {
+            if (sessionStorage.getItem(KEY)) return;
+            sessionStorage.setItem(KEY, '1');
+          } catch (e) { /* 隐私模式没有 sessionStorage，仍然刷一次 */ }
+          reloading = true;
+          location.reload();
+        }
+        window.addEventListener('vite:preloadError', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          recover();
+        });
+        // Vite 的 preload 包装偶尔会以 rejection 形式冒出来，而不是事件
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          var msg = String((r && (r.message || r)) || '');
+          if (/dynamically imported module|module script failed|error loading dynamically/i.test(msg)) recover();
+        });
+      })();
+    </script>
+  </body>
+</html>

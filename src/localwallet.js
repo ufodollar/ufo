@@ -11,9 +11,9 @@
 //   浏览器内完成。用户看到的就是一个网页弹框，点确认，交易就发出去了。
 //
 // 代价必须说清楚（UI 上也要说）：
-//   这是一个**新地址**，跟用户手机里 OKX/Trust 那个地址不是同一个。要发行
+//   这是一个**新地址**，跟用户手机里其他钱包的地址不是同一个。要发行
 //   UFO，得先往这个地址转 USDT。清掉浏览器数据 = 私钥丢失，所以创建时
-//   强制展示助记词，并支持导出。
+//   强制展示助记词，之后还可以用 PIN 重新导出。
 //
 // 为什么做成 EIP-1193：
 //   tx.js 的设计是「钱包只接收预填好的 eth_sendTransaction，负责签名」。
@@ -24,6 +24,9 @@
 import { rpcCall } from './chain';
 
 const STORE_KEY = 'ufo.local.wallet.v1';
+// 「助记词已经抄下来了」的标记。它不参与签名，只用来决定要不要在界面上
+// 继续提醒 —— 没抄的人一旦清了浏览器数据，这个钱包就再也回不来了。
+const BACKUP_KEY = 'ufo.local.backedUp';
 const PBKDF2_ROUNDS = 210000;
 const CHAIN_ID = 56;
 const CHAIN_HEX = '0x38';
@@ -83,15 +86,25 @@ export function hasLocalWallet() {
   return !!read();
 }
 
-/** 地址是明文存的，用于钱包墙显示，不涉及私钥 */
+/** 地址是明文存的，用于界面显示，不涉及私钥 */
 export function localAddress() {
   const o = read();
   return o ? o.address : null;
 }
 
+/** 助记词是否已经被用户确认抄写过 */
+export function hasBackedUp() {
+  try { return localStorage.getItem(BACKUP_KEY) === '1'; } catch (e) { return false; }
+}
+
+export function markBackedUp() {
+  try { localStorage.setItem(BACKUP_KEY, '1'); } catch (e) { /* 无痕模式 */ }
+}
+
 /** 彻底删除（私钥无法恢复，UI 必须二次确认） */
 export function destroyLocalWallet() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* noop */ }
+  try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* noop */ }
   session = null;
 }
 

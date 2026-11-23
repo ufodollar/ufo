@@ -47,35 +47,36 @@
   FEE_RATE: 0.005, // 0.5% Settlement Fee
 };</code></pre>
 
-<h2>⚡ 连接架构（没有钱包 SDK，也没有中继服务器）</h2>
-<p>页面不依赖 AppKit、WalletConnect 或任何钱包 SDK。连接只有一条路径：<b>EIP-1193 注入</b>。</p>
+<h2>👛 钱包架构（钱包就在页面里，没有 SDK，没有中继）</h2>
+<p>UFO 的钱包不是「连接」来的，而是<b>在这一页里生成</b>的。用户第一次打开站点，在 Wallet 标签页点 <b>Generate wallet</b>，页面当场生成一个 BIP-39 助记词与对应地址，不需要安装任何 App，也不经过任何第三方服务。</p>
 <table>
-  <tr><th>场景</th><th>怎么连上</th><th>下载量</th></tr>
-  <tr><td>钱包 App 内置浏览器（授权过）</td><td>页面里已有 <code>window.ethereum</code>，<code>eth_accounts</code> 静默恢复，零点击</td><td>0</td></tr>
-  <tr><td>钱包 App 内置浏览器（首次）</td><td>落地地址带 <code>?c=1</code>，页面自动发起授权，钱包弹自己的确认框，点一次即完成</td><td>0</td></tr>
-  <tr><td>桌面装了扩展</td><td>EIP-6963 发现，点一下直连；多个扩展时让用户自己选</td><td>0</td></tr>
-  <tr><td>手机普通浏览器</td><td>点钱包图标 → universal link / scheme 跳进该 App 的内置浏览器 → 回到第一条</td><td>0</td></tr>
-  <tr><td>桌面什么钱包都没有</td><td>显示二维码，手机扫码后在手机上下载的流程里完成</td><td>0</td></tr>
+  <tr><th>状态</th><th>界面</th><th>能做什么</th></tr>
+  <tr><td>还没有钱包</td><td>“No wallet on this device yet” ＋ Generate wallet</td><td>生成新地址（每次都是新的随机密钥）</td></tr>
+  <tr><td>已生成，本次会话未解锁</td><td>“Wallet locked” ＋ Unlock wallet</td><td>输 6 位 PIN 解密私钥</td></tr>
+  <tr><td>已解锁</td><td>地址、余额、Copy / Back up / Lock</td><td>发行 UFO、销毁 UFO、查看余额</td></tr>
 </table>
-<p>这意味着任何网络环境下都能连上：没有 <code>relay.walletconnect.org</code> 可连，就没有连不上的理由。</p>
 
-<h3>落地即连接：把「进入 → 点按钮 → 点确认」压成「点确认」</h3>
-<p>钱包内置浏览器打开一个<b>从未授权过</b>的站点时，<code>eth_accounts</code> 一定返回空数组 —— 这是钱包的安全模型，网页绕不过去。所以钱包图标的跳转目标都带 <code>?c=1</code>，页面一读到它就发起 <code>eth_requestAccounts</code>，直接弹出钱包自己的授权框，用户点一次「连接」即可，不必先去页面上找按钮。</p>
-<p>授权成功后写入 <code>localStorage.ufo_linked</code>。此后无论从哪个入口进来（包括直接输入网址），都是零点击秒连；即使中途被撤销过授权，也会自动补弹一次，而不是干等着用户发现。</p>
-<p>不做无条件自动请求：普通浏览器打开本站（地址没有 <code>?c=1</code> 且 <code>ufo_linked</code> 为空）只发 <code>eth_accounts</code>，不弹任何窗口 —— 不能为了连接体验赶走「只想看汇率」的访客。</p>
-<p><b>为什么 Trust Wallet 看起来是秒连：</b>它对内置浏览器里的 dapp 更宽松，<code>eth_accounts</code> 会直接放行。MetaMask 不会。这是各钱包自己的策略差异，不是网页能做到的事。</p>
+<h3>密钥怎么存</h3>
+<p>助记词用用户设置的 6 位 PIN 加密：<b>PBKDF2-SHA256（210,000 轮）</b>派生密钥，<b>AES-GCM</b> 加密，密文与盐、IV 一起写进 <code>localStorage['ufo.local.wallet.v1']</code>。解出来的私钥只存在内存里，刷新即失效，所以每次重新打开页面都要输一次 PIN。</p>
+<p>生成后弹窗展示地址与 12 词助记词，<b>复制与选中都被禁用</b>，必须勾选「已抄写」才能关闭。没勾的人，Wallet 卡片上会一直留着一条备份提醒。</p>
+
+<h3>签名怎么发生</h3>
+<p>本地钱包实现成一个 EIP-1193 provider（<code>src/localwallet.js</code>）：<code>eth_sendTransaction</code> 收到的是 <code>tx.js</code> 已经算好 nonce / gas / gasPrice 的交易，钱包只负责签名并广播原始字节。因此余额刷新、nonce 管理、回执轮询、错误处理全部沿用原有逻辑，没有为「本地钱包」写第二套。</p>
+
+<h3>为什么不做钱包墙</h3>
+<p>移动端网页做不到「把 App 叫起来、但确认框仍渲染在网页里」：私钥在 App 里，确认界面就必须由 App 渲染；而任何网页能渲染的确认框都可以被钓鱼页伪造。<b>要让确认框出现在页面里，私钥就必须也在页面里。</b>这条限制不是实现问题，是浏览器的安全边界。</p>
+<p>同理，WalletConnect 这类协议需要一个双方都能连上的中继；中继在部分网络里建不起长连接，而钱包 App 侧的中继地址是写死的，网页无法替换。把入口留在这里，只会变成「点了没反应」。</p>
 <table>
   <tr><th>模块</th><th>何时加载</th><th>大小（min / gzip）</th></tr>
-  <tr><td>React + UI + 读链层 + 钱包层</td><td>首屏必需</td><td>≈204KB / 64KB</td></tr>
-  <tr><td>Ethers.js</td><td>第一次签交易前（输入金额时即预取）</td><td>≈214KB / 82KB</td></tr>
+  <tr><td>React + UI + 读链层 + 钱包层</td><td>首屏必需</td><td>≈225KB / 71KB</td></tr>
+  <tr><td>Ethers.js</td><td>第一次生成钱包或签交易前</td><td>≈210KB / 78KB</td></tr>
 </table>
-<p>五个设计决定值得记住，改代码时不要退回去：</p>
+<p>四个设计决定值得记住，改代码时不要退回去：</p>
 <ol>
   <li><b>读链不用 ethers。</b> 所有读取都是 <code>eth_call</code>，参数只有 <code>address</code> / <code>uint256</code>，<code>src/chain.js</code> 手写编码，省下 270KB。</li>
-  <li><b>不引入钱包 SDK。</b> AppKit 一家 1.5MB，且强制依赖 Relay。用户要的只是「点一下进钱包」，用系统 universal link 就够。</li>
-  <li><b>自定义 scheme 必须设超时回落。</b> 没装 App 时浏览器不会有任何回调，1.8 秒后跳下载页，否则用户会以为按钮坏了。</li>
-  <li><b>钱包图标本地打包。</b> 走 App Store 原图转 webp，10 个共 16KB，不依赖任何图床（国内访问 coingecko 会超时）。</li>
-  <li><b>自动请求授权要有条件。</b> 只有「带 <code>?c=1</code> 落地」或「这个浏览器连过」才主动弹窗，其余情况静默等待。无条件弹窗等于用打扰换转化。</li>
+  <li><b>不引入钱包 SDK。</b> 本地钱包只需要 <code>ethers</code> 的 <code>Wallet</code> 与 <code>TypedDataEncoder</code>，按需动态加载，首屏为 0。</li>
+  <li><b>密钥永不明文落盘。</b> 只存 AES-GCM 密文；导出助记词必须重新输 PIN。</li>
+  <li><b>助记词不进剪贴板。</b> 复制/选中被禁用，避免被输入法与剪贴板历史带走。</li>
 </ol>
 
 <h2>🚀 Local Development</h2>

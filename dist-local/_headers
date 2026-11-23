@@ -1,0 +1,27 @@
+# Cloudflare Pages 缓存策略
+# 放在 public/_headers，构建时会复制到 dist 根目录，Pages 自动读取。
+# 线上当前是 `max-age=0, must-revalidate`，等于每次访问都要回源校验一次。
+
+# 带内容哈希的产物，内容变了文件名就会变，可以永久缓存
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 图标、字体等静态资源
+/*.svg
+  Cache-Control: public, max-age=604800
+/*.png
+  Cache-Control: public, max-age=604800
+/*.ico
+  Cache-Control: public, max-age=604800
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# 钱包图标：文件名固定，内容几乎不变。换图标时改文件名即可绕过缓存。
+/wallets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 入口 HTML 必须每次校验，否则更新发不出去
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

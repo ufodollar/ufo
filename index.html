@@ -10,8 +10,7 @@
     <link rel="apple-touch-icon" href="/icon-512.png" />
 
     <!-- 首屏唯一的后端依赖：RPC。提前建连，省一次 TLS 握手（约 100-200ms）。
-         AppKit / WalletConnect 的域名首屏用不到，等真正要加载钱包弹窗时再预热
-         （见 src/wallet.js 的 warmup），首屏白拿 2 个多余连接没有意义。 -->
+         钱包就在这个页面里，没有任何第三方域名需要在首屏预热。 -->
     <link rel="preconnect" href="https://rpc.ankr.com" crossorigin />
     <link rel="dns-prefetch" href="https://rpc.ankr.com" />
 
@@ -279,8 +278,8 @@
           if (!boot) return; // React 已接管，说明正常
           boot.innerHTML =
             '<div style="text-align:center;line-height:1.9">' +
-            '<div style="font-size:13px;color:#475569;font-weight:600">这个钱包的浏览器没能加载页面</div>' +
-            '<div style="font-size:11.5px;color:#94a3b8">多半是内置浏览器版本过旧。复制链接，改用 Chrome 或 Safari 打开即可。</div>' +
+            '<div style="font-size:13px;color:#475569;font-weight:600">The page could not load</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8">Check the connection and reload. If it keeps failing, try a current Chrome or Safari.</div>' +
             detail() +
             '</div>' +
             '<button onclick="location.reload()" style="margin-top:6px;padding:9px 22px;border-radius:20px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700">重新加载</button>';

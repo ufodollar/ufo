@@ -31,13 +31,3 @@ export const RPC_FALLBACKS = [
   'https://bsc-dataseed1.defibit.io/',
   'https://bsc.publicnode.com'
 ];
-
-/**
- * Reown（WalletConnect）Project ID。
- *
- * 留给钱包墙判断「要不要走中继通道」：填了就启用，留空则所有钱包继续走各自的
- * 内置浏览器，行为与今天完全一致，也不会下载那 300KB 的 SDK。
- *
- * 申请：https://cloud.reown.com → Create Project → 复制 Project ID。
- */
-export const WC_PROJECT_ID = 'd6431212399f6c487b364387859983ea';
