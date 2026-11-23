@@ -792,15 +792,24 @@ function App() {
     return `1 ${paySym} = ${r.toLocaleString('en-US', { maximumFractionDigits: dp })} ${recvSym}`;
   })();
 
+  // 路由与费率都读 vaultRoute（币对本身决定的），不读 quote.kind ——
+  // quote 可能是上一对币留下的，也可能是空对象，拿它写文案会出现
+  // 「CAKE → UFO 却写着 Vault」这种自相矛盾的画面。
   const routeLine = (() => {
-    if (quote.kind === 'vault') return `Vault · ${paySym} → ${recvSym}`;
-    if (!quote.path) return 'Pancake V2';
+    if (vaultRoute) return `Vault · ${paySym} → ${recvSym}`;
+    if (!quote.path) return '—';
     const name = (addr) => {
       const a = String(addr).toLowerCase();
       const hit = TOKENS.find((t) => (t.address || '').toLowerCase() === a);
       return hit ? hit.symbol : a.slice(0, 6) + '…';
     };
     return 'Pancake V2 · ' + quote.path.map(name).join(' → ');
+  })();
+
+  const feeLine = (() => {
+    if (!(outNum > 0)) return '—';
+    if (vaultRoute) return `-${quote.fee} USD`;
+    return `0.25% × ${quote.hops} hop${quote.hops > 1 ? 's' : ''}`;
   })();
 
   const openAccounts = () => setWalletPanel('accounts');
@@ -1130,12 +1139,10 @@ function App() {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-                <span>{quote.kind === 'vault' ? 'Fee (0.5%)' : 'Pool fee'}</span>
-                <span style={{ color: inputNum > 0 && quote.kind === 'vault' ? '#ef4444' : SWAP_TINT.mute,
+                <span>{vaultRoute ? 'Fee (0.5%)' : 'Pool fee'}</span>
+                <span style={{ color: vaultRoute && outNum > 0 ? '#ef4444' : SWAP_TINT.mute,
                                fontVariantNumeric: 'tabular-nums' }}>
-                  {inputNum > 0
-                    ? (quote.kind === 'vault' ? `-${quote.fee} USD` : `0.25% × ${quote.hops} hop${quote.hops > 1 ? 's' : ''}`)
-                    : '—'}
+                  {feeLine}
                 </span>
               </div>
             </div>
