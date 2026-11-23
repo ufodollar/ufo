@@ -50,24 +50,24 @@
     <span class="tag">② 本站极简页 · 原样传</span>
     <div class="name">现网正在用的写法</div>
     <div class="desc">只含 HTML/CSS 和 6 行 ES5，没有任何构建产物。能看到 PING 就证明 URL 传进来了。</div>
-    <div class="code">trust://open_url?coin_id=60&amp;url=https://ufo-eea.pages.dev/ping.html</div>
-    <button onclick="go('trust://open_url?coin_id=60&url=https://ufo-eea.pages.dev/ping.html')">打开 PING 页</button>
+    <div class="code">trust://open_url?coin_id=60&amp;url=https://ufo-eea.pages.dev/ping</div>
+    <button onclick="go('trust://open_url?coin_id=60&url=https://ufo-eea.pages.dev/ping')">打开 PING 页</button>
   </div>
 
   <div class="card">
     <span class="tag">③ 本站极简页 · 编码传</span>
     <div class="name">url 参数整体 percent-encode</div>
     <div class="desc">官方新版文档写的是「URL-encoded dApp URL」。很多解析器按标准 query 解码，原样传反而会丢。</div>
-    <div class="code">trust://open_url?coin_id=60&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2Fping.html</div>
-    <button onclick="go('trust://open_url?coin_id=60&url=https%3A%2F%2Fufo-eea.pages.dev%2Fping.html')">打开 PING 页（编码）</button>
+    <div class="code">trust://open_url?coin_id=60&amp;url=https%3A%2F%2Fufo-eea.pages.dev%2Fping</div>
+    <button onclick="go('trust://open_url?coin_id=60&url=https%3A%2F%2Fufo-eea.pages.dev%2Fping')">打开 PING 页（编码）</button>
   </div>
 
   <div class="card">
     <span class="tag">④ 不带协议头</span>
     <div class="name">只传域名，让它自己补 https</div>
     <div class="desc">少数钱包会把 url 当「站点」而不是「完整地址」，遇到 https:// 直接解析失败。</div>
-    <div class="code">trust://open_url?coin_id=60&amp;url=ufo-eea.pages.dev/ping.html</div>
-    <button onclick="go('trust://open_url?coin_id=60&url=ufo-eea.pages.dev/ping.html')">打开 PING 页（无协议）</button>
+    <div class="code">trust://open_url?coin_id=60&amp;url=ufo-eea.pages.dev/ping</div>
+    <button onclick="go('trust://open_url?coin_id=60&url=ufo-eea.pages.dev/ping')">打开 PING 页（无协议）</button>
   </div>
 
   <p class="hint">
