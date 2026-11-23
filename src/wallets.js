@@ -200,7 +200,7 @@ export function walletList() {
       // 浏览器入口不再露在导航里，open_url 偶尔会静默退回首页。这时候用户
       // 手上必须有一条能立刻走通的路 —— 链接已经替他复制好了，只要点底部
       // 那个放大镜粘进去，就一定落在内置浏览器里，且带着 ?c=1 自动授权。
-      pasteHint: 'Link copied. Trust opens its browser blank — tap the address bar, long-press, Paste, then Go. The page auto-connects once it loads.',
+      pasteHint: 'Open the blank tab, tap the address bar and press Go — the address is already in it. Once the page paints, tap Connect and approve.',
       noBrowser: platform() === 'ios'
     },
     {

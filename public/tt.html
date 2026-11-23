@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Trust 唤起方式对照</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; padding: 22px 18px 40px; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #f8fafc; color: #1e293b; line-height: 1.6; }
+  h1 { font-size: 17px; margin: 0 0 6px; }
+  p.lead { font-size: 12.5px; color: #64748b; margin: 0 0 20px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; color: #1d4ed8; background: #eff6ff;
+         border: 1px solid #bfdbfe; border-radius: 999px; padding: 1px 8px; margin-bottom: 6px; }
+  .title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+  .why { font-size: 12px; color: #64748b; margin-bottom: 10px; }
+  a.btn { display: block; text-align: center; text-decoration: none; font-size: 14px; font-weight: 700;
+          color: #fff; background: #3b82f6; border-radius: 12px; padding: 12px; }
+  a.btn.ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+  .note { font-size: 11.5px; color: #94a3b8; margin-top: 18px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; background: #f1f5f9;
+         padding: 1px 4px; border-radius: 4px; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>Trust 唤起方式对照</h1>
+  <p class="lead">四个按钮各点一次。进 Trust 后看内容 —— 哪个出现了蓝色的 <b>UFO</b> 三个字母，就停在那一个，回来告诉我编号。</p>
+
+  <div class="card">
+    <span class="tag">① 现在线上用的</span>
+    <div class="title">自定义 scheme + coin_id=60</div>
+    <div class="why">你现在看到的白屏就是它。作为对照基线。</div>
+    <a class="btn" href="trust://open_url?coin_id=60&url=https://ufo-eea.pages.dev">用这个打开</a>
+  </div>
+
+  <div class="card">
+    <span class="tag">② 换投递方式</span>
+    <div class="title">Universal Link（https 域名）</div>
+    <div class="why">不经过 trust:// 的 scheme 处理器，走系统 App Links 交给 Trust。域名解析不通时浏览器会直接报错，也是有效信息。</div>
+    <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=60&url=https://ufo-eea.pages.dev">用这个打开</a>
+  </div>
+
+  <div class="card">
+    <span class="tag">③ 去掉网络参数</span>
+    <div class="title">scheme，不带 coin_id</div>
+    <div class="why">coin_id 决定落地后停在哪个网络，也可能触发一次切链重置。去掉它看是否影响首次加载。</div>
+    <a class="btn" href="trust://open_url?url=https://ufo-eea.pages.dev">用这个打开</a>
+  </div>
+
+  <div class="card">
+    <span class="tag">④ 纯静态对照</span>
+    <div class="title">scheme，指向 /ping（无 JS、无构建）</div>
+    <div class="why">这个页面只有几行 HTML。它要也是白的，说明「文档根本没加载」，和我们的代码无关。</div>
+    <a class="btn ghost" href="trust://open_url?coin_id=60&url=https://ufo-eea.pages.dev/ping">用这个打开</a>
+  </div>
+
+  <p class="note">
+    如果四个都白：请回到 ① 打开的那个空白标签，<b>点一下地址栏，按键盘上的「前往 / Go」</b>（地址已经在那里了），看页面是否出来。
+    这一步能区分「Trust 首次导航没发起」和「这个 WebView 根本连不上外网」。
+  </p>
+  <p class="note">
+    参考：<code>trust://open_url?coin_id=60&amp;url=https://ufo-eea.pages.dev</code>
+  </p>
+</body>
+</html>
