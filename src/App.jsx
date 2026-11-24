@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // 首屏不引入 ethers：读链走 chain.js 的裸 JSON-RPC，
 // 只有真正签名时才按需下载 ethers（见 tx.js）。体积对比见 README。
 import { CONFIG } from './config';
@@ -179,11 +179,23 @@ function App() {
   const [recvSym, setRecvSym] = useState('UFO');
   // 顶部只显示账户编号，地址不在页面上出现（只在账户管理弹窗里）。
   // 编号取记录里的 a.no，永远不用数组下标：删掉账户 1 之后账户 2 仍叫账户 2。
+  //
+  // 认账户以**地址**为准：余额、报价、签名用的都是这个地址，顶部编号必须跟着
+  // 它走。只看 activeId 时，一旦那个 id 因为存储写入失败或一次慢渲染而落后，
+  // 就会出现「已经切到 2 了、顶上还写着 1」—— 用户会以为切换没生效。地址变了
+  // 编号就跟着变，这条链路上没有第二份真相。
   const addrKey = (address || '').toLowerCase();
-  const activeAcct =
-    accounts.find((a) => a.id === activeId) ||
-    (addrKey ? accounts.find((a) => a.address.toLowerCase() === addrKey) : null) ||
-    null;
+  const activeAcct = useMemo(() => {
+    if (!accounts.length) return null;
+    const byAddr = addrKey
+      ? accounts.filter((a) => (a.address || '').toLowerCase() === addrKey)
+      : [];
+    if (byAddr.length) {
+      // 同一个私钥被导入两次会产生两条同地址记录，优先用 activeId 指的那条
+      return byAddr.find((a) => a.id === activeId) || byAddr[byAddr.length - 1];
+    }
+    return accounts.find((a) => a.id === activeId) || null;
+  }, [accounts, activeId, addrKey]);
   const accountNo = activeAcct ? activeAcct.no : null;
 
   // '' | 'pay' | 'receive' —— 点哪一侧的胶囊，弹窗就替哪一侧选币

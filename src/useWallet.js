@@ -48,10 +48,13 @@ export function useWallet() {
   const [accounts, setAccounts] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
-  const refreshAccounts = useCallback(() => {
+  // preferredId：刚切换成功时优先用它。存储不可写（无痕模式 / 配额满）时
+  // 回读可能还是旧 active，编号就会停在旧账户上 —— 这正是「切到 2 了、顶上
+  // 还写着 1」的来源。有确切的切换结果就不要再问存储。
+  const refreshAccounts = useCallback((preferredId) => {
     const list = localAccounts();
     setAccounts(list);
-    setActiveId(activeAccountId());
+    setActiveId(preferredId != null ? preferredId : activeAccountId());
     return list;
   }, []);
 
@@ -165,13 +168,19 @@ export function useWallet() {
       // 直接用返回值定位新账户，不再回读一次 localStorage：
       // 在存储不可写（隐私模式）的浏览器里，回读结果可能还是旧的 active，
       // 于是顶部编号与链上余额都停在上一个账户 —— 表现就是「切换没生效」。
+      // 编号也一并落定：activeId 是这个函数的返回事实，不是存储的推测。
       if (r && r.address) {
         const restored = restoreLocalWallet();
         setAccount({ address: r.address, provider: restored ? restored.provider : null });
+        setActiveId(r.id);
+        setAccounts((prev) => prev.map((a) => (
+          a.id === r.id ? { ...a, address: r.address, no: r.no != null ? r.no : a.no } : a
+        )));
+        refreshAccounts(r.id);
       } else {
         bindActive();
+        refreshAccounts();
       }
-      refreshAccounts();
       return r;
     } catch (e) {
       const msg = e && e.message ? e.message : String(e);

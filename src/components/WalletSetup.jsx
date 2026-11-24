@@ -2,18 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { skyBtn, skyLink } from '../ui';
 
 // ============================================================================
-// 钱包面板：选择钱包 / 添加钱包 / 生成 / 导入 / 查看私钥
+// 钱包面板：选择钱包 / 添加钱包 / 管理钱包 / 生成 / 导入 / 查看私钥
 // ----------------------------------------------------------------------------
 // 密钥形态：**裸私钥**，不是助记词。
 //   · 生成后立刻给出完整私钥，允许复制 —— 用户必须能把它带走；
-//   · 之后只有「去备份」能看到，且每次都要重输 6 位 PIN；
+//   · 之后只有「管理钱包 → 查看私钥」能看到，且每次都要重输 6 位 PIN；
 //   · 删除账户只删本机密文，链上资产不动，但没保存私钥的人会永久失去这个地址。
 //
-// 两个入口，对应两种动作：
+// 三个入口，对应三类动作：
 //   选择钱包 —— 列出现在这台设备上的所有钱包，**点一下就是切过去**，
-//               不需要再点一次确认。右侧的「去备份」是查看私钥的入口。
+//               切完立刻收起面板回到钱包页，用户当场就能看到顶部编号与余额变了。
 //   添加钱包 —— 只有两条路：创建、导入。没有硬件钱包、观察钱包、社交登录，
 //               这台设备只管理私钥，别的入口都指向不存在的东西。
+//   管理钱包 —— 只有两个动作：查看私钥（重输 PIN）、删除钱包（二次确认）。
 // ============================================================================
 
 const FONT = {
@@ -80,7 +81,7 @@ export default function WalletSetup({
 }) {
   const open = !!mode;
 
-  const [step, setStep] = useState('pin');    // pin | form | reveal | list | menu | done | viewgate | confirm
+  const [step, setStep] = useState('pin');    // pin | form | reveal | list | menu | manage | done | viewgate | confirm
   const [pin, setPin] = useState('');
   const [keyInput, setKeyInput] = useState('');
   const [secret, setSecret] = useState('');   // 展示中的私钥
@@ -216,8 +217,12 @@ export default function WalletSetup({
         setPendingSwitch(null);
         setPin('');
         setSwitching(id);
-        try { await onSwitch(id); } catch (e2) { setErr(errText(e2)); }
+        let ok = false;
+        try { await onSwitch(id); ok = true; } catch (e2) { setErr(errText(e2)); }
         setSwitching(null);
+        // 切成功就收起面板：用户要的是立刻看到钱包页顶部的编号和余额换了没有，
+        // 而不是继续盯着这张列表。
+        if (ok) { onClose(); return; }
         setStep('list');
       } else if (mode === 'accounts') {
         setStep('list');
@@ -235,7 +240,9 @@ export default function WalletSetup({
     // 只拦「同一张卡重复点」。之前用全局 busy 做闸门，只要别的动作
     // （解锁、生成、删账户）还没落定，切换就会被静默吞掉 ——
     // 用户看到的是「按钮点了没反应」，这正是切换失败最常见的成因。
-    if (switching || id === activeId) return;
+    if (switching) return;
+    // 点的就是当前账户：没有要切的东西，直接收起面板（否则用户会以为没响应）
+    if (id === activeId) { onClose(); return; }
     if (needGate) {
       setPendingSwitch(id);
       setPin('');
@@ -246,6 +253,9 @@ export default function WalletSetup({
     setSwitching(id); setErr('');
     try {
       await onSwitch(id);
+      // 切换是一次「看一眼就结束」的动作：收起面板，钱包页就是结果本身
+      // （顶部编号、总余额、资产列表全部换到新账户）。失败才留在列表里报错。
+      onClose();
     } catch (e) {
       setErr(errText(e));
       if (e && e.code === 4100) { setPendingSwitch(id); setStep('pin'); }
@@ -318,11 +328,13 @@ export default function WalletSetup({
 
   const title =
     step === 'confirm' ? '删除钱包'
-      : mode === 'accounts' ? '选择钱包'
-        : mode === 'add' ? '添加钱包'
-          : mode === 'import' ? '导入钱包'
-            : mode === 'create' ? '创建钱包'
-              : '输入 PIN';
+      : step === 'manage' ? '管理钱包'
+        : step === 'viewgate' || (step === 'reveal' && mode === 'accounts') ? '查看私钥'
+          : mode === 'accounts' ? '选择钱包'
+            : mode === 'add' ? '添加钱包'
+              : mode === 'import' ? '导入钱包'
+                : mode === 'create' ? '创建钱包'
+                  : '输入 PIN';
 
   // 选择钱包 / 添加钱包 / 解锁 都是底部弹层；创建与导入是带返回的独立页
   const sheetMode = mode === 'accounts' || mode === 'add' || mode === 'unlock';
@@ -558,7 +570,9 @@ export default function WalletSetup({
               <button
                 onClick={() => {
                   if (onBackedUp) onBackedUp();
-                  if (mode === 'accounts') { setStep('list'); return; }
+                  // 从「管理钱包 → 查看私钥」进来的，看完回到那一页
+                  // （用户的管理动作还没结束，不该被弹到全网钱包列表）。
+                  if (mode === 'accounts') { setSecret(''); setPin(''); setStep('manage'); return; }
                   // 在选择钱包里点「创建钱包」时 mode 会变成 create。生成完
                   // 若只是 onClose，用户就被弹回钱包页，还得再点一次。
                   // 这里把面板切回 accounts，于是他看到的还是那张钱包列表。
@@ -570,22 +584,11 @@ export default function WalletSetup({
                 }}
                 style={{ ...secBtn, marginTop: '9px' }}
               >
-                {backToSheet ? '返回选择钱包' : '完成，进入钱包'}
+                {mode === 'accounts' ? '返回管理钱包' : backToSheet ? '返回选择钱包' : '完成，进入钱包'}
               </button>
 
-              {/* 删除放在这里：已经输过 PIN、也看过私钥，是唯一「确认过本人」的时刻 */}
-              {mode === 'accounts' && (
-                <button
-                  onClick={() => { setErr(''); setStep('confirm'); }}
-                  style={{ ...skyLink('sm'), display: 'block', width: '100%', marginTop: '14px',
-                           color: '#ef4444', textAlign: 'center' }}
-                >
-                  删除这个钱包
-                </button>
-              )}
-
               <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>
-                之后可以在「选择钱包 → 去备份」里再看一次，但每次都要输 PIN。
+                之后可以在「选择钱包 → 管理钱包 → 查看私钥」里再看一次，但每次都要输 PIN。
               </div>
             </>
           )}
@@ -607,6 +610,47 @@ export default function WalletSetup({
                 </div>
               </div>
               <button onClick={onClose} style={{ ...primaryBtn(false), marginTop: '16px' }}>完成</button>
+            </>
+          )}
+
+          {/* ---------------- 管理钱包：只有查看私钥与删除 ---------------- */}
+          {step === 'manage' && (
+            <>
+              <div style={{ marginTop: '12px', padding: '12px 14px', borderRadius: '18px',
+                            background: '#f7f9fb', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                  background: `linear-gradient(160deg, hsl(${AVATAR_HUES[((noOf(target) || 1) - 1) % AVATAR_HUES.length]} 85% 68%), hsl(${AVATAR_HUES[((noOf(target) || 1) - 1) % AVATAR_HUES.length]} 75% 52%))`
+                }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a' }}>{nameOf(target)}</div>
+                  <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '3px',
+                                fontFamily: 'ui-monospace, Menlo, monospace', overflow: 'hidden',
+                                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {addrOf(target)}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <AddRow
+                  icon={<KeyIcon />}
+                  title="查看私钥"
+                  desc="重新输入 PIN 后显示完整私钥"
+                  onClick={() => { setErr(''); setPin(''); setSecret(''); setCopied(''); setStep('viewgate'); }}
+                />
+                <AddRow
+                  icon={<TrashIcon />}
+                  title="删除钱包"
+                  desc="从这台设备移除，链上资产不受影响"
+                  danger
+                  onClick={() => { setErr(''); setStep('confirm'); }}
+                />
+              </div>
+
+              <div style={{ marginTop: '16px', fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.7, textAlign: 'center' }}>
+                删除不会动链上的钱，但没保存私钥的话，这个地址就再也找不回来了。
+              </div>
             </>
           )}
 
@@ -643,7 +687,7 @@ export default function WalletSetup({
                 style={{ ...primaryBtn(busy || pin.length < 6), marginTop: '16px' }}>
                 {busy ? '处理中…' : '查看私钥'}
               </button>
-              <button onClick={() => { setErr(''); setPin(''); setStep('list'); }}
+              <button onClick={() => { setErr(''); setPin(''); setStep('manage'); }}
                 style={{ ...ghostBtn, marginTop: '6px' }}>
                 返回
               </button>
@@ -674,7 +718,7 @@ export default function WalletSetup({
                 style={{ ...primaryBtn(false), marginTop: '16px', background: '#dc2626', boxShadow: '0 4px 14px rgba(220,38,38,0.25)' }}>
                 {busy ? '删除中…' : '确认删除'}
               </button>
-              <button onClick={() => { setTarget(null); setErr(''); setStep('list'); }}
+              <button onClick={() => { setErr(''); setStep('manage'); }}
                 style={{ ...secBtn, marginTop: '9px' }}>
                 取消
               </button>
@@ -780,7 +824,7 @@ export default function WalletSetup({
                           onClick={(e) => {
                             e.stopPropagation();
                             setTarget(a.id); setErr(''); setPin(''); setSecret(''); setCopied('');
-                            setStep('viewgate');
+                            setStep('manage');
                           }}
                           style={{
                             appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
@@ -790,12 +834,12 @@ export default function WalletSetup({
                             fontSize: '11.5px', fontWeight: 700, color: '#334155'
                           }}
                         >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b"
-                               strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="4" y="10.5" width="16" height="10" rx="2.2" />
-                            <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b"
+                               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.6 1.6 0 0 0 .33 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-1.77-.33 1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.11a1.6 1.6 0 0 0-1-1.47 1.6 1.6 0 0 0-1.77.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.6 1.6 0 0 0 .33-1.77 1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.11a1.6 1.6 0 0 0 1.47-1 1.6 1.6 0 0 0-.33-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.6 1.6 0 0 0 1.77.33H9a1.6 1.6 0 0 0 1-1.47V3a2 2 0 1 1 4 0v.11a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.6 1.6 0 0 0-.33 1.77V9a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.11a1.6 1.6 0 0 0-1.47 1z" />
                           </svg>
-                          去备份
+                          管理钱包
                         </button>
                       </div>
                     );
@@ -820,7 +864,7 @@ export default function WalletSetup({
 }
 
 /** 添加钱包页的一行：图标 + 标题 + 说明 + 右箭头 */
-function AddRow({ icon, title, desc, onClick }) {
+function AddRow({ icon, title, desc, onClick, danger }) {
   return (
     <button
       type="button"
@@ -829,18 +873,20 @@ function AddRow({ icon, title, desc, onClick }) {
         appearance: 'none', WebkitAppearance: 'none', font: 'inherit', width: '100%',
         display: 'flex', alignItems: 'center', gap: '14px', textAlign: 'left',
         padding: '16px 14px', borderRadius: '18px', border: 'none',
-        background: '#f7f9fb', cursor: 'pointer'
+        background: danger ? '#fef6f6' : '#f7f9fb', cursor: 'pointer'
       }}
     >
       <span style={{
-        width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0, background: '#fff',
+        width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0,
+        background: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxShadow: '0 1px 3px rgba(15,23,42,0.08)'
       }}>
         {icon}
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{title}</span>
+        <span style={{ display: 'block', fontSize: '16px', fontWeight: 800,
+                       color: danger ? '#dc2626' : '#0f172a' }}>{title}</span>
         <span style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{desc}</span>
       </span>
       <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#c0c8d2"
@@ -862,6 +908,23 @@ const ImportIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a"
        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 4v11" /><path d="M7.5 10.5 12 15l4.5-4.5" /><path d="M5 19h14" />
+  </svg>
+);
+
+const KeyIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a"
+       strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7.5" cy="15.5" r="3.5" />
+    <path d="M10 13 20 3" /><path d="M16.5 6.5 19 9" /><path d="M14 9l2 2" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626"
+       strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 7h16" /><path d="M9 7V4.8h6V7" />
+    <path d="M6.5 7l.9 12.2a2 2 0 0 0 2 1.8h5.2a2 2 0 0 0 2-1.8L17.5 7" />
+    <path d="M10.5 11v6" /><path d="M13.5 11v6" />
   </svg>
 );
 
