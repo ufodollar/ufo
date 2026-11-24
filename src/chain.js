@@ -358,45 +358,67 @@ export async function readTokenPrices(tokens, ttlMs = PRICE_TTL_MS) {
   const decOf = await readDecimals(tokens);
   const oneUnit = (t) => 10n ** BigInt(decOf(t));
 
-  const map = {};
-  const readOut = (t, hex) => {
+  // USDT 是 18 位，amounts 的最后一项就是美元数 × 1e18
+  const priceOf = (hex) => {
     const amounts = decodeAmounts(hex);
-    if (!amounts || amounts.length < 2) return;
-    // USDT 是 18 位，amounts 的最后一项就是美元数 × 1e18
+    if (!amounts || amounts.length < 2) return null;
     const price = Number(amounts[amounts.length - 1]) / 1e18;
-    if (!isFinite(price) || price <= 0 || price > 1e9) return;
-    map[t.symbol] = price;
+    if (!isFinite(price) || price <= 0 || price > 1e9) return null;
+    return price;
   };
 
-  // 第一轮：直接与 USDT 组成交易对
+  const quote = (list, units, mid) => inChunks(list.map((t) => ({
+    to: PANCAKE_ROUTER,
+    data: encodeGetAmountsOut(oneUnit(t) * units, mid
+      ? [routeAddress(t), WBNB_ADDRESS, CONFIG.USDT_ADDRESS]
+      : [routeAddress(t), CONFIG.USDT_ADDRESS])
+  })));
+
+  // 两条路都问一遍：直连 <币/USDT>，以及经 WBNB 中转。
+  // 不能「先直连、失败才走中转」—— 大量新币的直连池是机器人造的浅池，
+  // 报价能成功但价格偏离几十倍（NVDAB 直连 $0.02、真实 $154）。是否可靠
+  // 只能靠深度判断，所以两条都问，再比谁更扛得住大额。
   let direct = [];
+  let hop = [];
   try {
-    direct = await inChunks(targets.map((t) => ({
-      to: PANCAKE_ROUTER,
-      data: encodeGetAmountsOut(oneUnit(t), [routeAddress(t), CONFIG.USDT_ADDRESS])
-    })));
+    [direct, hop] = await Promise.all([quote(targets, 1n, false), quote(targets, 1n, true)]);
   } catch (e) {
     return priceMemo.map;
   }
 
-  const missed = [];
+  const pick = {};
   targets.forEach((t, i) => {
-    if (!direct[i] || direct[i] === '0x') { missed.push(t); return; }
-    const before = map[t.symbol];
-    readOut(t, direct[i]);
-    if (map[t.symbol] === before) missed.push(t);
+    const d = priceOf(direct[i]);
+    const h = priceOf(hop[i]);
+    if (d != null && h != null) pick[t.symbol] = { t, i, d, h, both: true };
+    else if (d != null) pick[t.symbol] = { t, i, d, h: null, both: false };
+    else if (h != null) pick[t.symbol] = { t, i, d: null, h, both: false };
   });
 
-  // 第二轮：经 WBNB 中转（原生 BNB 也在这里取价）
-  if (missed.length) {
+  // 两条都有价：用 1000 个币再问一次，比较价格冲击。
+  // 冲击小（大额报价仍然接近 1 个币的单价）的那条路才是真的有深度。
+  const dual = Object.values(pick).filter((x) => x.both);
+  const better = {};
+  if (dual.length) {
     try {
-      const hop = await inChunks(missed.map((t) => ({
-        to: PANCAKE_ROUTER,
-        data: encodeGetAmountsOut(oneUnit(t), [routeAddress(t), WBNB_ADDRESS, CONFIG.USDT_ADDRESS])
-      })));
-      missed.forEach((t, i) => readOut(t, hop[i]));
-    } catch (e) { /* 保留第一轮的结果 */ }
+      const [dBig, hBig] = await Promise.all([
+        quote(dual.map((x) => x.t), 1000n, false),
+        quote(dual.map((x) => x.t), 1000n, true)
+      ]);
+      dual.forEach((x, k) => {
+        const dOut = Number((decodeAmounts(dBig[k]) || []).slice(-1)[0] || 0) / 1e18;
+        const hOut = Number((decodeAmounts(hBig[k]) || []).slice(-1)[0] || 0) / 1e18;
+        const dRatio = x.d > 0 ? dOut / (1000 * x.d) : 0;
+        const hRatio = x.h > 0 ? hOut / (1000 * x.h) : 0;
+        better[x.t.symbol] = dRatio >= hRatio ? 'direct' : 'hop';
+      });
+    } catch (e) { /* 比不出来就按直连 */ }
   }
+
+  const map = {};
+  Object.values(pick).forEach((x) => {
+    map[x.t.symbol] = better[x.t.symbol] === 'hop' ? x.h : (x.d != null ? x.d : x.h);
+  });
 
   priceMemo = { at: Date.now(), key, map };
   return map;

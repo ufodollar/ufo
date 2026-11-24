@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { skyBtn, skyLink } from '../ui';
+import { skyBtn } from '../ui';
+import { copyText } from '../clipboard';
+import { useSheetDrag } from '../useSheetDrag';
 
 // ============================================================================
 // 钱包面板：选择钱包 / 添加钱包 / 管理钱包 / 生成 / 导入 / 查看私钥
@@ -33,35 +35,17 @@ const label = {
 
 const hint = { fontSize: '12.5px', color: '#64748b', lineHeight: 1.65, marginTop: '8px' };
 
+// 地址旁的复制按钮：28px 的点击区域，视觉上只有 12px 的图标
+const copyIconBtn = {
+  appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
+  width: '24px', height: '24px', padding: 0, border: 'none', borderRadius: '50%',
+  background: 'transparent', color: '#64748b', cursor: 'pointer',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+};
+
 // 每个钱包一张头像。不是随机图：编号决定色相，用户靠「颜色 + 名字」认钱包，
 // 比只记编号快得多，也避免同一屏里排一片一模一样的灰圈。
 const AVATAR_HUES = [200, 340, 265, 152, 28, 320];
-
-/** 老 WebView 里 navigator.clipboard 常常不存在，必须留 execCommand 兜底 */
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (e) { /* 落到兜底 */ }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.top = '-200px';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, text.length);
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch (e) {
-    return false;
-  }
-}
 
 /** 0x0d10e…C72031 —— 首尾各 6 位，中间省略，手机上也不会被挤成两行 */
 function shortAddr(a) {
@@ -89,20 +73,17 @@ export default function WalletSetup({
   const [target, setTarget] = useState(null); // 正在查看 / 删除的账户 id
   const [pendingSwitch, setPendingSwitch] = useState(null);
   const [copied, setCopied] = useState('');   // '' | 'ok' | 'fail'
+  const [copiedAddr, setCopiedAddr] = useState('');  // 刚复制成功的地址
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [switching, setSwitching] = useState(null);
 
-  // 拖拽关闭（和代币弹窗同一套手势）
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef(null);
-
   // 创建结果的 reveal 不允许点遮罩 / 下滑关闭：私钥只在这里出现一次。
-  // 这个 ref 必须在下面的早退之前声明 —— hook 不能放在 if (open) 之后。
+  // 这个判断必须在下面的早退之前算出来 —— hook 不能放在 if (open) 之后。
   const lockOverlay = step === 'reveal' && mode === 'create';
-  const lockOverlayRef = useRef(lockOverlay);
-  lockOverlayRef.current = lockOverlay;
+
+  // 整张面板任意位置下拉关闭（列表滚到顶之后才接管手势）
+  const { ref: sheetRef, dragY, dragging } = useSheetDrag(onClose, open && !lockOverlay);
 
   // 这次操作是否需要先过 PIN：已解锁就不用
   const needGate = !unlocked;
@@ -112,8 +93,7 @@ export default function WalletSetup({
   useEffect(() => {
     if (!open) return;
     setPin(''); setKeyInput(''); setSecret(''); setShownAddress(''); setTarget(null);
-    setCopied(''); setBusy(false); setErr(''); setSwitching(null); setPendingSwitch(null);
-    setDragY(0); setDragging(false); dragRef.current = null;
+    setCopied(''); setCopiedAddr(''); setBusy(false); setErr(''); setSwitching(null); setPendingSwitch(null);
 
     if (mode === 'create') {
       if (needGate) { setStep('pin'); return; }
@@ -295,6 +275,13 @@ export default function WalletSetup({
     }
   };
 
+  const doCopyAddr = async (addr) => {
+    if (!addr) return;
+    const ok = await copyText(addr);
+    setCopiedAddr(ok ? addr : 'fail');
+    setTimeout(() => setCopiedAddr(''), 1800);
+  };
+
   const doCopy = async () => {
     const ok = await copyText(secret);
     setCopied(ok ? 'ok' : 'fail');
@@ -302,26 +289,6 @@ export default function WalletSetup({
     setTimeout(() => setCopied(''), 2200);
   };
 
-  // ---- 拖拽关闭 ----
-  const dragStart = (e) => {
-    dragRef.current = { y: e.clientY, dy: 0 };
-    setDragging(true);
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* 老浏览器 */ }
-  };
-  const dragMove = (e) => {
-    if (!dragRef.current) return;
-    const dy = e.clientY - dragRef.current.y;
-    dragRef.current.dy = dy;
-    setDragY(Math.max(0, dy));
-  };
-  const dragEnd = () => {
-    if (!dragRef.current) return;
-    const dy = dragRef.current.dy;
-    dragRef.current = null;
-    setDragging(false);
-    setDragY(0);
-    if (dy > 90 && !lockOverlayRef.current) onClose();
-  };
   // 从「选择钱包」进来的创建，生成完要回到列表；从空钱包页进来的才是「进入钱包」。
   // 文案与点击行为必须用同一个判断，否则按钮写着「完成，进入钱包」却把人送回了列表。
   const backToSheet = mode === 'accounts' || (mode === 'create' && accounts.length > 1);
@@ -336,8 +303,9 @@ export default function WalletSetup({
                 : mode === 'create' ? '创建钱包'
                   : '输入 PIN';
 
-  // 选择钱包 / 添加钱包 / 解锁 都是底部弹层；创建与导入是带返回的独立页
-  const sheetMode = mode === 'accounts' || mode === 'add' || mode === 'unlock';
+  // 所有步骤都是同一张底部弹层：没有右上角叉、没有返回箭头，
+  // 想退出就按住任意位置往下拉（见 useSheetDrag.js）。
+  const sheetMode = true;
   const isAddPage = mode === 'add';
 
   return (
@@ -361,6 +329,7 @@ export default function WalletSetup({
       `}</style>
 
       <div
+        ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#fff',
@@ -372,59 +341,22 @@ export default function WalletSetup({
           maxHeight: sheetMode ? '92vh' : '88vh',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
-          transform: sheetMode ? `translateY(${dragY}px)` : undefined,
+          transform: dragY ? `translateY(${dragY}px)` : undefined,
           transition: dragging ? 'none' : 'transform 220ms cubic-bezier(.22,.9,.3,1)',
           animation: sheetMode ? 'ufoSheetUp 240ms cubic-bezier(.22,.9,.3,1)' : undefined,
           color: '#1e293b'
         }}
       >
-        {sheetMode && (
-          <div
-            onPointerDown={dragStart}
-            onPointerMove={dragMove}
-            onPointerUp={dragEnd}
-            onPointerCancel={dragEnd}
-            style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'center',
-                     cursor: 'grab', touchAction: 'none', flexShrink: 0 }}
-          >
-            <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#d5dbe3' }} />
-          </div>
-        )}
+        <div style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#d5dbe3' }} />
+        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                      paddingTop: sheetMode ? '6px' : 0, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            {mode === 'add' && (
-              <button
-                onClick={() => onNavigate && onNavigate('accounts')}
-                aria-label="Back"
-                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-                         width: '30px', height: '30px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                         background: '#f1f5f9', color: '#334155', padding: 0,
-                         display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#334155"
-                     strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 5 8 12l7 7" />
-                </svg>
-              </button>
-            )}
-            <div style={{ fontSize: isAddPage ? '26px' : '21px', fontWeight: 800, letterSpacing: '-0.6px',
-                          lineHeight: 1.25, color: '#0f172a' }}>
-              {title}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px',
+                      paddingTop: '6px', flexShrink: 0 }}>
+          <div style={{ fontSize: isAddPage ? '26px' : '21px', fontWeight: 800, letterSpacing: '-0.6px',
+                        lineHeight: 1.25, color: '#0f172a' }}>
+            {title}
           </div>
-          {!lockOverlay && (
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', flexShrink: 0,
-                       width: '30px', height: '30px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                       background: '#f1f5f9', color: '#64748b', fontSize: '16px', padding: 0 }}
-            >
-              ×
-            </button>
-          )}
         </div>
 
         <div className="ufo-sheet-scroll" style={{ overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
@@ -529,7 +461,6 @@ export default function WalletSetup({
                 {busy ? '导入中…' : '导入钱包'}
               </button>
 
-              <button onClick={onClose} style={{ ...ghostBtn, marginTop: '6px' }}>取消</button>
             </>
           )}
 
@@ -570,9 +501,6 @@ export default function WalletSetup({
               <button
                 onClick={() => {
                   if (onBackedUp) onBackedUp();
-                  // 从「管理钱包 → 查看私钥」进来的，看完回到那一页
-                  // （用户的管理动作还没结束，不该被弹到全网钱包列表）。
-                  if (mode === 'accounts') { setSecret(''); setPin(''); setStep('manage'); return; }
                   // 在选择钱包里点「创建钱包」时 mode 会变成 create。生成完
                   // 若只是 onClose，用户就被弹回钱包页，还得再点一次。
                   // 这里把面板切回 accounts，于是他看到的还是那张钱包列表。
@@ -584,7 +512,7 @@ export default function WalletSetup({
                 }}
                 style={{ ...secBtn, marginTop: '9px' }}
               >
-                {mode === 'accounts' ? '返回管理钱包' : backToSheet ? '返回选择钱包' : '完成，进入钱包'}
+                {backToSheet ? '完成' : '完成，进入钱包'}
               </button>
 
               <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>
@@ -620,14 +548,31 @@ export default function WalletSetup({
                             background: '#f7f9fb', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: `linear-gradient(160deg, hsl(${AVATAR_HUES[((noOf(target) || 1) - 1) % AVATAR_HUES.length]} 85% 68%), hsl(${AVATAR_HUES[((noOf(target) || 1) - 1) % AVATAR_HUES.length]} 75% 52%))`
-                }} />
-                <div style={{ minWidth: 0 }}>
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z" />
+                    <path d="M3 9.5h13.5" /><circle cx="16.6" cy="14" r="1.4" fill="#fff" stroke="none" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a' }}>{nameOf(target)}</div>
-                  <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '3px',
-                                fontFamily: 'ui-monospace, Menlo, monospace', overflow: 'hidden',
-                                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {addrOf(target)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', minWidth: 0 }}>
+                    {/* 地址中间缩写：整串 42 位在手机上会把名字挤成两行 */}
+                    <span style={{ fontSize: '11.5px', color: '#94a3b8', fontFamily: 'ui-monospace, Menlo, monospace',
+                                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {shortAddr(addrOf(target))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => doCopyAddr(addrOf(target))}
+                      aria-label="复制地址"
+                      style={copyIconBtn}
+                    >
+                      {copiedAddr === addrOf(target) ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -687,10 +632,7 @@ export default function WalletSetup({
                 style={{ ...primaryBtn(busy || pin.length < 6), marginTop: '16px' }}>
                 {busy ? '处理中…' : '查看私钥'}
               </button>
-              <button onClick={() => { setErr(''); setPin(''); setStep('manage'); }}
-                style={{ ...ghostBtn, marginTop: '6px' }}>
-                返回
-              </button>
+
             </>
           )}
 
@@ -805,6 +747,14 @@ export default function WalletSetup({
                                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {a.no ? `我的钱包 ${a.no}` : '我的钱包'}
                             </span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); doCopyAddr(a.address); }}
+                              aria-label="复制地址"
+                              style={copyIconBtn}
+                            >
+                              {copiedAddr === a.address ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                            </button>
                             {switching === a.id && (
                               <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 700 }}>切换中…</span>
                             )}
@@ -908,6 +858,21 @@ const ImportIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a"
        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 4v11" /><path d="M7.5 10.5 12 15l4.5-4.5" /><path d="M5 19h14" />
+  </svg>
+);
+
+const CopyIcon = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="11" height="11" rx="2.2" />
+    <path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6a2.5 2.5 0 0 0-2.5 2.5V13" />
+  </svg>
+);
+
+const CheckIcon = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#10b981"
+       strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m4.5 12.5 5 5L20 7" />
   </svg>
 );
 

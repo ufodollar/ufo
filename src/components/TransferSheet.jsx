@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { sendTransfer, normalizeAddress, toWei } from '../tx';
 import { TokenIcon } from '../icons';
 import { skyBtn, skyLink } from '../ui';
+import { copyText } from '../clipboard';
+import { useSheetDrag } from '../useSheetDrag';
 
 // ============================================================================
 // 发送 / 接收
@@ -21,17 +23,20 @@ const FONT = {
   WebkitFontSmoothing: 'antialiased'
 };
 
+// 与其他弹层一致：底部升起、整张面板可下拉关闭
 const overlayStyle = {
   ...FONT,
   position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2000,
-  background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  padding: '16px', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)'
+  background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+  backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)'
 };
 
 const sheetStyle = {
-  background: '#fff', width: '100%', maxWidth: '420px', borderRadius: '24px',
-  padding: '22px 20px', boxShadow: '0 20px 60px rgba(15,23,42,0.28)',
-  maxHeight: '88vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', color: '#1e293b'
+  background: '#fff', width: '100%', maxWidth: '480px', borderRadius: '26px 26px 0 0',
+  padding: '0 18px calc(18px + env(safe-area-inset-bottom, 0px))',
+  boxShadow: '0 -18px 50px rgba(15,23,42,0.22)',
+  maxHeight: '92vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+  overscrollBehavior: 'contain', color: '#1e293b'
 };
 
 // 与全站同一套按钮语言（ui.js）
@@ -48,32 +53,6 @@ const field = {
   padding: '13px 14px', borderRadius: '13px', border: '1px solid #e2e8f0',
   background: '#f8fafc', color: '#0f172a', fontSize: '14px', outline: 'none'
 };
-
-/** 老 WebView 里 navigator.clipboard 常常不存在，必须留 execCommand 兜底 */
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (e) { /* 落到兜底 */ }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.top = '-200px';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, text.length);
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch (e) {
-    return false;
-  }
-}
 
 export default function TransferSheet({
   mode, onClose, address, accountNo, balances = {}, tokens = [],
@@ -93,6 +72,9 @@ export default function TransferSheet({
   // 发送前的 PIN 关卡。钱包锁着（刷新过、刚打开站点）时，签名要先把私钥解出来。
   const [pinOpen, setPinOpen] = useState(false);
   const [pin, setPin] = useState('');
+
+  // 整张面板下拉关闭；交易进行中不许关（避免签名到一半面板消失）
+  const { ref: sheetRef, dragY, dragging } = useSheetDrag(onClose, open && !busy);
 
   // 每次重新打开都回到初始态：上一次的成功页 / 报错不该跟着进来
   useEffect(() => {
@@ -215,21 +197,14 @@ export default function TransferSheet({
 
   return (
     <div onClick={busy ? undefined : onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={sheetStyle}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-          <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3 }}>
-            {mode === 'receive' ? '充值' : '发送'}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            disabled={busy}
-            style={{ appearance: 'none', WebkitAppearance: 'none', flexShrink: 0, width: '30px', height: '30px',
-                     borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#64748b',
-                     fontSize: '16px', lineHeight: 1, cursor: busy ? 'not-allowed' : 'pointer' }}
-          >
-            ✕
-          </button>
+      <div ref={sheetRef} onClick={(e) => e.stopPropagation()}
+           style={{ ...sheetStyle, transform: dragY ? `translateY(${dragY}px)` : undefined,
+                    transition: dragging ? 'none' : 'transform 220ms cubic-bezier(.22,.9,.3,1)' }}>
+        <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#d5dbe3' }} />
+        </div>
+        <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3, paddingTop: '4px' }}>
+          {mode === 'receive' ? '充值' : '发送'}
         </div>
 
         {/* ---------------- 接收 ---------------- */}

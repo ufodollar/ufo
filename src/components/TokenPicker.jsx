@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TokenIcon } from '../icons';
+import { useSheetDrag } from '../useSheetDrag';
 
 // ============================================================================
 // 代币选择弹窗（bottom sheet）
@@ -23,39 +24,14 @@ export default function TokenPicker({
   const [q, setQ] = useState('');
   const inputRef = useRef(null);
 
-  // ---- 下拖关闭 ----
-  // 顶部那道凹槽不是装饰：按住它往下拖，超过 90px 就关掉面板，不到就弹回去。
-  // 用 pointer 事件而不是 touch：桌面浏览器也能拖，且不会被滚动容器抢走。
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef(null);
-
-  const dragStart = (e) => {
-    dragRef.current = { y: e.clientY, dy: 0 };
-    setDragging(true);
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* 老浏览器 */ }
-  };
-  const dragMove = (e) => {
-    if (!dragRef.current) return;
-    const dy = e.clientY - dragRef.current.y;
-    dragRef.current.dy = dy;
-    setDragY(Math.max(0, dy));   // 只允许往下，往上不给「拉长」
-  };
-  const dragEnd = () => {
-    if (!dragRef.current) return;
-    const dy = dragRef.current.dy;
-    dragRef.current = null;
-    setDragging(false);
-    if (dy > 90) { onClose(); return; }
-    setDragY(0);
-  };
+  // ---- 下拉关闭 ----
+  // 整张面板都可以按住往下拉（不只顶部那道凹槽），列表停在顶部时才接管手势。
+  // 见 useSheetDrag.js。
+  const { ref: sheetRef, dragY, dragging } = useSheetDrag(onClose, open);
 
   useEffect(() => {
     if (!open) return;
     setQ('');
-    setDragY(0);
-    setDragging(false);
-    dragRef.current = null;
     const t = setTimeout(() => { try { inputRef.current?.focus(); } catch (e) {} }, 220);
     return () => clearTimeout(t);
   }, [open]);
@@ -101,6 +77,7 @@ export default function TokenPicker({
       `}</style>
 
       <div
+        ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -112,20 +89,13 @@ export default function TokenPicker({
           display: 'flex', flexDirection: 'column',
           maxHeight: '88vh', paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           animation: 'ufoSheetUp 240ms cubic-bezier(.22,.9,.3,1)',
-          transform: `translateY(${dragY}px)`,
+          transform: dragY ? `translateY(${dragY}px)` : undefined,
           transition: dragging ? 'none' : 'transform 220ms cubic-bezier(.22,.9,.3,1)',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
         }}
       >
-        {/* 拖拽条：整条都是把手，不只是那根 4px 的线 —— 4px 手指按不住 */}
-        <div
-          onPointerDown={dragStart}
-          onPointerMove={dragMove}
-          onPointerUp={dragEnd}
-          onPointerCancel={dragEnd}
-          style={{ padding: '14px 0 10px', display: 'flex', justifyContent: 'center',
-                   cursor: 'grab', touchAction: 'none' }}
-        >
+        {/* 凹槽只是视觉提示：整张面板都能拖，不必对准这根 4px 的线 */}
+        <div style={{ padding: '14px 0 10px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
           <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#d5dbe3' }} />
         </div>
 

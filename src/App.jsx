@@ -16,6 +16,7 @@ import ReadmeTab from './components/ReadmeTab';
 import { TokenIcon, UfoIcon } from './icons';
 import { TOKENS, TOKEN_BY_SYMBOL, UFO_TOKEN, isStable, isVaultPair, formatAmount, formatTokenAmount } from './tokens';
 import { skyBtn, skyLink } from './ui';
+import { copyText } from './clipboard';
 
 // Guide 与 Rules 合并成一个 Readme 页，页内顶部切换（见 ReadmeTab）。
 // 两份文案本身不动：它们是按条引用的条款，拆开写才不会被互相稀释。
@@ -171,6 +172,10 @@ function App() {
   // 选择钱包面板里每个钱包各自值多少钱。地址只在本机，读余额不需要签名，
   // 所以锁着也能算 —— 否则卡片上只能写一排 $ —。
   const [acctUsd, setAcctUsd] = useState({});
+  // 钱包页代币列表是否隐藏 0 余额（默认显示全部）
+  const [hideZero, setHideZero] = useState(false);
+  // 顶部地址复制反馈：'' | 'ok' | 'fail'
+  const [copiedAddr, setCopiedAddr] = useState('');
 
   const [activeTab, setActiveTab] = useState('assets');
   // 闪兑两侧的代币，用 symbol 存。存对象会在每次读余额后被替换成新引用，
@@ -864,18 +869,28 @@ function App() {
     return null;
   }
 
-  // 钱包资产列表：只列真的有钱的币，按美元估值从大到小。
-  // 这里不按「代币表顺序」排 —— 用户关心的是哪一笔最值钱，不是我们的配置顺序。
+  // 钱包资产列表：**整张代币表**，没余额的也列出来 —— 钱包的意义是「我有哪些币、
+  // 各值多少」，不是「我有哪些不为零的币」。默认全部显示，右上角的开关才过滤 0。
+  //
+  // 排序：有余额的按美元估值从大到小，其余保持代币表顺序。持仓永远在前面，
+  // 但没持仓的那几十行不会因为估值都是 0 而随机跳动。
   const portfolio = TOKENS
     .map((t) => {
       const balance = isConnected ? Number(tokenBalances[t.symbol] || 0) : 0;
       const price = priceOf(t.symbol);
       return { ...t, balance, price, usd: price == null ? null : balance * price };
     })
-    .filter((t) => t.balance > 0)
-    .sort((a, b) => (b.usd || 0) - (a.usd || 0));
+    .sort((a, b) => {
+      const ah = a.balance > 0 ? 1 : 0;
+      const bh = b.balance > 0 ? 1 : 0;
+      if (ah !== bh) return bh - ah;
+      if (ah && bh) return (b.usd || 0) - (a.usd || 0);
+      return 0;
+    });
 
   const totalUsd = portfolio.reduce((sum, t) => sum + (t.usd || 0), 0);
+  // 右上角开关：默认关（0 余额也显示）
+  const shownTokens = hideZero ? portfolio.filter((t) => t.balance > 0) : portfolio;
 
   // 弹窗要用的是「整张表 + 价格」，没有余额的币也要能显示 0.00
   const priceMap = TOKENS.reduce((m, t) => {
@@ -1017,23 +1032,55 @@ function App() {
             UFO<span style={{ color: '#3b82f6' }}> Wallet</span>
           </span>
         </div>
-        {/* 右上角只剩一个入口：「我的钱包 N」。它既是身份，也是选择钱包面板的
-            标题。原来那颗 Lock 删掉了 —— 锁不锁不该是用户每天要做的决定，
-            PIN 只在真正要动钱（发送 / 签名）的时候问。 */}
+        {/* 右上角只剩一个入口：「我的钱包 N + 地址尾号」。它既是身份，也是选择
+            钱包面板的入口。地址尾号让人一眼分清两个都叫「我的钱包」的账户；
+            旁边的复制键把完整地址放进剪贴板（不打开任何面板）。 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {hasWallet ? (
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setWalletPanel('accounts')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWalletPanel('accounts'); } }}
               aria-label={`我的钱包 ${accountNo ?? ''} — 选择钱包`}
               title="选择钱包"
-              style={SKY_BTN}
+              style={{ ...SKY_BTN, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
             >
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff', display: 'inline-block', flexShrink: 0 }} />
-              我的钱包 {accountNo ?? '—'}
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <span style={{ whiteSpace: 'nowrap' }}>我的钱包 {accountNo ?? '—'}</span>
+              {address && (
+                <span style={{ fontSize: '11px', opacity: 0.8, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.2px' }}>
+                  {address.slice(-4)}
+                </span>
+              )}
+              <span
+                role="button"
+                tabIndex={-1}
+                aria-label="复制钱包地址"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyText(address || '').then((ok) => {
+                    setCopiedAddr(ok ? 'ok' : 'fail');
+                    setTimeout(() => setCopiedAddr(''), 1600);
+                  });
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                         width: '16px', height: '16px', flexShrink: 0 }}
+              >
+                {copiedAddr === 'ok' ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m4.5 12.5 5 5L20 7" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="11" height="11" rx="2.2" />
+                    <path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6a2.5 2.5 0 0 0-2.5 2.5V13" />
+                  </svg>
+                )}
+              </span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <path d="M6 9l6 6 6-6" />
               </svg>
-            </button>
+            </div>
           ) : (
             <button
               onClick={() => setWalletPanel('create')}
@@ -1311,22 +1358,52 @@ function App() {
               </button>
             </div>
 
-            {/* 资产列表：只列真的有钱的币。代币表里的十几个币全部参与读取，
-                但余额为 0 的不占版面 —— 一个空钱包不该显示 15 行 0.00。 */}
-            {portfolio.length === 0 ? (
+            {/* 列表头 + 过滤开关。默认显示代币表里的每一个币（含 0 余额），
+                开关只影响「看不看 0」，不改变顺序、不改总余额。 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          gap: '10px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#94a3b8',
+                             letterSpacing: '0.9px', textTransform: 'uppercase' }}>
+                代币
+              </span>
+              <button
+                type="button"
+                onClick={() => setHideZero((v) => !v)}
+                aria-pressed={hideZero}
+                aria-label={hideZero ? '显示 0 余额代币' : '隐藏 0 余额代币'}
+                style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', cursor: 'pointer',
+                         display: 'flex', alignItems: 'center', gap: '7px', padding: 0, border: 'none',
+                         background: 'transparent', color: hideZero ? '#0f172a' : '#94a3b8',
+                         fontSize: '12px', fontWeight: 600 }}
+              >
+                隐藏 0 余额
+                <span style={{
+                  width: '34px', height: '20px', borderRadius: '10px', position: 'relative', flexShrink: 0,
+                  background: hideZero ? '#38bdf8' : '#e2e8f0', transition: 'background 160ms ease'
+                }}>
+                  <span style={{
+                    position: 'absolute', top: '2px', left: hideZero ? '16px' : '2px',
+                    width: '16px', height: '16px', borderRadius: '50%', background: '#fff',
+                    boxShadow: '0 1px 3px rgba(15,23,42,0.25)', transition: 'left 160ms ease'
+                  }} />
+                </span>
+              </button>
+            </div>
+
+            {shownTokens.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '26px 10px 10px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b' }}>No assets yet</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b' }}>目前尚无资产</div>
                 <div style={{ fontSize: '12px', marginTop: '6px', lineHeight: 1.7 }}>
-                  Receive BNB or any BEP-20 token to this account and it shows up here.
+                  收到 BNB 或任何 BEP-20 代币到此账户，它将显示在此处。
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {portfolio.map((t, i) => (
+                {shownTokens.map((t, i) => (
                   <div key={t.symbol} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    paddingBottom: '16px', marginBottom: i === portfolio.length - 1 ? 0 : '16px',
-                    borderBottom: i === portfolio.length - 1 ? 'none' : '1px solid #f1f5f9'
+                    paddingBottom: '16px', marginBottom: i === shownTokens.length - 1 ? 0 : '16px',
+                    borderBottom: i === shownTokens.length - 1 ? 'none' : '1px solid #f1f5f9'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                       <TokenIcon token={t} size={40} />

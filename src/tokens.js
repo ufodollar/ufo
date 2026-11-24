@@ -21,6 +21,9 @@ import { CONFIG } from './config';
 export const CHAIN_NAME = 'BNB Chain';
 
 export const TOKENS = [
+  // 顺序就是钱包页与选择弹窗的默认顺序：主流币在前，其余按市场关注度。
+  // 每一项的地址都在 BSC 主网用 symbol()/name()/decimals() 回读过，
+  // 名字对不上的一律不进来（见文件头的规则）。
   {
     symbol: 'BNB', name: 'BNB Chain', native: true, decimals: 18,
     verified: true, color: '#F0B90B'
@@ -38,20 +41,77 @@ export const TOKENS = [
     verified: true, color: '#3B82F6'
   },
   {
-    symbol: 'BTCB', name: 'Binance Bitcoin', address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', decimals: 18,
-    verified: true, color: '#F7931A'
-  },
-  {
-    symbol: 'ETH', name: 'Binance-Peg Ethereum', address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18,
-    verified: true, color: '#627EEA'
-  },
-  {
     symbol: 'WBNB', name: 'Wrapped BNB', address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', decimals: 18,
     verified: true, color: '#F0B90B'
   },
   {
     symbol: 'CAKE', name: 'PancakeSwap', address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', decimals: 18,
     verified: true, color: '#1FC7D4'
+  },
+  {
+    symbol: 'BTCB', name: 'Binance Bitcoin', address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', decimals: 18,
+    verified: true, color: '#F7931A'
+  },
+  {
+    // 链上 symbol 本身就是小写 quq，照抄，不做美化
+    symbol: 'quq', name: 'quq', address: '0x4fa7C69a7B69f8Bc48233024D546bc299d6B03bf', decimals: 18,
+    verified: true, color: '#22C55E'
+  },
+  {
+    symbol: 'NVDAB', name: 'NVIDIA Corp', address: '0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436', decimals: 18,
+    verified: true, color: '#76B900'
+  },
+  {
+    symbol: 'ETH', name: 'Binance-Peg Ethereum', address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18,
+    verified: true, color: '#627EEA'
+  },
+  {
+    symbol: 'PIEVERSE', name: 'Pieverse Token', address: '0x0E63B9C287E32A05E6b9AB8ee8dF88A2760225A9', decimals: 18,
+    verified: true, color: '#111827'
+  },
+  {
+    symbol: 'U', name: 'United Stables', address: '0xcE24439F2D9C6a2289F741120FE202248B666666', decimals: 18,
+    verified: true, color: '#3B82F6'
+  },
+  {
+    symbol: 'DGAI', name: 'DGrid AI', address: '0x10D4183389e99233db3cc981c43443Ebd28Ebd5e', decimals: 18,
+    verified: true, color: '#84CC16'
+  },
+  {
+    symbol: 'ARIA', name: 'ARIA.AI', address: '0x5d3A12C42E5372B2CC3264AB3cdcF660a1555238', decimals: 18,
+    verified: true, color: '#7DD3FC'
+  },
+  {
+    symbol: 'USD1', name: 'World Liberty Financial USD', address: '0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d', decimals: 18,
+    verified: true, color: '#C9A227'
+  },
+  {
+    symbol: 'DNA', name: 'DE NEO AGENT', address: '0xA991F61940095AEA0724ef54077223B048c5CF7b', decimals: 18,
+    verified: true, color: '#22D3EE'
+  },
+  {
+    symbol: 'ANTB', name: 'Anthropic', address: '0x38Dd26788Cf2d901E3aBf04efE3007d459d0Fc53', decimals: 18,
+    verified: true, color: '#D97706'
+  },
+  {
+    symbol: 'ON', name: 'Orochi Network Token', address: '0x0e4F6209eD984b21EDEA43acE6e09559eD051D48', decimals: 18,
+    verified: true, color: '#F97316'
+  },
+  {
+    symbol: 'BNCB', name: 'CEA Industries', address: '0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f', decimals: 18,
+    verified: true, color: '#16A34A'
+  },
+  {
+    symbol: 'CYS', name: 'Cysic Token', address: '0x0C69199C1562233640e0Db5Ce2c399A88eB507C7', decimals: 18,
+    verified: true, color: '#0EA5E9'
+  },
+  {
+    symbol: 'EVAA', name: 'EVAA', address: '0xaa036928c9c0Df07d525B55ea8EE690Bb5a628C1', decimals: 18,
+    verified: true, color: '#7C3AED'
+  },
+  {
+    symbol: 'RYDE4', name: 'Ryde Group', address: '0x6a2b0B704650A93F7495d728C3b851A1c5f73172', decimals: 18,
+    verified: true, color: '#EC4899'
   },
   {
     symbol: 'BUSD', name: 'Binance USD', address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', decimals: 18,
