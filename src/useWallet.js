@@ -67,7 +67,12 @@ export function useWallet() {
       const r = restoreLocalWallet();
       if (r) setAccount({ address: r.accounts[0], provider: r.provider });
     } else {
+      // 锁着也要把地址挂上：地址不是秘密（它本来就要给付款方看），
+      // 而余额、行情、资产列表全都只需要地址。以前这里把 account 置空，
+      // 导致刷新一次钱包页就变空 —— 用户以为资产没了。
+      // provider 为 null 表示「能看不能签」，签名前会要 PIN。
       setLocked(true);
+      setAccount({ address: addr, provider: null });
     }
   }, [refreshAccounts]);
 
@@ -134,10 +139,12 @@ export function useWallet() {
     setError('');
     try {
       const r = await unlockLocalWallet(pin);
-      bindActive();
+      const restored = bindActive();
       setLocked(false);
       refreshAccounts();
-      return r;
+      // 把 provider 一起返回：调用方（比如发送面板）在同一个手势里就要签名，
+      // 等 React 把新的 props 传下去已经太晚，那次签名会拿到 null。
+      return { ...r, provider: restored ? restored.provider : null };
     } catch (e) {
       // BAD_PIN 是「口令错」，其它是「这台设备上没有钱包」之类。
       // 两者 UI 上要分开说，不能都显示成一句失败。

@@ -154,8 +154,8 @@ function App() {
   // 在 Wallet 标签页生成一个，之后每次进来输 PIN 解锁（见 useWallet.js）。
   const {
     address, provider: walletProvider, isConnected,
-    busy: walletBusy, hasWallet, accounts, activeId,
-    create: createWallet, importKey, unlock: unlockWallet, lock: lockWallet,
+    busy: walletBusy, hasWallet, locked, accounts, activeId,
+    create: createWallet, importKey, unlock: unlockWallet,
     switchTo: switchAccount, viewKey, removeAccount, confirmBackup, fixChain
   } = useWallet();
 
@@ -163,6 +163,14 @@ function App() {
   const [walletPanel, setWalletPanel] = useState('');
   // '' | 'send' | 'receive'
   const [transferMode, setTransferMode] = useState('');
+  // 钱包锁着时点了 Swap：先要 PIN，解锁完自动把这一笔接着做完，
+  // 而不是让用户「输完 PIN 再点一次 Swap」。
+  const [pendingAfterUnlock, setPendingAfterUnlock] = useState('');
+  const actionRef = useRef(null);
+
+  // 选择钱包面板里每个钱包各自值多少钱。地址只在本机，读余额不需要签名，
+  // 所以锁着也能算 —— 否则卡片上只能写一排 $ —。
+  const [acctUsd, setAcctUsd] = useState({});
 
   const [activeTab, setActiveTab] = useState('assets');
   // 闪兑两侧的代币，用 symbol 存。存对象会在每次读余额后被替换成新引用，
@@ -621,9 +629,13 @@ function App() {
 
   const handleAction = async () => {
     if (isProcessing) return;
-    // 没有钱包就先生成/解锁，而不是「连接」。这是本页唯一的账户来源。
-    if (!isConnected || !walletProvider) {
-      setWalletPanel(hasWallet ? 'unlock' : 'create');
+    // 没有钱包就先生成，而不是「连接」。这是本页唯一的账户来源。
+    if (!hasWallet) { setWalletPanel('create'); return; }
+    // 有钱包但本次会话还没解锁：签名要私钥，先过 PIN。解锁完 effect 会
+    // 自动把这一笔接着做完（见 pendingAfterUnlock）。
+    if (!walletProvider) {
+      setPendingAfterUnlock('swap');
+      setWalletPanel('unlock');
       return;
     }
 
@@ -722,10 +734,11 @@ function App() {
     }
   };
 
-  // 未连接时先走创建 / 解锁；已连接才打开转账面板
+  // 没有钱包时先创建。收钱只要地址（不需要私钥），发钱由面板自己问 PIN ——
+  // 所以这里不再用「解锁」当门槛。
   const openTransfer = (m) => {
-    if (!isConnected) {
-      setWalletPanel(hasWallet ? 'unlock' : 'create');
+    if (!hasWallet) {
+      setWalletPanel('create');
       return;
     }
     setTransferMode(m);
@@ -745,6 +758,54 @@ function App() {
     });
     fetchUserBalances();
   };
+
+  // 解锁成功 -> 把刚才被 PIN 拦下的 Swap 接着做完。
+  // 放在 provider 出现之后触发，而不是 onUnlock 回调里：那一刻 React 还没
+  // 把新 provider 传下来，直接调用会拿到 null。
+  actionRef.current = handleAction;
+  useEffect(() => {
+    if (pendingAfterUnlock !== 'swap' || !walletProvider) return;
+    setPendingAfterUnlock('');
+    const t = setTimeout(() => { if (actionRef.current) actionRef.current(); }, 0);
+    return () => clearTimeout(t);
+  }, [pendingAfterUnlock, walletProvider]);
+
+  // 打开「选择钱包」时，把每个钱包的美元总值也算一遍。只在这个面板打开时算，
+  // 不跟着 10 秒轮询跑 —— 那是 N 个地址 × 16 个代币的读取。
+  useEffect(() => {
+    if (walletPanel !== 'accounts' || !accounts.length) return undefined;
+    let alive = true;
+    // 当前这个钱包的值我们已经有了，先填上，别让用户先看到一排「—」
+    if (activeId != null) setAcctUsd((prev) => ({ ...prev, [activeId]: totalUsd }));
+
+    // 并行读：串行的话 5 个钱包就是 5 个来回，面板上会先空一秒多
+    (async () => {
+      const rows = await Promise.all(accounts.map(async (a) => {
+        try {
+          const bal = await readTokenBalances(a.address, TOKENS);
+          let sum = 0;
+          for (const t of TOKENS) {
+            const n = Number(bal[t.symbol] || 0);
+            if (!(n > 0)) continue;
+            const p = priceOf(t.symbol);
+            if (p != null) sum += n * p;
+          }
+          return [a.id, sum];
+        } catch (e) {
+          return null;   // 读不到就保持 —，不写成 0
+        }
+      }));
+      if (!alive) return;
+      setAcctUsd((prev) => {
+        const next = { ...prev };
+        rows.forEach((r) => { if (r) next[r[0]] = r[1]; });
+        return next;
+      });
+    })();
+    return () => { alive = false; };
+    // priceOf 每次渲染都是新函数，故意不进依赖：进一次面板算一次就够了
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletPanel, accounts]);
 
   const clearHistory = () => {
     if (window.confirm('Are you sure you want to clear all local history?')) {
@@ -884,14 +945,14 @@ function App() {
   // 没解锁先解锁 → 这个币没钱就充值 → 有钱才真的下单。
   const onSwapCta = () => {
     if (isProcessing) return;
-    if (!isConnected) { setWalletPanel(hasWallet ? 'unlock' : 'create'); return; }
+    if (!hasWallet) { setWalletPanel('create'); return; }
     if (needTopUp) { setActiveTab('assets'); setTransferMode('receive'); return; }
-    handleAction();
+    handleAction();   // 锁着的话 handleAction 自己会先要 PIN
   };
 
   const ctaLabel = isProcessing ? 'Processing…'
-    : !isConnected ? (hasWallet ? 'Unlock Wallet' : 'Create Wallet')
-      : needTopUp ? 'Top Up'
+    : !hasWallet ? '创建钱包'
+      : needTopUp ? '充值'
         : 'Swap';
 
   // 底部五个入口，顺序就是产品的主线：先看钱（Wallet）→ 看规则（Readme）
@@ -944,47 +1005,30 @@ function App() {
             UFO<span style={{ color: '#3b82f6' }}> Wallet</span>
           </span>
         </div>
-        {/* 右上角：Lock → Account N。
-            「Account 3」既是身份（是第几个账户，地址不显示）也是账户管理入口，
-            点它直接进账户面板；Lock 只做一件事：把私钥从内存里清掉。 */}
+        {/* 右上角只剩一个入口：「我的钱包 N」。它既是身份，也是选择钱包面板的
+            标题。原来那颗 Lock 删掉了 —— 锁不锁不该是用户每天要做的决定，
+            PIN 只在真正要动钱（发送 / 签名）的时候问。 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-          {isConnected ? (
-            <button
-              onClick={lockWallet}
-              aria-label="Lock wallet"
-              title="Lock wallet"
-              style={SKY_BTN}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
-                <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
-              </svg>
-              Lock
-            </button>
-          ) : (
-            <button
-              onClick={() => setWalletPanel(hasWallet ? 'unlock' : 'create')}
-              disabled={walletBusy}
-              style={{ ...SKY_BTN, opacity: walletBusy ? 0.7 : 1, cursor: walletBusy ? 'wait' : 'pointer' }}
-            >
-              {walletBusy ? 'Working…' : hasWallet ? 'Unlock' : 'Create Wallet'}
-            </button>
-          )}
-
-          {/* 账户入口在锁定时也在：点它先进 PIN，再看得到地址与私钥。
-              否则「锁上之后想切账户」就只剩重新解锁一条路。 */}
-          {hasWallet && accounts.length > 0 && (
+          {hasWallet ? (
             <button
               onClick={() => setWalletPanel('accounts')}
-              aria-label={`Account ${accountNo ?? ''} — manage accounts`}
-              title="Accounts"
+              aria-label={`我的钱包 ${accountNo ?? ''} — 选择钱包`}
+              title="选择钱包"
               style={SKY_BTN}
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff', display: 'inline-block', flexShrink: 0 }} />
-              Account {accountNo ?? '—'}
+              我的钱包 {accountNo ?? '—'}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 9l6 6 6-6" />
               </svg>
+            </button>
+          ) : (
+            <button
+              onClick={() => setWalletPanel('create')}
+              disabled={walletBusy}
+              style={{ ...SKY_BTN, opacity: walletBusy ? 0.7 : 1, cursor: walletBusy ? 'wait' : 'pointer' }}
+            >
+              {walletBusy ? '创建中…' : '创建钱包'}
             </button>
           )}
         </div>
@@ -1181,6 +1225,40 @@ function App() {
 
         {activeTab === 'assets' && (
           <div style={{ marginTop: '2px' }}>
+          {!hasWallet ? (
+            /* 一个钱包都没有的时候，这一页只该有一个动作：创建。
+               不要显示 $0.00、不要显示一个空的资产列表、更不要一个点了会
+               弹「请先创建钱包」的发送按钮 —— 那些都是「还没有的东西」。 */
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                          minHeight: '64vh', gap: '16px', padding: '0 2px' }}>
+              <button
+                type="button"
+                onClick={() => setWalletPanel('create')}
+                disabled={walletBusy}
+                style={{
+                  ...UI_FONT, appearance: 'none', WebkitAppearance: 'none', width: '100%',
+                  border: 'none', cursor: walletBusy ? 'wait' : 'pointer',
+                  borderRadius: '28px', padding: '34px 24px',
+                  background: 'linear-gradient(180deg, #5CCBEC 0%, #38BDF8 100%)',
+                  color: '#fff', boxShadow: '0 18px 40px -16px rgba(56,189,248,0.9)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                  opacity: walletBusy ? 0.75 : 1
+                }}
+              >
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z" />
+                  <path d="M3 9.5h13.5" /><circle cx="16.6" cy="14" r="1.5" fill="#fff" stroke="none" />
+                </svg>
+                <span style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.6px' }}>
+                  {walletBusy ? '创建中…' : '创建钱包'}
+                </span>
+                <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'rgba(255,255,255,0.86)', lineHeight: 1.6 }}>
+                  钱包在这个页面里生成，私钥加密保存在这台设备上
+                </span>
+              </button>
+            </div>
+          ) : (<>
           {/* 总额：钱包页第一眼要看到「我这儿有多少钱」。
               绿色是这套产品里表示「资产在账上」的颜色，与收发按钮区分开。 */}
           <div style={{ padding: '12px 4px 18px' }}>
@@ -1207,17 +1285,17 @@ function App() {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 19V5" /><path d="M5 12l7-7 7 7" />
                 </svg>
-                Send
+                发送
               </button>
               <button
                 type="button"
                 onClick={() => openTransfer('receive')}
                 style={{ ...skyBtn('md', { block: true, soft: true }), flex: 1, height: '46px', fontSize: '14px' }}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14" /><path d="M19 12l-7 7-7-7" />
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14" /><path d="M5 12h14" />
                 </svg>
-                Receive
+                充值
               </button>
             </div>
 
@@ -1276,6 +1354,7 @@ function App() {
               </div>
             )}
           </div>
+          </>)}
           </div>
         )}
 
@@ -1479,6 +1558,8 @@ function App() {
         balances={tokenBalances}
         tokens={portfolio}
         provider={walletProvider}
+        locked={locked}
+        onUnlock={unlockWallet}
         onSent={handleTransferSent}
       />
 
@@ -1490,7 +1571,9 @@ function App() {
         accounts={accounts}
         activeId={activeId}
         hasWallet={hasWallet}
-        unlocked={isConnected}
+        unlocked={!locked}
+        totalUsd={totalUsd}
+        acctUsd={acctUsd}
         onCreate={createWallet}
         onImport={importKey}
         onUnlock={unlockWallet}

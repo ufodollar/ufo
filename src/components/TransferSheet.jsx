@@ -76,7 +76,8 @@ async function copyText(text) {
 }
 
 export default function TransferSheet({
-  mode, onClose, address, accountNo, balances = {}, tokens = [], provider, onSent
+  mode, onClose, address, accountNo, balances = {}, tokens = [],
+  provider, locked = false, onUnlock, onSent
 }) {
   const open = mode === 'send' || mode === 'receive';
 
@@ -89,6 +90,9 @@ export default function TransferSheet({
   const [copied, setCopied] = useState('');
   const [qr, setQr] = useState(null);       // { n, d }
   const [qrErr, setQrErr] = useState(false);
+  // 发送前的 PIN 关卡。钱包锁着（刷新过、刚打开站点）时，签名要先把私钥解出来。
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPin] = useState('');
 
   // 每次重新打开都回到初始态：上一次的成功页 / 报错不该跟着进来
   useEffect(() => {
@@ -100,6 +104,8 @@ export default function TransferSheet({
     setErr('');
     setDone(null);
     setCopied('');
+    setPinOpen(false);
+    setPin('');
   }, [mode, open]);
 
   // 二维码在本地画。qrcode-generator 只在真正打开接收页时才下载。
@@ -136,7 +142,9 @@ export default function TransferSheet({
   const enough = amountOk && amtNum <= balNum;
   const canSend = !busy && !!address && to.trim().length > 0 && enough;
 
-  const doSend = async () => {
+  // 真正发交易。解锁是在同一个手势里完成的，所以 provider 允许从外面传进来 ——
+  // 刚解完锁那一帧 props 还是旧的 null。
+  const doSend = async (provOverride) => {
     if (!canSend) return;
     setBusy(true);
     setErr('');
@@ -144,7 +152,7 @@ export default function TransferSheet({
       const target = await normalizeAddress(to);
       const wei = toWei(amount);
       const r = await sendTransfer({
-        walletProvider: provider,
+        walletProvider: provOverride || provider,
         owner: address,
         token,
         to: target,
@@ -154,6 +162,34 @@ export default function TransferSheet({
       if (onSent) onSent({ hash: r.hash, symbol, amount, to: target });
     } catch (e) {
       setErr((e && e.message) || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 点「发送」：锁着就先要 PIN，解锁后自动继续，不用再点一次
+  const startSend = () => {
+    if (!canSend) return;
+    if (locked && onUnlock) {
+      setPin('');
+      setErr('');
+      setPinOpen(true);
+      return;
+    }
+    doSend();
+  };
+
+  const confirmPin = async () => {
+    if (pin.length < 6 || !onUnlock) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const r = await onUnlock(pin);
+      setPinOpen(false);
+      setPin('');
+      await doSend(r && r.provider);
+    } catch (e) {
+      setErr(e && e.code === 'BAD_PIN' ? 'PIN 错误，请重试。' : ((e && e.message) || '解锁失败'));
     } finally {
       setBusy(false);
     }
@@ -182,7 +218,7 @@ export default function TransferSheet({
       <div onClick={(e) => e.stopPropagation()} style={sheetStyle}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
           <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1.3 }}>
-            {mode === 'receive' ? 'Receive' : 'Send'}
+            {mode === 'receive' ? '充值' : '发送'}
           </div>
           <button
             onClick={onClose}
@@ -229,7 +265,7 @@ export default function TransferSheet({
             <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
               <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#1d4ed8' }}>
-                Account {accountNo ?? '—'}
+                我的钱包 {accountNo ?? '—'}
               </span>
             </div>
 
@@ -274,8 +310,62 @@ export default function TransferSheet({
           </>
         )}
 
+        {/* ---------------- 发送前先验 PIN ---------------- */}
+        {mode === 'send' && !done && pinOpen && (
+          <>
+            <div style={{ marginTop: '10px', fontSize: '12.5px', color: '#64748b', lineHeight: 1.65 }}>
+              转出资产需要动用私钥。输入 6 位 PIN 解锁这台设备上的钱包。
+            </div>
+
+            <div style={{ marginTop: '12px', padding: '11px 12px', borderRadius: '12px',
+                          background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: '12.5px',
+                          color: '#334155', lineHeight: 1.8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                <span style={{ color: '#94a3b8' }}>接收方</span>
+                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11.5px',
+                               wordBreak: 'break-all', textAlign: 'right' }}>
+                  {to.trim() ? to.trim().slice(0, 10) + '…' + to.trim().slice(-8) : '—'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                <span style={{ color: '#94a3b8' }}>金额</span>
+                <span style={{ fontWeight: 700 }}>{amount} {symbol}</span>
+              </div>
+            </div>
+
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={pin}
+              onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 8)); setErr(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmPin(); }}
+              placeholder="6 位 PIN"
+              style={{ width: '100%', boxSizing: 'border-box', marginTop: '14px', padding: '14px 16px',
+                       fontSize: '17px', letterSpacing: '7px', textAlign: 'center', borderRadius: '13px',
+                       border: '1px solid #e2e8f0', background: '#f8fafc', color: '#0f172a', outline: 'none' }}
+            />
+
+            {err && (
+              <div style={{ marginTop: '12px', padding: '10px 11px', borderRadius: '10px', background: '#fef2f2',
+                            border: '1px solid #fecaca', color: '#b91c1c', fontSize: '12px', lineHeight: 1.6 }}>
+                {err}
+              </div>
+            )}
+
+            <button onClick={confirmPin} disabled={busy || pin.length < 6}
+              style={{ ...primaryBtn(busy || pin.length < 6), marginTop: '16px' }}>
+              {busy ? '签名中…' : '确认并发送'}
+            </button>
+            <button onClick={() => { setPinOpen(false); setErr(''); }} disabled={busy}
+              style={{ ...ghostBtn, marginTop: '6px' }}>
+              返回修改
+            </button>
+          </>
+        )}
+
         {/* ---------------- 发送表单 ---------------- */}
-        {mode === 'send' && !done && (
+        {mode === 'send' && !done && !pinOpen && (
           <>
             <div style={{ marginTop: '14px' }}>
               <div style={label}>Asset</div>
@@ -356,8 +446,8 @@ export default function TransferSheet({
               </div>
             )}
 
-            <button onClick={doSend} disabled={!canSend} style={{ ...primaryBtn(!canSend), marginTop: '16px' }}>
-              {busy ? 'Sending…' : `Send ${symbol}`}
+            <button onClick={startSend} disabled={!canSend} style={{ ...primaryBtn(!canSend), marginTop: '16px' }}>
+              {busy ? 'Sending…' : `发送 ${symbol}`}
             </button>
             <div style={{ marginTop: '8px', fontSize: '11px', color: '#94a3b8', textAlign: 'center', lineHeight: 1.6 }}>
               Network fee is paid in BNB. You will see the hash here when it is mined.
