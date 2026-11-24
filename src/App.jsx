@@ -1392,9 +1392,13 @@ function App() {
 
             {shownTokens.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '26px 10px 10px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b' }}>目前尚无资产</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b' }}>
+                  {hideZero ? '没有持有中的代币' : '目前尚无资产'}
+                </div>
                 <div style={{ fontSize: '12px', marginTop: '6px', lineHeight: 1.7 }}>
-                  收到 BNB 或任何 BEP-20 代币到此账户，它将显示在此处。
+                  {hideZero
+                    ? '关掉「隐藏 0 余额」就能看到全部代币。'
+                    : '收到 BNB 或任何 BEP-20 代币到此账户，它将显示在此处。'}
                 </div>
               </div>
             ) : (
