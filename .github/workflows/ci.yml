@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Report bundle size
+        run: |
+          {
+            echo "### 构建产物"
+            echo '```'
+            du -sh dist
+            find dist/assets -type f -exec du -h {} + | sort -h | tail -10
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
