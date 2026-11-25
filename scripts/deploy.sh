@@ -235,7 +235,7 @@ if [ -n "$WF_FILES" ]; then
     exit 3
   fi
 
-  info "workflow 文件走 Contents API（${#WF_FILES} 个）…"
+  info "workflow 文件走 Contents API（$(printf '%s\n' "$WF_FILES" | grep -c .) 个）…"
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     code=$(api_put_file "$f")
