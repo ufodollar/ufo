@@ -131,9 +131,9 @@ if [ "$MODE" = "status" ]; then
   t0=$(date +%s%N)
   if GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote "https://github.com/${SLUG}.git" HEAD >/dev/null 2>&1; then
     t1=$(date +%s%N)
-    ok "HTTPS 读可达     $(( (t1-t0)/1000000 ))ms   （写通道不可靠，见下）"
+    ok "HTTPS 读可达     $(( (t1-t0)/1000000 ))ms   （写通道不稳，不走它）"
   else
-    warn "HTTPS 不可达"
+    warn "HTTPS 读超时     （写通道更不稳，已改走 SSH）"
   fi
 
   t0=$(date +%s%N)
@@ -336,7 +336,7 @@ ok "推送成功   $(git rev-parse --short HEAD)   [$PUSH_MODE]"
 # 只改脚本 / 文档 / workflow 时，Vite 产出的 asset hash 不会变，
 # 用签名判据会白等到超时。先看这次到底动没动前端。
 APP_TOUCHED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null \
-              | grep -E '^(src/|index\.html|package\.json|vite\.config|public/|tailwind|postcss)' || true)
+              | grep -E '^(src/|index\.html|package(-lock)?\.json|pnpm-lock\.yaml|vite\.config|public/|tailwind|postcss)' || true)
 if [ -z "$APP_TOUCHED" ]; then
   ok "本次未触及前端源码，Cloudflare 仍会重建但无需等待"
   printf '  %s\n' "$SITE"
