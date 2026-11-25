@@ -151,6 +151,9 @@ BEFORE=$(sig)
 info "基线签名 ${BEFORE:-读取失败}  ($SITE)"
 
 # ---------------- 提交 ----------------
+# BASE 是上一次推送的位置：后面用它算「这次到底动了什么」，
+# 既覆盖本次新提交，也覆盖之前攒下没推的提交。
+BASE=$(git rev-parse origin/main 2>/dev/null || echo '')
 git add -A
 HAS_STAGED=0
 git diff --cached --quiet || HAS_STAGED=1
@@ -273,6 +276,16 @@ ok "推送成功   $(git rev-parse --short HEAD)   [$PUSH_MODE]"
 [ -n "$SCOPES" ] && info "token scopes: $SCOPES"
 
 [ "$WAIT" = 1 ] || exit 0
+
+# 只改脚本 / 文档 / workflow 时，Vite 产出的 asset hash 不会变，
+# 用签名判据会白等到超时。先看这次到底动没动前端。
+APP_TOUCHED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null \
+              | grep -E '^(src/|index\.html|package\.json|vite\.config|public/|tailwind|postcss)' || true)
+if [ -z "$APP_TOUCHED" ]; then
+  ok "本次未触及前端源码，Cloudflare 仍会重建但无需等待"
+  printf '  %s\n' "$SITE"
+  exit 0
+fi
 
 # ---------------- 等部署 ----------------
 info "等待 Cloudflare Pages 构建（通常 40–90 秒）…"
