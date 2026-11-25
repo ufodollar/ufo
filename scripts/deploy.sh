@@ -7,19 +7,25 @@
 #   ./deploy.sh <提交信息> --https    强制走 HTTPS（失败不回落）
 #   ./deploy.sh --status              只看两条通道的连通性与权限，不推送
 #
-# 通道（同一沙箱实测，各三次采样）：
-#   HTTPS + PAT        约 1.0s   支持 .github/workflows/*，权限可到账号级
-#   SSH over 443 复用  约 1.3s   **推不了 workflow 文件**，只能动这一个仓库
-#   SSH over 22        被阻断
+# 通道（同一沙箱实测，含 5 次稳定性采样）：
+#   SSH over 443 复用   1.2–1.6s   稳定命中，默认通道
+#   HTTPS + PAT         1.0s / 20s 超时    忽快忽慢，5 次里 2 成功 3 卡死
+#   SSH over 22         被阻断
+#   Contents API        1.3–2.2s   **workflow 文件专用**，稳定
 #
-# 为什么 HTTPS 更快：SSH 每次重做密钥协商（TCP 仅 0.09s，其余 3–4s 全在握手）；
-# HTTPS 复用 TLS 会话，1 秒内走完。SSH 侧已配 ControlMaster，把 4.6s 压到 1.3s，
-# 作为兜底够用。
+# 为什么不走 HTTPS 推代码：单独看 info/refs 只要 0.6s、TLS 握手 0.18s，
+# 但一进 POST /git-receive-pack 传 pack 就卡 —— 同一 IP 上 body 传输
+# 到 4 秒仍没走完（响应头秒回、body 不动）。强制 HTTP/1.1 只能救回一半
+# （5 次里 2 次成功）。这是链路上对大流量包的干扰，与令牌无关。
+# 原脚本写的“TLS 中断”是同一现象，只是当时没定位到 HTTP/2 这一层。
+#
+# 所以：代码走 SSH（稳、1.3s），workflow 文件走 Contents API（稳、2s），
+# 两者都不经过“大流量 HTTPS”。HTTPS 保留为 --https 手动选项。
 #
 # 凭据查找顺序（均不落盘、不进 argv）：
 #   $GH_TOKEN / $GITHUB_TOKEN  →  ~/.config/ufo/github-token  →  gh auth token
 #
-# 要推 workflow 就必须是 classic PAT，scopes：
+# workflow 走 API 需要 classic PAT，scopes：
 #   repo, workflow, admin:repo_hook, delete_repo
 
 set -uo pipefail
@@ -91,6 +97,11 @@ else
   WF_SCOPE=0
 fi
 
+# ---------------- 接口地址 ----------------
+API="https://api.github.com/repos/${SLUG}"
+API_H=(-H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github+json"
+       -H "X-GitHub-Api-Version: 2022-11-28")
+
 # ---------------- --status ----------------
 if [ "$MODE" = "status" ]; then
   echo
@@ -119,16 +130,27 @@ if [ "$MODE" = "status" ]; then
 
   t0=$(date +%s%N)
   if GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote "https://github.com/${SLUG}.git" HEAD >/dev/null 2>&1; then
-    t1=$(date +%s%N); ok "HTTPS 读写可达   $(( (t1-t0)/1000000 ))ms"
+    t1=$(date +%s%N)
+    ok "HTTPS 读可达     $(( (t1-t0)/1000000 ))ms   （写通道不可靠，见下）"
   else
-    warn "HTTPS 不可达（会自动回落 SSH）"
+    warn "HTTPS 不可达"
   fi
 
   t0=$(date +%s%N)
   if ssh -o ConnectTimeout=10 -T git@github.com >/dev/null 2>&1 || [ $? = 1 ]; then
-    t1=$(date +%s%N); ok "SSH 443 可达     $(( (t1-t0)/1000000 ))ms"
+    t1=$(date +%s%N); ok "SSH 443 可达     $(( (t1-t0)/1000000 ))ms   ← 代码默认通道"
   else
     warn "SSH 443 不可达"
+  fi
+
+  if [ -n "$TOKEN" ]; then
+    t0=$(date +%s%N)
+    code=$(curl -sS -o /dev/null -m 15 -w '%{http_code}' "${API_H[@]}" \
+           "$API/git/ref/heads/main" 2>/dev/null || echo 000)
+    t1=$(date +%s%N)
+    [ "$code" = "200" ] \
+      && ok "仓库 API 可写    $(( (t1-t0)/1000000 ))ms   ← workflow 专用通道" \
+      || warn "仓库 API 返回 $code（workflow 提交会失败）"
   fi
 
   echo
@@ -170,27 +192,74 @@ if [ "$HAS_STAGED" = 1 ]; then
   ok "已提交  $MSG"
 fi
 
-# ---------------- workflow 预检 ----------------
-# Deploy Key 与“缺 workflow scope 的 PAT”都会被 GitHub 拒绝，而且是在传完 pack
-# 之后才拒。这里在传之前就拦住，省一次白等。
+# ---------------- workflow 文件：走 Contents API ----------------
+# git push 带 workflow 文件时，Deploy Key 必被拒；就算是 PAT，也要先传完整个
+# pack 才拒。而 HTTPS 传 pack 在这条链路上不稳定（见文件头）。所以这里改成
+# 逐文件 PUT —— 请求体只有几 KB，实测 1.3–2.2s，稳定。
 WF_FILES=$(git diff --name-only --diff-filter=ACMR origin/main..HEAD 2>/dev/null \
            | grep -E '^\.github/workflows/' || true)
 
-if [ -n "$WF_FILES" ] && [ "$WF_SCOPE" = 0 ]; then
-  warn "本次要推 workflow 文件，但当前凭据没有 workflow 权限："
-  printf '%s\n' "$WF_FILES" | sed 's/^/    /'
-  if [ -n "$TOKEN" ]; then
-    printf '\n  当前：%s（%s）%s\n' "$TOKEN_KIND" "$TOKEN_SRC" "${SCOPES:+  scopes: $SCOPES}"
-  else
-    printf '\n  当前：无 PAT，仅 Deploy Key —— 它永远推不了 workflow。\n'
+# 返回 HTTP 状态码；调用方判 200/201
+api_put_file() {
+  local path="$1" enc sha body
+  enc=$(base64 -w0 < "$path")
+  # 已存在则必须带 sha，否则 422
+  sha=$(curl -sS -m 15 "${API_H[@]}" "$API/contents/${path}?ref=main" 2>/dev/null \
+        | python3 -c 'import sys,json
+try:
+    d = json.load(sys.stdin)
+    print(d.get("sha","") if isinstance(d, dict) else "")
+except Exception:
+    print("")')
+  body=$(python3 -c 'import json,sys
+b = {"message": "ci: sync " + sys.argv[3] + " from local", "content": sys.argv[1], "branch": "main"}
+if sys.argv[2]:
+    b["sha"] = sys.argv[2]
+print(json.dumps(b))' "$enc" "$sha" "$(basename "$path")")
+  curl -sS -m 25 -X PUT "${API_H[@]}" -d "$body" \
+       "$API/contents/${path}" -o /tmp/ufo-api.json -w '%{http_code}'
+}
+
+if [ -n "$WF_FILES" ]; then
+  if [ -z "$TOKEN" ] || [ "$WF_SCOPE" = 0 ]; then
+    warn "本次要推 workflow 文件，但当前凭据没有 workflow 权限："
+    printf '%s\n' "$WF_FILES" | sed 's/^/    /'
+    if [ -n "$TOKEN" ]; then
+      printf '\n  当前：%s（%s）%s\n' "$TOKEN_KIND" "$TOKEN_SRC" "${SCOPES:+  scopes: $SCOPES}"
+    else
+      printf '\n  当前：无 PAT，仅 Deploy Key —— 它永远推不了 workflow。\n'
+    fi
+    printf '\n  需要一个带 workflow 的 classic PAT：\n  %s\n' "$NEW_TOKEN_URL"
+    printf '\n  写入后重跑（令牌只落本地文件，不进 git）：\n'
+    printf '    printf %%s "ghp_xxx" > %s && chmod 600 %s\n' "$TOKEN_FILE" "$TOKEN_FILE"
+    exit 3
   fi
-  printf '\n  需要一个带 workflow 的 classic PAT：\n  %s\n' "$NEW_TOKEN_URL"
-  printf '\n  写入后重跑（令牌只落本地文件，不进 git）：\n'
-  printf '    printf %%s "ghp_xxx" > %s && chmod 600 %s\n' "$TOKEN_FILE" "$TOKEN_FILE"
-  exit 3
+
+  info "workflow 文件走 Contents API（${#WF_FILES} 个）…"
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    code=$(api_put_file "$f")
+    case "$code" in
+      200|201) ok "  $f  [$code]" ;;
+      *)  warn "  $f  [$code]"
+          python3 -c 'import json;d=json.load(open("/tmp/ufo-api.json"));print("   ",d.get("message",""))' 2>/dev/null
+          die "workflow 提交失败 —— 若提示 workflow scope，换令牌后重试" ;;
+    esac
+  done <<< "$WF_FILES"
+
+  # 远程已经有这些文件了。本地 commit 若只含 workflow，rebase 会把它当作
+  # 空改动自动丢弃；若还含代码，代码部分保留。
+  info "同步本地到远程（rebase）…"
+  git fetch -q origin main
+  if ! git rebase origin/main >/tmp/ufo-rebase.log 2>&1; then
+    git rebase --abort 2>/dev/null
+    tail -5 /tmp/ufo-rebase.log | sed 's/^/    /'
+    die "workflow 已提交到远程，但本地 rebase 冲突。远程是最新的，请手动 git pull --rebase"
+  fi
+  ok "  rebase 完成  HEAD=$(git rev-parse --short HEAD)"
 fi
 
-# ---------------- 推送 ----------------
+# ---------------- 推送代码 ----------------
 ASKPASS=""
 cleanup() { [ -n "$ASKPASS" ] && rm -f "$ASKPASS"; }
 trap cleanup EXIT
@@ -207,11 +276,13 @@ AP
   chmod 700 "$ASKPASS"
 }
 
-# token 只经环境变量传给 askpass：不写 remote url、不进 argv、不落 .git/config
+# 只用于 --https 手动指定。必须关掉 HTTP/2：默认协议下 POST pack 会被卡死，
+# 换成 HTTP/1.1 能救回一部分，但仍不如 SSH 稳。
 push_https() {
   make_askpass
   GIT_ASKPASS="$ASKPASS" UFO_GH_TOKEN="$TOKEN" GIT_TERMINAL_PROMPT=0 \
-    timeout 90 git -c credential.helper= -c protocol.version=2 \
+    timeout 60 git -c credential.helper= -c protocol.version=2 \
+      -c http.version=HTTP/1.1 -c http.extraHeader=Expect: \
       push "https://github.com/${SLUG}.git" HEAD:main >/tmp/ufo-push.log 2>&1
 }
 
@@ -226,33 +297,18 @@ push_ssh() {
 
 pushed=0; PUSH_MODE=""
 
-if [ -n "$TOKEN" ] && [ "$FORCE" != "ssh" ]; then
-  info "推送 GitHub（HTTPS + ${TOKEN_KIND}）…"
+if [ "$FORCE" = "https" ] && [ -n "$TOKEN" ]; then
+  info "推送 GitHub（HTTPS + ${TOKEN_KIND}，HTTP/1.1）…"
   for i in 1 2 3; do
     if push_https; then pushed=1; PUSH_MODE="https"; break; fi
     if grep -qi 'workflow.*scope' /tmp/ufo-push.log; then break; fi
     if grep -qE 'Authentication failed|Invalid username or password|\b401\b' /tmp/ufo-push.log; then
       warn "token 无效或已过期"; break
     fi
-    warn "第 $i 次失败，3 秒后重试"; sleep 3
+    warn "第 $i 次失败（HTTPS 在此链路上不稳定），3 秒后重试"; sleep 3
   done
-fi
-
-if [ "$pushed" != 1 ]; then
-  if grep -qi 'workflow.*scope' /tmp/ufo-push.log 2>/dev/null; then
-    printf '\n\033[31m✗ 令牌缺少 workflow scope\033[0m\n'
-    tail -4 /tmp/ufo-push.log | sed 's/^/    /'
-    printf '\n  重新生成并勾上 workflow：\n  %s\n\n' "$NEW_TOKEN_URL"
-    exit 3
-  fi
-
-  [ "$FORCE" = "https" ] && die "HTTPS 推送失败（--https 指定不回落）"
-  [ -n "$WF_FILES" ] && die "workflow 文件只能经 HTTPS + PAT 推送，SSH 必定被拒"
-
-  if [ -n "$TOKEN" ] && grep -qE 'Authentication failed|\b401\b' /tmp/ufo-push.log 2>/dev/null; then
-    warn "HTTPS 认证失败，回落 SSH over 443"
-  fi
-
+  [ "$pushed" = 1 ] || die "HTTPS 推送失败"
+else
   info "推送 GitHub（SSH over 443，复用连接）…"
   for i in 1 2 3; do
     if push_ssh; then pushed=1; PUSH_MODE="ssh"; break; fi
@@ -268,7 +324,7 @@ if [ "$pushed" != 1 ]; then
       printf '\n加完重跑本脚本，本地提交还在，不会丢。\n'
       exit 2
     fi
-    die "两种通道均推送失败"
+    die "SSH 推送失败"
   fi
 fi
 
